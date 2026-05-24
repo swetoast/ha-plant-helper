@@ -27,7 +27,7 @@ A comprehensive Home Assistant custom integration for managing and monitoring yo
 
 ### Manual
 
-1. Download the [latest release](https://github.com/swetoast/ha-plant-helper/releases)
+1. Download the [latest release from the main repo](https://github.com/swetoast/ha-plant-helper/archive/refs/heads/main.zip)
 2. Copy `custom_components/plant_helper/` to your Home Assistant config
 3. Restart Home Assistant
 4. Add the integration via UI
