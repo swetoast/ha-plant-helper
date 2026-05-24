@@ -1,0 +1,53 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Plant Helper",
+        "description": "Configure Plant Helper API providers."
+      }
+    },
+    "abort": {
+      "already_configured": "Plant Helper is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Plant Helper Configuration",
+        "description": "{info}"
+      },
+      "add_plant_search": {
+        "title": "Add Plant",
+        "description": "{info}"
+      },
+      "add_plant_details": {
+        "title": "Plant Care Source Sensors",
+        "description": "{info}"
+      },
+      "fetch_species": {
+        "title": "Fetch Species Data",
+        "description": "{info}"
+      },
+      "settings": {
+        "title": "Integration Settings",
+        "description": "{info}"
+      },
+      "remove_plant": {
+        "title": "Remove Configured Plant",
+        "description": "{info}"
+      },
+      "view_plants": {
+        "title": "View Plants",
+        "description": "{info}"
+      },
+      "reset_database": {
+        "title": "Reset Plant Database",
+        "description": "{info}"
+      },
+      "result": {
+        "title": "Result",
+        "description": "{info}"
+      }
+    }
+  }
+}

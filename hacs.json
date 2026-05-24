@@ -1,0 +1,9 @@
+{
+  "name": "Plant Helper",
+  "content_in_root": false,
+  "filename": "plant_helper",
+  "render_readme": true,
+  "domains": ["sensor", "binary_sensor"],
+  "homeassistant": "2024.1.0",
+  "iot_class": "Cloud Polling"
+}

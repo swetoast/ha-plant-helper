@@ -1,0 +1,126 @@
+{
+  "title": "Plant Helper",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Plant Helper setup",
+        "description": "{info}",
+        "data": {
+          "perenual_api_key": "Perenual API key",
+          "trefle_api_key": "Trefle API token",
+          "enable_trefle_fallback": "Enable Trefle fallback",
+          "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
+          "update_interval": "Update interval in seconds"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Plant Helper",
+        "description": "{info}",
+        "data": {
+          "perenual_api_key": "Perenual API key",
+          "trefle_api_key": "Trefle API token",
+          "enable_trefle_fallback": "Enable Trefle fallback",
+          "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
+          "update_interval": "Update interval in seconds"
+        }
+      }
+    },
+    "error": {
+      "required": "This field is required.",
+      "plant_id_exists": "A configured plant with this Plant ID already exists."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Plant Helper",
+        "description": "{info}",
+        "data": {
+          "menu_action": "Action"
+        }
+      },
+      "add_plant_search": {
+        "title": "Add Configured Plant",
+        "description": "{info}",
+        "data": {
+          "common_name_search": "Common name search"
+        }
+      },
+      "add_plant_details": {
+        "title": "Add plant and link source sensors",
+        "description": "{info}",
+        "data": {
+          "selected_species": "Matched species",
+          "custom_name": "Plant name",
+          "plant_id": "Plant ID",
+          "soil_temperature_entity": "Soil temperature source",
+          "soil_humidity_entity": "Soil moisture source",
+          "room_temperature_entity": "Room temperature source",
+          "room_humidity_entity": "Room humidity source",
+          "room_lux_entity": "Room light source"
+        },
+        "data_description": {
+          "selected_species": "Species record used as the plant model.",
+          "custom_name": "Friendly name shown on the plant device and sensors.",
+          "plant_id": "Stable unique ID for this configured plant. Use lowercase letters, numbers, and underscores.",
+          "soil_temperature_entity": "Optional soil-zone temperature sensor.",
+          "soil_humidity_entity": "Optional real soil moisture sensor. If omitted, Plant Helper calculates soil moisture from the model.",
+          "room_temperature_entity": "Used for drying speed, temperature stress, health score, and care action.",
+          "room_humidity_entity": "Used for humidity suitability, drying speed, health score, and care action.",
+          "room_lux_entity": "Used for daily light score, growth mode, drying speed, health score, and care action."
+        }
+      },
+      "fetch_species": {
+        "title": "Fetch Species to Cache",
+        "description": "{info}",
+        "data": {
+          "common_name_search": "Common name search",
+          "force_fetch": "Force provider refresh"
+        }
+      },
+      "remove_plant": {
+        "title": "Remove Configured Plant",
+        "description": "{info}",
+        "data": {
+          "plant_id": "Configured plant"
+        },
+        "data_description": {
+          "plant_id": "Select which plant to remove. This deletes the device and all sensors but keeps the cached species data."
+        }
+      },
+      "view_plants": {
+        "title": "Configured and Cached Plants",
+        "description": "{info}"
+      },
+      "reset_database": {
+        "title": "Reset Plant Database",
+        "description": "{info}",
+        "data": {
+          "confirm_reset": "Confirm reset"
+        },
+        "data_description": {
+          "confirm_reset": "Check to confirm deletion of all plant data. Your API keys and settings will not be affected."
+        }
+      },
+      "settings": {
+        "title": "Integration Settings",
+        "description": "{info}",
+        "data": {
+          "perenual_api_key": "Perenual API key",
+          "trefle_api_key": "Trefle API token",
+          "enable_trefle_fallback": "Enable Trefle fallback",
+          "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
+          "update_interval": "Update interval in seconds"
+        }
+      },
+      "result": {
+        "title": "Plant Helper result",
+        "description": "{info}"
+      }
+    },
+    "error": {
+      "required": "This field is required.",
+      "plant_id_exists": "A configured plant with this Plant ID already exists."
+    }
+  }
+}
