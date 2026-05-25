@@ -5,6 +5,34 @@ All notable changes to Plant Helper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3] - 2026-05-25
+
+### Fixed
+- **CRITICAL:** Fixed binary sensors showing null thresholds when provider data is incomplete
+  - Binary sensors now use default thresholds matching the algorithm behavior
+  - Defaults: soil_moisture_min=30, temperature_min=16, temperature_max=29, lux_min=1200
+  - Fixes issue where plants with missing Perenual watering data had non-functional binary sensors
+- Fixed API rate limiting in binary sensor to track all three providers (Perenual, Trefle, iNaturalist)
+  - Binary sensor now shows comprehensive status for all APIs
+  - Added availability status, usage percentages, and calls remaining for each provider
+- Fixed config flow linked sensors display showing "not set" for all sensors
+  - Corrected entity key mapping to use actual storage keys instead of configuration constants
+- Fixed hardcoded API limits in Trefle and iNaturalist providers
+  - Now properly use TREFLE_DAILY_LIMIT and INATURALIST_DAILY_LIMIT constants
+
+### Changed
+- Enhanced API connectivity binary sensor with per-provider detailed attributes
+  - Shows which APIs are available, at limit, or have errors
+  - Displays usage statistics and next reset time for each provider
+  - Binary sensor now ON if ANY primary provider (Perenual OR Trefle) is available
+
+### Removed
+- Removed 26 lines of dead code across integration
+  - Removed unused `compact_dict()` function from api/base.py
+  - Removed unused `async_import_from_json()` method from storage.py
+  - Removed duplicate event constants from const.py (kept API daily limit constants only)
+  - Removed duplicate PERENUAL_DAILY_LIMIT from api/perenual.py (now imports from const.py)
+
 ## [3.1.2] - 2026-05-24
 
 ### Changed
@@ -25,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved quick start guide
 - Added automation examples
 
-## [3.1.1] - 2026-XX-XX
+## [3.1.1] - 026-05-24
 
 ### Added
 - Support for calculated soil moisture without physical sensor
@@ -43,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected timestamp parsing for last watering events
 - Fixed edge case in soil moisture calculation
 
-## [3.1.0] - 2026-XX-XX
+## [3.1.0] - 026-05-24
 
 ### Added
 - iNaturalist enrichment support (optional, no API key required)
@@ -63,7 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected timezone handling for sensor timestamps
 - Fixed issue with species key extraction from varied data formats
 
-## [3.0.0] - 2026-XX-XX
+## [3.0.0] - 026-05-24
 
 ### Added
 - Initial release with local-first architecture
