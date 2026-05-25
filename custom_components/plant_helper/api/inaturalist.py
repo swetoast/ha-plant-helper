@@ -9,6 +9,7 @@ from typing import Any
 import aiohttp
 
 from .base import ProviderResult, RateLimiter
+from ..const import INATURALIST_DAILY_LIMIT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class INaturalistProvider:
         *,
         session: aiohttp.ClientSession,
         enabled: bool = True,
-        daily_limit: int = 300,
+        daily_limit: int = INATURALIST_DAILY_LIMIT,
         min_interval_seconds: int = 3,
     ) -> None:
         """Initialize provider."""
@@ -87,37 +88,28 @@ class INaturalistProvider:
     def _normalize(self, payload: dict[str, Any], query: str) -> dict[str, Any]:
         """Normalize iNaturalist observations."""
         results = payload.get("results") or []
-        observations: list[dict[str, Any]] = []
         photos: list[dict[str, Any]] = []
 
         for item in results[:5]:
-            obs = {
-                "id": item.get("id"),
-                "uri": item.get("uri"),
-                "observed_on": item.get("observed_on"),
-                "place_guess": item.get("place_guess"),
-                "quality_grade": item.get("quality_grade"),
-                "taxon": (item.get("taxon") or {}).get("name"),
-                "preferred_common_name": (item.get("taxon") or {}).get("preferred_common_name"),
-            }
-            observations.append(obs)
             for photo in item.get("photos") or []:
-                url = photo.get("url") or photo.get("medium_url") or photo.get("square_url")
+                # Use larger photo sizes: large > medium > original > square
+                url = (
+                    photo.get("large_url") 
+                    or photo.get("medium_url") 
+                    or photo.get("original_url")
+                    or photo.get("url")
+                )
                 if url:
                     photos.append({
-                        "url": url,
+                        "url": url.replace("/square.", "/large."),  # Force large size
                         "license_code": photo.get("license_code"),
                         "attribution": photo.get("attribution"),
-                        "observation_id": item.get("id"),
                     })
 
         return {
             "provider": "inaturalist",
             "query": query,
-            "observations_checked": True,
             "observation_count": payload.get("total_results", len(results)),
-            "returned_observations": len(results),
-            "observations": observations,
             "photos": photos[:10],
             "updated_at": datetime.now().isoformat(),
         }

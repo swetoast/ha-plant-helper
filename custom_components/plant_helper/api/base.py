@@ -79,6 +79,3 @@ def first_value(value: Any) -> Any:
     return value
 
 
-def compact_dict(data: dict[str, Any]) -> dict[str, Any]:
-    """Remove None values from a dict."""
-    return {key: value for key, value in data.items() if value is not None}

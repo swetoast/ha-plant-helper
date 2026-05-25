@@ -322,11 +322,25 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         entities = {
             key: call.data[key]
             for key in (
+                # Support old keys for backward compatibility
                 "humidity_entity",
                 "temperature_entity",
                 "lux_entity",
                 "moisture_entity",
                 "air_humidity_entity",
+                # Support new clean keys
+                "soil_temperature",
+                "soil_moisture",
+                "soil_humidity",
+                "room_temperature",
+                "room_humidity",
+                "room_lux",
+                # Support base keys
+                "temperature",
+                "moisture",
+                "humidity",
+                "lux",
+                "air_humidity",
             )
             if key in call.data and call.data[key]
         }

@@ -9,10 +9,9 @@ from typing import Any
 import aiohttp
 
 from .base import ProviderResult, RateLimiter, first_value, normalize_text
+from ..const import PERENUAL_DAILY_LIMIT
 
 _LOGGER = logging.getLogger(__name__)
-
-PERENUAL_DAILY_LIMIT = 100
 
 
 class PerenualProvider:

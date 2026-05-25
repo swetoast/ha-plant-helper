@@ -9,6 +9,7 @@ from typing import Any
 import aiohttp
 
 from .base import ProviderResult, RateLimiter, normalize_text
+from ..const import TREFLE_DAILY_LIMIT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class TrefleProvider:
         session: aiohttp.ClientSession,
         api_key: str | None,
         enabled: bool = True,
-        daily_limit: int = 500,
+        daily_limit: int = TREFLE_DAILY_LIMIT,
         min_interval_seconds: int = 2,
     ) -> None:
         """Initialize provider."""

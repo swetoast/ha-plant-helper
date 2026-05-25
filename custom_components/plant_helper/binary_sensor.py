@@ -16,7 +16,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
@@ -25,18 +25,27 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, PERENUAL_DAILY_LIMIT
+from .const import (
+    DOMAIN,
+    PERENUAL_DAILY_LIMIT,
+    TREFLE_DAILY_LIMIT,
+    INATURALIST_DAILY_LIMIT,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
+EVENT_USER_PLANT_ADDED = f"{DOMAIN}_user_plant_added"
+EVENT_USER_PLANT_REMOVED = f"{DOMAIN}_user_plant_removed"
+EVENT_DATABASE_RESET = f"{DOMAIN}_database_reset"
+
 
 ENTITY_KEY_ALIASES = {
-    "humidity": ("humidity", "humidity_entity", "moisture", "moisture_entity"),
-    "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity"),
-    "temperature": ("temperature", "temperature_entity", "temp", "temp_entity"),
-    "temp": ("temp", "temp_entity", "temperature", "temperature_entity"),
-    "lux": ("lux", "lux_entity", "light", "light_entity"),
-    "air_humidity": ("air_humidity", "air_humidity_entity"),
+    "humidity": ("humidity", "humidity_entity", "moisture", "moisture_entity", "soil_moisture", "soil_humidity"),
+    "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity", "soil_moisture", "soil_humidity"),
+    "temperature": ("temperature", "temperature_entity", "temp", "temp_entity", "room_temperature", "soil_temperature"),
+    "temp": ("temp", "temp_entity", "temperature", "temperature_entity", "room_temperature", "soil_temperature"),
+    "lux": ("lux", "lux_entity", "light", "light_entity", "room_lux"),
+    "air_humidity": ("air_humidity", "air_humidity_entity", "room_humidity"),
 }
 
 
@@ -50,6 +59,9 @@ async def async_setup_entry(
     storage = runtime_data["storage"]
     api = runtime_data.get("api")
     coordinator = runtime_data.get("coordinator")
+
+    # Track plant binary sensors for dynamic add/remove
+    plant_entities: dict[str, list[BinarySensorEntity]] = {}
 
     entities: list[BinarySensorEntity] = [
         PlantHelperAPIConnectivityBinarySensor(
@@ -74,33 +86,129 @@ async def async_setup_entry(
             )
             continue
 
-        entities.extend(
-            [
-                PlantNeedsWaterSensor(
-                    hass=hass,
-                    entry=entry,
-                    plant_id=plant_id,
-                    plant_data=plant_data,
-                    plant_info=plant_info,
-                ),
-                PlantLowLightSensor(
-                    hass=hass,
-                    entry=entry,
-                    plant_id=plant_id,
-                    plant_data=plant_data,
-                    plant_info=plant_info,
-                ),
-                PlantTemperatureIssueSensor(
-                    hass=hass,
-                    entry=entry,
-                    plant_id=plant_id,
-                    plant_data=plant_data,
-                    plant_info=plant_info,
-                ),
-            ]
-        )
+        plant_binary_sensors = [
+            PlantNeedsWaterSensor(
+                hass=hass,
+                entry=entry,
+                plant_id=plant_id,
+                plant_data=plant_data,
+                plant_info=plant_info,
+                storage=storage,
+            ),
+            PlantLowLightSensor(
+                hass=hass,
+                entry=entry,
+                plant_id=plant_id,
+                plant_data=plant_data,
+                plant_info=plant_info,
+                storage=storage,
+            ),
+            PlantTemperatureIssueSensor(
+                hass=hass,
+                entry=entry,
+                plant_id=plant_id,
+                plant_data=plant_data,
+                plant_info=plant_info,
+                storage=storage,
+            ),
+        ]
+        
+        entities.extend(plant_binary_sensors)
+        plant_entities[plant_id] = plant_binary_sensors
 
     async_add_entities(entities, True)
+
+    # Handle dynamic plant addition
+    async def _handle_plant_added(event: Event) -> None:
+        if event.data.get("entry_id") not in (None, entry.entry_id):
+            return
+
+        plant_id = event.data.get("plant_id")
+        if not plant_id or plant_id in plant_entities:
+            return
+
+        plant_data = storage.get_user_plant(plant_id)
+        if not plant_data:
+            return
+
+        species = plant_data.get("species")
+        plant_info = storage.get_plant(species)
+
+        if not plant_info:
+            _LOGGER.warning(
+                "Species '%s' not found for configured plant '%s'",
+                species,
+                plant_id,
+            )
+            return
+
+        suite = [
+            PlantNeedsWaterSensor(
+                hass=hass,
+                entry=entry,
+                plant_id=plant_id,
+                plant_data=plant_data,
+                plant_info=plant_info,
+                storage=storage,
+            ),
+            PlantLowLightSensor(
+                hass=hass,
+                entry=entry,
+                plant_id=plant_id,
+                plant_data=plant_data,
+                plant_info=plant_info,
+                storage=storage,
+            ),
+            PlantTemperatureIssueSensor(
+                hass=hass,
+                entry=entry,
+                plant_id=plant_id,
+                plant_data=plant_data,
+                plant_info=plant_info,
+                storage=storage,
+            ),
+        ]
+
+        plant_entities[plant_id] = suite
+        async_add_entities(suite, True)
+
+    # Handle dynamic plant removal
+    async def _handle_plant_removed(event: Event) -> None:
+        if event.data.get("entry_id") not in (None, entry.entry_id):
+            return
+
+        plant_id = event.data.get("plant_id")
+        if not plant_id:
+            return
+
+        for entity in plant_entities.pop(plant_id, []):
+            try:
+                await entity.async_remove()
+            except Exception:
+                _LOGGER.debug("Failed removing binary sensor for plant %s", plant_id)
+
+    # Handle database reset
+    async def _handle_database_reset(event: Event) -> None:
+        if event.data.get("entry_id") not in (None, entry.entry_id):
+            return
+
+        for plant_id in list(plant_entities):
+            for entity in plant_entities.pop(plant_id, []):
+                try:
+                    await entity.async_remove()
+                except Exception:
+                    _LOGGER.debug("Failed removing binary sensor for plant %s", plant_id)
+
+    # Register event listeners
+    entry.async_on_unload(
+        hass.bus.async_listen(EVENT_USER_PLANT_ADDED, _handle_plant_added)
+    )
+    entry.async_on_unload(
+        hass.bus.async_listen(EVENT_USER_PLANT_REMOVED, _handle_plant_removed)
+    )
+    entry.async_on_unload(
+        hass.bus.async_listen(EVENT_DATABASE_RESET, _handle_database_reset)
+    )
     _LOGGER.info("Created %d Plant Helper binary sensors", len(entities))
 
 
@@ -194,25 +302,86 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
         """Update state on interval."""
         self.async_schedule_update_ha_state(True)
 
+    def _get_api_status(self) -> dict[str, Any]:
+        """Check availability status of all APIs.
+        
+        Returns dict with availability status for each provider and aggregate status.
+        """
+        if self._api is None:
+            return {
+                "perenual_available": False,
+                "trefle_available": False,
+                "inaturalist_available": False,
+                "any_available": False,
+                "perenual_at_limit": False,
+                "trefle_at_limit": False,
+                "inaturalist_at_limit": False,
+            }
+
+        # Check Perenual status
+        perenual_key = getattr(self._api, "perenual_key", None)
+        perenual_provider = getattr(self._api, "perenual", None)
+        perenual_calls = 0
+        if perenual_provider is not None:
+            limiter = getattr(perenual_provider, "limiter", None)
+            if limiter is not None:
+                perenual_calls = int(getattr(limiter, "calls_today", 0))
+        
+        perenual_at_limit = perenual_calls >= PERENUAL_DAILY_LIMIT
+        perenual_available = bool(perenual_key) and not perenual_at_limit
+
+        # Check Trefle status
+        enable_trefle = bool(getattr(self._api, "enable_trefle_fallback", False))
+        trefle_key = getattr(self._api, "trefle_key", None)
+        trefle_provider = getattr(self._api, "trefle", None)
+        trefle_calls = 0
+        if trefle_provider is not None:
+            limiter = getattr(trefle_provider, "limiter", None)
+            if limiter is not None:
+                trefle_calls = int(getattr(limiter, "calls_today", 0))
+        
+        trefle_at_limit = trefle_calls >= TREFLE_DAILY_LIMIT
+        trefle_available = enable_trefle and bool(trefle_key) and not trefle_at_limit
+
+        # Check iNaturalist status
+        enable_inaturalist = bool(getattr(self._api, "enable_inaturalist_enrichment", False))
+        inaturalist_provider = getattr(self._api, "inaturalist", None)
+        inaturalist_calls = 0
+        if inaturalist_provider is not None:
+            limiter = getattr(inaturalist_provider, "limiter", None)
+            if limiter is not None:
+                inaturalist_calls = int(getattr(limiter, "calls_today", 0))
+        
+        inaturalist_at_limit = inaturalist_calls >= INATURALIST_DAILY_LIMIT
+        inaturalist_available = enable_inaturalist and not inaturalist_at_limit
+
+        # At least one primary provider (Perenual or Trefle) must be available
+        any_available = perenual_available or trefle_available
+
+        return {
+            "perenual_available": perenual_available,
+            "trefle_available": trefle_available,
+            "inaturalist_available": inaturalist_available,
+            "any_available": any_available,
+            "perenual_at_limit": perenual_at_limit,
+            "trefle_at_limit": trefle_at_limit,
+            "inaturalist_at_limit": inaturalist_at_limit,
+            "perenual_calls": perenual_calls,
+            "trefle_calls": trefle_calls,
+            "inaturalist_calls": inaturalist_calls,
+        }
+
     @property
     def is_on(self) -> bool:
-        """Return true if API layer is usable."""
+        """Return true if ANY primary API (Perenual or Trefle) is usable.
+        
+        iNaturalist is enrichment-only, so its availability doesn't affect the main state.
+        """
         if self._api is None:
             return False
 
-        perenual_key = getattr(self._api, "perenual_key", None)
-        if not perenual_key:
-            return False
-
-        calls_today = int(getattr(self._api, "_api_calls_today", 0))
-        if calls_today >= PERENUAL_DAILY_LIMIT:
-            return False
-
-        last_error = getattr(self._api, "_last_error", None)
-        if last_error:
-            return False
-
-        return True
+        status = self._get_api_status()
+        return status["any_available"]
 
     @property
     def icon(self) -> str:
@@ -232,16 +401,30 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
                 "trefle_enabled": False,
                 "inaturalist_enabled": False,
                 "perenual_daily_limit": PERENUAL_DAILY_LIMIT,
+                "trefle_daily_limit": TREFLE_DAILY_LIMIT,
+                "inaturalist_daily_limit": INATURALIST_DAILY_LIMIT,
                 "perenual_calls_today": None,
                 "perenual_calls_remaining": None,
+                "perenual_available": False,
+                "perenual_at_limit": False,
                 "trefle_calls_today": None,
+                "trefle_calls_remaining": None,
+                "trefle_available": False,
+                "trefle_at_limit": False,
                 "inaturalist_calls_today": None,
+                "inaturalist_calls_remaining": None,
+                "inaturalist_available": False,
+                "inaturalist_at_limit": False,
+                "any_api_available": False,
                 "last_provider": None,
                 "last_success": None,
                 "last_error": "API client is not loaded",
                 "updated_at": dt_util.now().isoformat(),
             }
 
+        # Get comprehensive API status from helper
+        api_status = self._get_api_status()
+        
         perenual_key = getattr(self._api, "perenual_key", None)
         trefle_key = getattr(self._api, "trefle_key", None)
         enable_trefle = bool(getattr(self._api, "enable_trefle_fallback", False))
@@ -249,11 +432,13 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
             getattr(self._api, "enable_inaturalist_enrichment", False)
         )
 
-        perenual_calls_today = int(getattr(self._api, "_api_calls_today", 0))
-        perenual_calls_remaining = max(
-            PERENUAL_DAILY_LIMIT - perenual_calls_today,
-            0,
-        )
+        perenual_calls_today = api_status["perenual_calls"]
+        trefle_calls_today = api_status["trefle_calls"]
+        inaturalist_calls_today = api_status["inaturalist_calls"]
+
+        perenual_calls_remaining = max(PERENUAL_DAILY_LIMIT - perenual_calls_today, 0)
+        trefle_calls_remaining = max(TREFLE_DAILY_LIMIT - trefle_calls_today, 0)
+        inaturalist_calls_remaining = max(INATURALIST_DAILY_LIMIT - inaturalist_calls_today, 0)
 
         last_error = getattr(self._api, "_last_error", None)
         last_success = getattr(self._api, "_last_success", None)
@@ -263,37 +448,47 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
         trefle_provider = getattr(self._api, "trefle", None)
         inaturalist_provider = getattr(self._api, "inaturalist", None)
 
-        trefle_calls_today = None
-        inaturalist_calls_today = None
-
-        if trefle_provider is not None:
-            limiter = getattr(trefle_provider, "limiter", None)
-            if limiter is not None:
-                trefle_calls_today = getattr(limiter, "calls_today", None)
-
-        if inaturalist_provider is not None:
-            limiter = getattr(inaturalist_provider, "limiter", None)
-            if limiter is not None:
-                inaturalist_calls_today = getattr(limiter, "calls_today", None)
-
-        if not perenual_key:
-            status = "perenual_key_missing"
-        elif perenual_calls_today >= PERENUAL_DAILY_LIMIT:
-            status = "perenual_daily_limit_reached"
+        # Determine overall status message
+        if not perenual_key and not (enable_trefle and trefle_key):
+            status = "no_api_keys_configured"
+        elif api_status["perenual_at_limit"] and api_status["trefle_at_limit"]:
+            status = "all_limits_reached"
+        elif api_status["perenual_at_limit"] and not enable_trefle:
+            status = "perenual_limit_reached_no_fallback"
+        elif api_status["perenual_at_limit"]:
+            status = "perenual_limit_reached_using_trefle"
+        elif api_status["trefle_at_limit"] and not api_status["perenual_available"]:
+            status = "trefle_limit_reached"
         elif last_error:
             status = "api_error"
-        else:
+        elif api_status["any_available"]:
             status = "connected"
+        else:
+            status = "unavailable"
 
         return {
             "status": status,
             "api_client_loaded": True,
             "api_usable": self.is_on,
+            # Configuration status
             "perenual_key_configured": bool(perenual_key),
             "trefle_key_configured": bool(trefle_key),
             "trefle_enabled": enable_trefle,
             "inaturalist_enabled": enable_inaturalist,
+            # Availability status (new - shows which APIs can be used right now)
+            "perenual_available": api_status["perenual_available"],
+            "trefle_available": api_status["trefle_available"],
+            "inaturalist_available": api_status["inaturalist_available"],
+            "any_api_available": api_status["any_available"],
+            # Limit status (new - shows which APIs hit their limits)
+            "perenual_at_limit": api_status["perenual_at_limit"],
+            "trefle_at_limit": api_status["trefle_at_limit"],
+            "inaturalist_at_limit": api_status["inaturalist_at_limit"],
+            # Daily limits
             "perenual_daily_limit": PERENUAL_DAILY_LIMIT,
+            "trefle_daily_limit": TREFLE_DAILY_LIMIT,
+            "inaturalist_daily_limit": INATURALIST_DAILY_LIMIT,
+            # Call counts
             "perenual_calls_today": perenual_calls_today,
             "perenual_calls_remaining": perenual_calls_remaining,
             "perenual_usage_percent": round(
@@ -301,7 +496,18 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
                 1,
             ),
             "trefle_calls_today": trefle_calls_today,
+            "trefle_calls_remaining": trefle_calls_remaining,
+            "trefle_usage_percent": round(
+                (trefle_calls_today / TREFLE_DAILY_LIMIT) * 100,
+                1,
+            ),
             "inaturalist_calls_today": inaturalist_calls_today,
+            "inaturalist_calls_remaining": inaturalist_calls_remaining,
+            "inaturalist_usage_percent": round(
+                (inaturalist_calls_today / INATURALIST_DAILY_LIMIT) * 100,
+                1,
+            ),
+            # Last operation details
             "last_provider": last_provider,
             "last_success": last_success,
             "last_error": last_error,
@@ -321,6 +527,7 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
             "base_url": getattr(perenual_provider, "base_url", None)
             if perenual_provider is not None
             else getattr(self._api, "_base_url", None),
+            "next_limit_reset": "midnight",  # All limits reset at midnight
             "updated_at": dt_util.now().isoformat(),
         }
 
@@ -335,12 +542,47 @@ class PlantBinaryBase(PlantHelperBinaryBase):
         plant_id: str,
         plant_data: dict[str, Any],
         plant_info: dict[str, Any],
+        storage: Any,
     ) -> None:
         """Initialize plant binary sensor."""
         super().__init__(hass, entry)
         self._plant_id = plant_id
         self._plant_data = plant_data
         self._plant_info = plant_info
+        self._storage = storage
+
+    async def async_added_to_hass(self) -> None:
+        """Register event listeners when added to HA."""
+        await super().async_added_to_hass()
+
+        # Listen for plant data updates
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                f"{DOMAIN}_plant_data_fetched",
+                self._handle_plant_event,
+            )
+        )
+
+    @callback
+    def _handle_plant_event(self, event: Event) -> None:
+        """Update plant info when species data is fetched."""
+        if event.data.get("entry_id") not in (None, self._entry.entry_id):
+            return
+        if event.data.get("plant_id") not in (None, self._plant_id):
+            return
+
+        # Refresh plant_data
+        latest_plant_data = self._storage.get_user_plant(self._plant_id)
+        if latest_plant_data:
+            self._plant_data = latest_plant_data
+
+        # Refresh plant_info (this will update thresholds!)
+        species = self._plant_data.get("species")
+        latest_plant_info = self._storage.get_plant(species)
+        if latest_plant_info:
+            self._plant_info = latest_plant_info
+
+        self.async_schedule_update_ha_state(True)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -392,18 +634,6 @@ class PlantBinaryBase(PlantHelperBinaryBase):
         """Handle linked entity update."""
         self.async_schedule_update_ha_state(True)
 
-    @property
-    def common_attributes(self) -> dict[str, Any]:
-        """Return common attributes."""
-        return {
-            "plant_id": self._plant_id,
-            "custom_name": self._plant_data.get("custom_name"),
-            "species": self._plant_data.get("species"),
-            "common_name": self._plant_info.get("common_name"),
-            "scientific_name": self._plant_info.get("scientific_name"),
-            "linked_entities": self._plant_data.get("entities", {}),
-        }
-
 
 class PlantNeedsWaterSensor(PlantBinaryBase):
     """Binary sensor for water status."""
@@ -417,9 +647,10 @@ class PlantNeedsWaterSensor(PlantBinaryBase):
         plant_id: str,
         plant_data: dict[str, Any],
         plant_info: dict[str, Any],
+        storage: Any,
     ) -> None:
         """Initialize water sensor."""
-        super().__init__(hass, entry, plant_id, plant_data, plant_info)
+        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage)
         name = plant_data.get("custom_name") or plant_id
         self._attr_name = f"{name} Needs Water"
         self._attr_unique_id = f"{DOMAIN}_{plant_id}_needs_water"
@@ -433,14 +664,13 @@ class PlantNeedsWaterSensor(PlantBinaryBase):
         if moisture is None:
             return False
 
-        thresholds = self._plant_info.get("thresholds", {})
-        moisture_min = thresholds.get("soil_moisture_min")
-
-        if moisture_min is None:
-            moisture_min = thresholds.get("humidity_min")
-
-        if moisture_min is None:
-            return False
+        # Get fresh plant_info from storage to ensure thresholds are current
+        species = self._plant_data.get("species")
+        fresh_plant_info = self._storage.get_plant(species) if species else {}
+        thresholds = (fresh_plant_info or {}).get("thresholds", {})
+        
+        # Use defaults matching plant_care_algorithms.py
+        moisture_min = thresholds.get("soil_moisture_min") or thresholds.get("humidity_min") or 30
 
         return moisture < float(moisture_min)
 
@@ -452,17 +682,17 @@ class PlantNeedsWaterSensor(PlantBinaryBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return attributes."""
-        attrs = self.common_attributes
-        thresholds = self._plant_info.get("thresholds", {})
-        attrs.update(
-            {
-                "soil_moisture": self._get_sensor_value("moisture"),
-                "soil_moisture_min": thresholds.get("soil_moisture_min")
-                or thresholds.get("humidity_min"),
-                "source_entity": _get_linked_entity(self._plant_data, "moisture"),
-            }
-        )
-        return attrs
+        # Get fresh plant_info from storage to ensure thresholds are current
+        species = self._plant_data.get("species")
+        fresh_plant_info = self._storage.get_plant(species) if species else {}
+        thresholds = (fresh_plant_info or {}).get("thresholds", {})
+        
+        # Use defaults matching plant_care_algorithms.py
+        return {
+            "soil_moisture": self._get_sensor_value("moisture"),
+            "soil_moisture_min": thresholds.get("soil_moisture_min") or thresholds.get("humidity_min") or 30,
+            "source_entity": _get_linked_entity(self._plant_data, "moisture"),
+        }
 
 
 class PlantLowLightSensor(PlantBinaryBase):
@@ -477,9 +707,10 @@ class PlantLowLightSensor(PlantBinaryBase):
         plant_id: str,
         plant_data: dict[str, Any],
         plant_info: dict[str, Any],
+        storage: Any,
     ) -> None:
         """Initialize low light sensor."""
-        super().__init__(hass, entry, plant_id, plant_data, plant_info)
+        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage)
         name = plant_data.get("custom_name") or plant_id
         self._attr_name = f"{name} Low Light"
         self._attr_unique_id = f"{DOMAIN}_{plant_id}_low_light"
@@ -493,11 +724,13 @@ class PlantLowLightSensor(PlantBinaryBase):
         if lux is None:
             return False
 
-        thresholds = self._plant_info.get("thresholds", {})
-        lux_min = thresholds.get("lux_min")
-
-        if lux_min is None:
-            return False
+        # Get fresh plant_info from storage to ensure thresholds are current
+        species = self._plant_data.get("species")
+        fresh_plant_info = self._storage.get_plant(species) if species else {}
+        thresholds = (fresh_plant_info or {}).get("thresholds", {})
+        
+        # Use defaults matching plant_care_algorithms.py
+        lux_min = thresholds.get("lux_min") or 1200
 
         return lux < float(lux_min)
 
@@ -509,16 +742,17 @@ class PlantLowLightSensor(PlantBinaryBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return attributes."""
-        attrs = self.common_attributes
-        thresholds = self._plant_info.get("thresholds", {})
-        attrs.update(
-            {
-                "lux": self._get_sensor_value("lux"),
-                "lux_min": thresholds.get("lux_min"),
-                "source_entity": _get_linked_entity(self._plant_data, "lux"),
-            }
-        )
-        return attrs
+        # Get fresh plant_info from storage to ensure thresholds are current
+        species = self._plant_data.get("species")
+        fresh_plant_info = self._storage.get_plant(species) if species else {}
+        thresholds = (fresh_plant_info or {}).get("thresholds", {})
+        
+        # Use defaults matching plant_care_algorithms.py
+        return {
+            "lux": self._get_sensor_value("lux"),
+            "lux_min": thresholds.get("lux_min") or 1200,
+            "source_entity": _get_linked_entity(self._plant_data, "lux"),
+        }
 
 
 class PlantTemperatureIssueSensor(PlantBinaryBase):
@@ -533,9 +767,10 @@ class PlantTemperatureIssueSensor(PlantBinaryBase):
         plant_id: str,
         plant_data: dict[str, Any],
         plant_info: dict[str, Any],
+        storage: Any,
     ) -> None:
         """Initialize temperature issue sensor."""
-        super().__init__(hass, entry, plant_id, plant_data, plant_info)
+        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage)
         name = plant_data.get("custom_name") or plant_id
         self._attr_name = f"{name} Temperature Issue"
         self._attr_unique_id = f"{DOMAIN}_{plant_id}_temperature_issue"
@@ -549,9 +784,14 @@ class PlantTemperatureIssueSensor(PlantBinaryBase):
         if temperature is None:
             return False
 
-        thresholds = self._plant_info.get("thresholds", {})
-        temp_min = thresholds.get("temperature_min")
-        temp_max = thresholds.get("temperature_max")
+        # Get fresh plant_info from storage to ensure thresholds are current
+        species = self._plant_data.get("species")
+        fresh_plant_info = self._storage.get_plant(species) if species else {}
+        thresholds = (fresh_plant_info or {}).get("thresholds", {})
+        
+        # Use defaults matching plant_care_algorithms.py
+        temp_min = thresholds.get("temperature_min") or 16
+        temp_max = thresholds.get("temperature_max") or 29
 
         if temp_min is not None and temperature < float(temp_min):
             return True
@@ -569,14 +809,15 @@ class PlantTemperatureIssueSensor(PlantBinaryBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return attributes."""
-        attrs = self.common_attributes
-        thresholds = self._plant_info.get("thresholds", {})
-        attrs.update(
-            {
-                "temperature": self._get_sensor_value("temperature"),
-                "temperature_min": thresholds.get("temperature_min"),
-                "temperature_max": thresholds.get("temperature_max"),
-                "source_entity": _get_linked_entity(self._plant_data, "temperature"),
-            }
-        )
-        return attrs
+        # Get fresh plant_info from storage to ensure thresholds are current
+        species = self._plant_data.get("species")
+        fresh_plant_info = self._storage.get_plant(species) if species else {}
+        thresholds = (fresh_plant_info or {}).get("thresholds", {})
+        
+        # Use defaults matching plant_care_algorithms.py
+        return {
+            "temperature": self._get_sensor_value("temperature"),
+            "temperature_min": thresholds.get("temperature_min") or 16,
+            "temperature_max": thresholds.get("temperature_max") or 29,
+            "source_entity": _get_linked_entity(self._plant_data, "temperature"),
+        }

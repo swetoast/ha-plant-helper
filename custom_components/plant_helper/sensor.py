@@ -20,6 +20,7 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
@@ -38,10 +39,10 @@ EVENT_PLANT_INSPECTED = f"{DOMAIN}_inspected"
 EVENT_DATABASE_RESET = f"{DOMAIN}_database_reset"
 
 ENTITY_KEY_ALIASES = {
-    "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity"),
-    "temperature": ("temperature", "temperature_entity", "temp", "temp_entity"),
-    "lux": ("lux", "lux_entity", "light", "light_entity"),
-    "air_humidity": ("air_humidity", "air_humidity_entity"),
+    "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity", "soil_moisture", "soil_humidity"),
+    "temperature": ("temperature", "temperature_entity", "temp", "temp_entity", "room_temperature", "soil_temperature"),
+    "lux": ("lux", "lux_entity", "light", "light_entity", "room_lux"),
+    "air_humidity": ("air_humidity", "air_humidity_entity", "room_humidity"),
 }
 
 CARE_ACTION_OPTIONS = [
@@ -131,11 +132,18 @@ async def async_setup_entry(
         if not plant_id:
             return
 
+        # Remove all entities for this plant
         for entity in plant_entities.pop(plant_id, []):
             try:
                 await entity.async_remove()
             except Exception:
                 _LOGGER.debug("Failed removing dynamic entity for plant %s", plant_id)
+
+        # Remove the device from device registry
+        device_reg = dr.async_get(hass)
+        device = device_reg.async_get_device(identifiers={(DOMAIN, plant_id)})
+        if device:
+            device_reg.async_remove_device(device.id)
 
         algorithms.clear_plant(plant_id)
 
@@ -143,12 +151,21 @@ async def async_setup_entry(
         if event.data.get("entry_id") not in (None, entry.entry_id):
             return
 
+        device_reg = dr.async_get(hass)
+        
         for plant_id in list(plant_entities):
+            # Remove all entities
             for entity in plant_entities.pop(plant_id, []):
                 try:
                     await entity.async_remove()
                 except Exception:
                     _LOGGER.debug("Failed removing dynamic entity for plant %s", plant_id)
+            
+            # Remove device
+            device = device_reg.async_get_device(identifiers={(DOMAIN, plant_id)})
+            if device:
+                device_reg.async_remove_device(device.id)
+            
             algorithms.clear_plant(plant_id)
 
     entry.async_on_unload(
@@ -461,6 +478,35 @@ class PlantGroupedStatusSensor(PlantDerivedBaseSensor):
                 },
             }
         )
+        
+        # Add iNaturalist enrichment data if available
+        inat_data = self._plant_info.get("inat", {}) if isinstance(self._plant_info, dict) else {}
+        if inat_data:
+            photos = inat_data.get("photos", [])[:3]  # Top 3 photos only
+            
+            if photos:
+                # Primary photo for easy dashboard use
+                attrs["inat_photo"] = photos[0].get("url")
+                
+                # Total observation count
+                attrs["inat_count"] = inat_data.get("observation_count", 0)
+                
+                # All photos with attribution (for advanced use)
+                attrs["inat_photos"] = [
+                    {
+                        "url": p.get("url"),
+                        "license": p.get("license_code"),
+                        "attribution": p.get("attribution"),
+                    }
+                    for p in photos
+                    if p.get("url")
+                ]
+                
+                # Link to view all observations
+                species = self._plant_data.get("species")
+                if species:
+                    attrs["inat_url"] = f"https://www.inaturalist.org/observations?taxon_name={species.replace(' ', '+')}"
+        
         return attrs
 
 
@@ -484,23 +530,19 @@ class PlantCalculatedSoilMoistureSensor(PlantDerivedBaseSensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         metrics = self._metrics()
-        attrs = self._common_attrs()
-        attrs.update(
-            {
-                "watering_state": metrics.get("watering_state"),
-                "watering_urgency": metrics.get("watering_urgency"),
-                "days_until_watering": metrics.get("days_until_watering"),
-                "days_since_watered": metrics.get("days_since_watered"),
-                "drying_rate_factor": metrics.get("drying_rate_factor"),
-                "drying_rate_per_hour": metrics.get("drying_rate_per_hour"),
-                "soil_moisture_model": metrics.get("soil_moisture_model"),
-                "soil_moisture_source": metrics.get("soil_moisture_source"),
-                "real_soil_moisture": metrics.get("soil_moisture_sensor"),
-                "soil_moisture_min": metrics.get("soil_moisture_min"),
-                "soil_moisture_max": metrics.get("soil_moisture_max"),
-            }
-        )
-        return attrs
+        return {
+            "watering_state": metrics.get("watering_state"),
+            "watering_urgency": metrics.get("watering_urgency"),
+            "days_until_watering": metrics.get("days_until_watering"),
+            "days_since_watered": metrics.get("days_since_watered"),
+            "drying_rate_factor": metrics.get("drying_rate_factor"),
+            "drying_rate_per_hour": metrics.get("drying_rate_per_hour"),
+            "soil_moisture_model": metrics.get("soil_moisture_model"),
+            "soil_moisture_source": metrics.get("soil_moisture_source"),
+            "real_soil_moisture": metrics.get("soil_moisture_sensor"),
+            "soil_moisture_min": metrics.get("soil_moisture_min"),
+            "soil_moisture_max": metrics.get("soil_moisture_max"),
+        }
 
 
 class PlantLightScoreSensor(PlantDerivedBaseSensor):
@@ -521,22 +563,18 @@ class PlantLightScoreSensor(PlantDerivedBaseSensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         metrics = self._metrics()
-        attrs = self._common_attrs()
-        attrs.update(
-            {
-                "light_state": metrics.get("light_state"),
-                "current_lux": metrics.get("current_lux"),
-                "peak_lux_today": metrics.get("peak_lux_today"),
-                "sufficient_light_minutes_today": metrics.get(
-                    "sufficient_light_minutes_today"
-                ),
-                "bright_light_minutes_today": metrics.get("bright_light_minutes_today"),
-                "low_light_minutes_today": metrics.get("low_light_minutes_today"),
-                "daily_light_target_minutes": metrics.get("daily_light_target_minutes"),
-                "lux_min": metrics.get("lux_min"),
-            }
-        )
-        return attrs
+        return {
+            "light_state": metrics.get("light_state"),
+            "current_lux": metrics.get("current_lux"),
+            "peak_lux_today": metrics.get("peak_lux_today"),
+            "sufficient_light_minutes_today": metrics.get(
+                "sufficient_light_minutes_today"
+            ),
+            "bright_light_minutes_today": metrics.get("bright_light_minutes_today"),
+            "low_light_minutes_today": metrics.get("low_light_minutes_today"),
+            "daily_light_target_minutes": metrics.get("daily_light_target_minutes"),
+            "lux_min": metrics.get("lux_min"),
+        }
 
 
 class PlantTemperatureStressLoadSensor(PlantDerivedBaseSensor):
@@ -559,20 +597,16 @@ class PlantTemperatureStressLoadSensor(PlantDerivedBaseSensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         metrics = self._metrics()
-        attrs = self._common_attrs()
-        attrs.update(
-            {
-                "temperature_state": metrics.get("temperature_state"),
-                "current_temperature": metrics.get("temperature"),
-                "cold_stress_minutes_today": metrics.get("cold_stress_minutes_today"),
-                "heat_stress_minutes_today": metrics.get("heat_stress_minutes_today"),
-                "min_temp_today": metrics.get("min_temp_today"),
-                "max_temp_today": metrics.get("max_temp_today"),
-                "temperature_min": metrics.get("temperature_min"),
-                "temperature_max": metrics.get("temperature_max"),
-            }
-        )
-        return attrs
+        return {
+            "temperature_state": metrics.get("temperature_state"),
+            "current_temperature": metrics.get("temperature"),
+            "cold_stress_minutes_today": metrics.get("cold_stress_minutes_today"),
+            "heat_stress_minutes_today": metrics.get("heat_stress_minutes_today"),
+            "min_temp_today": metrics.get("min_temp_today"),
+            "max_temp_today": metrics.get("max_temp_today"),
+            "temperature_min": metrics.get("temperature_min"),
+            "temperature_max": metrics.get("temperature_max"),
+        }
 
 
 class PlantHealthScoreSensor(PlantDerivedBaseSensor):
@@ -593,20 +627,16 @@ class PlantHealthScoreSensor(PlantDerivedBaseSensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         metrics = self._metrics()
-        attrs = self._common_attrs()
-        attrs.update(
-            {
-                "health_state": metrics.get("health_state"),
-                "primary_issue": metrics.get("primary_issue"),
-                "care_action": metrics.get("care_action"),
-                "moisture_score": metrics.get("moisture_score"),
-                "light_score": metrics.get("light_score"),
-                "temperature_score": metrics.get("temperature_score"),
-                "air_humidity_score": metrics.get("air_humidity_score"),
-                "maintenance_score": metrics.get("maintenance_score"),
-            }
-        )
-        return attrs
+        return {
+            "health_state": metrics.get("health_state"),
+            "primary_issue": metrics.get("primary_issue"),
+            "care_action": metrics.get("care_action"),
+            "moisture_score": metrics.get("moisture_score"),
+            "light_score": metrics.get("light_score"),
+            "temperature_score": metrics.get("temperature_score"),
+            "air_humidity_score": metrics.get("air_humidity_score"),
+            "maintenance_score": metrics.get("maintenance_score"),
+        }
 
 
 class PlantCareActionSensor(PlantDerivedBaseSensor):
@@ -628,16 +658,12 @@ class PlantCareActionSensor(PlantDerivedBaseSensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         metrics = self._metrics()
-        attrs = self._common_attrs()
-        attrs.update(
-            {
-                "primary_issue": metrics.get("primary_issue"),
-                "health_state": metrics.get("health_state"),
-                "watering_state": metrics.get("watering_state"),
-                "light_state": metrics.get("light_state"),
-                "temperature_state": metrics.get("temperature_state"),
-                "air_humidity_state": metrics.get("air_humidity_state"),
-                "maintenance_state": metrics.get("maintenance_state"),
-            }
-        )
-        return attrs
+        return {
+            "primary_issue": metrics.get("primary_issue"),
+            "health_state": metrics.get("health_state"),
+            "watering_state": metrics.get("watering_state"),
+            "light_state": metrics.get("light_state"),
+            "temperature_state": metrics.get("temperature_state"),
+            "air_humidity_state": metrics.get("air_humidity_state"),
+            "maintenance_state": metrics.get("maintenance_state"),
+        }

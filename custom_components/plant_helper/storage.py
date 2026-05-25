@@ -263,13 +263,3 @@ class PlantStorage:
         """Get all configured plant instances."""
         self._data.setdefault("user_plants", {})
         return self._data["user_plants"]
-
-    async def async_import_from_json(self, json_data: dict[str, Any]) -> int:
-        """Import plants from JSON data."""
-        count = 0
-
-        for species, data in json_data.items():
-            if await self.async_add_plant(species, data):
-                count += 1
-
-        return count

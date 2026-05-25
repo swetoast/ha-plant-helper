@@ -681,10 +681,10 @@ class PlantCareAlgorithms:
     def _get_linked_entity(self, plant_data: dict[str, Any], key: str) -> str | None:
         entities = plant_data.get("entities", {}) if isinstance(plant_data, dict) else {}
         aliases = {
-            "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity"),
-            "temperature": ("temperature", "temperature_entity", "temp", "temp_entity"),
-            "lux": ("lux", "lux_entity", "light", "light_entity"),
-            "air_humidity": ("air_humidity", "air_humidity_entity"),
+            "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity", "soil_moisture", "soil_humidity"),
+            "temperature": ("temperature", "temperature_entity", "temp", "temp_entity", "room_temperature", "soil_temperature"),
+            "lux": ("lux", "lux_entity", "light", "light_entity", "room_lux"),
+            "air_humidity": ("air_humidity", "air_humidity_entity", "room_humidity"),
         }.get(key, (key, f"{key}_entity"))
 
         for alias in aliases:

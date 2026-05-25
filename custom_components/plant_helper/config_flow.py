@@ -245,32 +245,36 @@ def _entry_value(entry: config_entries.ConfigEntry, key: str, default: Any) -> A
 
 
 def _source_entities_from_input(user_input: dict[str, Any]) -> dict[str, str]:
-    """Build source entity mapping with compatibility aliases."""
-    entities = {
-        field: user_input.get(field)
-        for field in ENTITY_FIELDS
-        if user_input.get(field)
-    }
-    if user_input.get(CONF_ROOM_TEMPERATURE_ENTITY):
-        entities["temperature_entity"] = user_input[CONF_ROOM_TEMPERATURE_ENTITY]
-    if user_input.get(CONF_ROOM_LUX_ENTITY):
-        entities["lux_entity"] = user_input[CONF_ROOM_LUX_ENTITY]
-    if user_input.get(CONF_ROOM_HUMIDITY_ENTITY):
-        entities["air_humidity_entity"] = user_input[CONF_ROOM_HUMIDITY_ENTITY]
+    """Build source entity mapping with proper soil/room prefixes."""
+    entities = {}
+    
+    # Save with clean keys (no _entity suffix)
+    if user_input.get(CONF_SOIL_TEMPERATURE_ENTITY):
+        entities["soil_temperature"] = user_input[CONF_SOIL_TEMPERATURE_ENTITY]
+    
     if user_input.get(CONF_SOIL_HUMIDITY_ENTITY):
-        entities["moisture_entity"] = user_input[CONF_SOIL_HUMIDITY_ENTITY]
-        entities["humidity_entity"] = user_input[CONF_SOIL_HUMIDITY_ENTITY]
+        entities["soil_moisture"] = user_input[CONF_SOIL_HUMIDITY_ENTITY]
+    
+    if user_input.get(CONF_ROOM_TEMPERATURE_ENTITY):
+        entities["room_temperature"] = user_input[CONF_ROOM_TEMPERATURE_ENTITY]
+    
+    if user_input.get(CONF_ROOM_HUMIDITY_ENTITY):
+        entities["room_humidity"] = user_input[CONF_ROOM_HUMIDITY_ENTITY]
+    
+    if user_input.get(CONF_ROOM_LUX_ENTITY):
+        entities["room_lux"] = user_input[CONF_ROOM_LUX_ENTITY]
+    
     return entities
 
 
 def _format_linked_sources(entities: dict[str, str]) -> str:
     """Return a friendly linked source sensor summary."""
     rows = (
-        ("Soil temperature", entities.get(CONF_SOIL_TEMPERATURE_ENTITY)),
-        ("Soil moisture", entities.get(CONF_SOIL_HUMIDITY_ENTITY)),
-        ("Room temperature", entities.get(CONF_ROOM_TEMPERATURE_ENTITY)),
-        ("Room humidity", entities.get(CONF_ROOM_HUMIDITY_ENTITY)),
-        ("Room light", entities.get(CONF_ROOM_LUX_ENTITY)),
+        ("Soil temperature", entities.get("soil_temperature")),
+        ("Soil moisture", entities.get("soil_moisture")),
+        ("Room temperature", entities.get("room_temperature")),
+        ("Room humidity", entities.get("room_humidity")),
+        ("Room light", entities.get("room_lux")),
     )
     return "\n".join(f"- {label}: {entity_id or 'not set'}" for label, entity_id in rows)
 
