@@ -2,7 +2,7 @@
 
 A comprehensive Home Assistant custom integration for managing and monitoring your houseplants with local-first data caching and intelligent API usage.
 
-[![Version](https://img.shields.io/badge/version-3.1.2-blue.svg)](https://github.com/swetoast/ha-plant-helper/releases)
+[![Version](https://img.shields.io/badge/version-3.1.3-blue.svg)](https://github.com/swetoast/ha-plant-helper/releases)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
