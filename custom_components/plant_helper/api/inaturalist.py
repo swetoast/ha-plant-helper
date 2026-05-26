@@ -40,20 +40,24 @@ class INaturalistProvider:
         if not self.limiter.can_call():
             return ProviderResult(False, "inaturalist", api_checked=True, api_called=False, message="iNaturalist limit reached or interval not ready")
 
-        query = plant_data.get("scientific_name") or plant_data.get("common_name") or plant_data.get("species")
-        if not query:
+        # Get query and clean it for iNaturalist
+        raw_query = plant_data.get("scientific_name") or plant_data.get("common_name") or plant_data.get("species")
+        if not raw_query:
             return ProviderResult(False, "inaturalist", api_checked=False, api_called=False, message="No query available for iNaturalist")
+        
+        # Clean the query: remove (group), cultivar names, etc.
+        query = self._clean_query(raw_query)
 
         try:
             params: dict[str, Any] = {
                 "iconic_taxa": "Plantae",
                 "photos": "true",
-                "quality_grade": "research",
                 "per_page": 5,
                 "page": 1,
             }
+            # Use cleaned query for taxon_name or general search
             if plant_data.get("scientific_name"):
-                params["taxon_name"] = plant_data["scientific_name"]
+                params["taxon_name"] = query
             else:
                 params["q"] = query
 
@@ -78,12 +82,34 @@ class INaturalistProvider:
             self.last_error = "iNaturalist limit reached"
             return None
         self.limiter.mark_call()
-        async with self.session.get(url, params=params, timeout=10) as response:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with self.session.get(url, params=params, timeout=timeout) as response:
             if response.status != 200:
                 text = await response.text()
                 self.last_error = f"iNaturalist HTTP {response.status}: {text[:200]}"
                 return None
             return await response.json()
+
+    def _clean_query(self, query: str) -> str:
+        """Clean scientific/common name for iNaturalist search.
+        
+        Remove:
+        - (group) suffix from genus groups
+        - 'Cultivar Name' in quotes
+        - Cultivar suffixes like 'Neon', 'Golden', etc.
+        """
+        import re
+        
+        # Remove (group), (species), etc.
+        query = re.sub(r'\s*\([^)]+\)\s*', ' ', query)
+        
+        # Remove quoted cultivar names: 'Neon', 'Golden Pothos', etc.
+        query = re.sub(r"\s*'[^']+'\s*", ' ', query)
+        
+        # Trim and collapse multiple spaces
+        query = ' '.join(query.split())
+        
+        return query.strip()
 
     def _normalize(self, payload: dict[str, Any], query: str) -> dict[str, Any]:
         """Normalize iNaturalist observations."""

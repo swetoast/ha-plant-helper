@@ -94,7 +94,8 @@ class TrefleProvider:
             self.last_error = "Trefle limit reached"
             return None
         self.limiter.mark_call()
-        async with self.session.get(url, params=params, timeout=10) as response:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with self.session.get(url, params=params, timeout=timeout) as response:
             if response.status == 401:
                 self.last_error = "Trefle invalid token"
                 return None

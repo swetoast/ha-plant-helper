@@ -162,13 +162,28 @@ class PlantDataAPI:
     async def _enrich(self, plant_data: dict[str, Any]) -> dict[str, Any]:
         """Apply optional enrichment providers."""
         if not self.enable_inaturalist_enrichment:
+            # Add debug info even when disabled
+            plant_data["inaturalist_enriched"] = False
+            plant_data["inaturalist_message"] = "iNaturalist enrichment disabled in config"
             return plant_data
 
         enrichment = await self.inaturalist.enrich(plant_data)
+        
+        # Always add enrichment status for debugging
+        plant_data["inaturalist_enriched"] = enrichment.found
+        plant_data["inaturalist_message"] = enrichment.message
+        
         if enrichment.data:
             plant_data["inat"] = enrichment.data
-            plant_data["inaturalist_enriched"] = enrichment.found
-            plant_data["inaturalist_message"] = enrichment.message
+        else:
+            # Add empty structure with error info for visibility
+            plant_data["inat"] = {
+                "provider": "inaturalist",
+                "photos": [],
+                "observation_count": 0,
+                "error": enrichment.message,
+            }
+        
         return plant_data
 
     def _record_success(self, provider: str) -> None:

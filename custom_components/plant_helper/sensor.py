@@ -481,15 +481,25 @@ class PlantGroupedStatusSensor(PlantDerivedBaseSensor):
         
         # Add iNaturalist enrichment data if available
         inat_data = self._plant_info.get("inat", {}) if isinstance(self._plant_info, dict) else {}
+        
+        # Always show enrichment status for debugging
+        enrichment_status = self._plant_info.get("inaturalist_enriched", False) if isinstance(self._plant_info, dict) else False
+        enrichment_msg = self._plant_info.get("inaturalist_message", "Not available") if isinstance(self._plant_info, dict) else "Not available"
+        
+        attrs["inaturalist_enriched"] = enrichment_status
+        attrs["inaturalist_message"] = enrichment_msg
+        
         if inat_data:
             photos = inat_data.get("photos", [])[:3]  # Top 3 photos only
+            
+            # Always add observation count and error info if present
+            attrs["inat_count"] = inat_data.get("observation_count", 0)
+            if inat_data.get("error"):
+                attrs["inat_error"] = inat_data["error"]
             
             if photos:
                 # Primary photo for easy dashboard use
                 attrs["inat_photo"] = photos[0].get("url")
-                
-                # Total observation count
-                attrs["inat_count"] = inat_data.get("observation_count", 0)
                 
                 # All photos with attribution (for advanced use)
                 attrs["inat_photos"] = [
@@ -503,9 +513,10 @@ class PlantGroupedStatusSensor(PlantDerivedBaseSensor):
                 ]
                 
                 # Link to view all observations
-                species = self._plant_data.get("species")
-                if species:
-                    attrs["inat_url"] = f"https://www.inaturalist.org/observations?taxon_name={species.replace(' ', '+')}"
+                # Use scientific_name for accurate iNaturalist search, fall back to species if not available
+                scientific_name = self._plant_info.get("scientific_name") or self._plant_data.get("species")
+                if scientific_name:
+                    attrs["inat_url"] = f"https://www.inaturalist.org/observations?taxon_name={scientific_name.replace(' ', '+')}"
         
         return attrs
 

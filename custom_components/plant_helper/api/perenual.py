@@ -112,7 +112,8 @@ class PerenualProvider:
 
         self.limiter.mark_call()
 
-        async with self.session.get(url, params=params, timeout=10) as response:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with self.session.get(url, params=params, timeout=timeout) as response:
             if response.status == 429:
                 self.last_error = "Perenual rate limit reached"
                 return None
