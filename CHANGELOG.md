@@ -19,12 +19,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Corrected entity key mapping to use actual storage keys instead of configuration constants
 - Fixed hardcoded API limits in Trefle and iNaturalist providers
   - Now properly use TREFLE_DAILY_LIMIT and INATURALIST_DAILY_LIMIT constants
+- **iNaturalist photos not appearing in sensor attributes**
+  - Fixed photo URL transformation: iNaturalist only returns `url` (square thumbnail); code
+    was looking for non-existent `large_url`/`medium_url` fields. Now correctly rewrites
+    `square.jpg` → `large.jpg` in the URL path
+  - Fixed silent enrichment failure: when enrichment failed for any reason (rate limit,
+    API error, disabled) the `inat` key was silently omitted with no diagnostic info.
+    Enrichment status, message, and error details are now always written to plant data
+    and surfaced as sensor attributes (`inaturalist_enriched`, `inaturalist_message`,
+    `inat_error`)
+  - Fixed cache bypass: plants served from local cache skipped enrichment entirely.
+    Cache hits now run iNaturalist enrichment before returning
+  - Fixed query cleaning: provider names like `"Spathiphyllum (group)"` and cultivar
+    suffixes like `'Neon'` are stripped before querying iNaturalist, which does not
+    recognise these suffixes as valid taxon names
+  - Removed overly strict `quality_grade=research` filter that blocked the majority of
+    iNaturalist observations; photos filter (`photos=true`) is retained
+- **`add_user_plant` service rejecting new entity keys**
+  - `SCHEMA_ADD_USER_PLANT` only accepted old-style keys (`humidity_entity`,
+    `temperature_entity`, etc.). Voluptuous rejected calls using new keys introduced by
+    the config flow (`room_temperature`, `room_humidity`, `room_lux`, `soil_moisture`,
+    `soil_temperature`). Schema now accepts all key styles
+- **`needs_water` binary sensor not using physics model**
+  - Sensor was a simple raw-sensor threshold check; if no physical moisture sensor was
+    linked it returned `off` permanently. Now uses the same `PlantCareAlgorithms`
+    physics model as `calculated_soil_moisture`, with three trigger conditions:
+    calculated moisture below minimum, less than 1 day until watering needed, or
+    watering urgency score ≥ 70. Falls back to threshold check if algorithms unavailable
+  - Fixed separate `PlantCareAlgorithms` instance being created in binary sensor setup:
+    binary sensors now reuse the shared instance stored in `runtime_data["algorithms"]`
+    by the sensor platform, ensuring both platforms share the same sample history
+  - Fixed `_handle_sensor_update` not calling `record_runtime_sample`: binary sensors
+    now record a runtime sample whenever a linked entity updates, matching sensor
+    platform behaviour and keeping growth-mode and drying-rate calculations accurate
+- **Dead `"soil_moisture"` key stored in every runtime sample**
+  - `record_runtime_sample` stored a `soil_moisture` key that no calculation ever read
+    (moisture is read from live HA state via `_current_environment`, not from the sample
+    buffer). Removed to reduce per-sample memory overhead
+- **Duplicate event constant definitions across four files**
+  - `EVENT_PLANT_*` strings were independently redefined in `__init__.py`, `sensor.py`,
+    `binary_sensor.py`, and `config_flow.py`. A divergence would have silently broken
+    event routing. All event constants are now defined once in `const.py` and imported
+    everywhere else
 
 ### Changed
 - Enhanced API connectivity binary sensor with per-provider detailed attributes
   - Shows which APIs are available, at limit, or have errors
   - Displays usage statistics and next reset time for each provider
   - Binary sensor now ON if ANY primary provider (Perenual OR Trefle) is available
+- `needs_water` binary sensor attributes now expose physics model metrics:
+  `calculated_soil_moisture`, `days_until_watering`, `watering_urgency`,
+  `drying_rate_per_hour`, `soil_moisture_source`, `days_since_watered`
+- `sensor.peace_lily_plant_status` (and all plant status sensors) now always expose
+  `inaturalist_enriched` and `inaturalist_message` attributes for diagnostics, even
+  when enrichment fails or is disabled
+- iNaturalist observation URL in sensor attributes now uses `scientific_name` instead
+  of the species key for more accurate taxon matching
 
 ### Removed
 - Removed 26 lines of dead code across integration
@@ -53,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved quick start guide
 - Added automation examples
 
-## [3.1.1] - 026-05-24
+## [3.1.1] - 2026-05-24
 
 ### Added
 - Support for calculated soil moisture without physical sensor
@@ -71,7 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected timestamp parsing for last watering events
 - Fixed edge case in soil moisture calculation
 
-## [3.1.0] - 026-05-24
+## [3.1.0] - 2026-05-24
 
 ### Added
 - iNaturalist enrichment support (optional, no API key required)
@@ -91,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected timezone handling for sensor timestamps
 - Fixed issue with species key extraction from varied data formats
 
-## [3.0.0] - 026-05-24
+## [3.0.0] - 2026-05-24
 
 ### Added
 - Initial release with local-first architecture
