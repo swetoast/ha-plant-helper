@@ -23,6 +23,10 @@ from .const import (
     DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    EVENT_PLANT_DATA_FETCHED,
+    EVENT_USER_PLANT_ADDED,
+    EVENT_USER_PLANT_REMOVED,
+    EVENT_DATABASE_RESET,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,11 +58,6 @@ ACTION_FETCH_SPECIES = "fetch_species"
 ACTION_VIEW_PLANTS = "view_plants"
 ACTION_RESET_DATABASE = "reset_database"
 ACTION_SETTINGS = "settings"
-
-EVENT_PLANT_DATA_FETCHED = f"{DOMAIN}_plant_data_fetched"
-EVENT_USER_PLANT_ADDED = f"{DOMAIN}_user_plant_added"
-EVENT_USER_PLANT_REMOVED = f"{DOMAIN}_user_plant_removed"
-EVENT_DATABASE_RESET = f"{DOMAIN}_database_reset"
 
 SETUP_INFO = """Welcome to Plant Helper!
 

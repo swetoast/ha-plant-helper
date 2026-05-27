@@ -31,6 +31,15 @@ from .const import (
     DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    EVENT_PLANT_ADDED,
+    EVENT_PLANT_REMOVED,
+    EVENT_PLANT_DATA_FETCHED,
+    EVENT_USER_PLANT_ADDED,
+    EVENT_USER_PLANT_REMOVED,
+    EVENT_PLANT_WATERED,
+    EVENT_PLANT_FERTILIZED,
+    EVENT_PLANT_INSPECTED,
+    EVENT_DATABASE_RESET,
 )
 from .plant_care_algorithms import PlantCareAlgorithms
 from .plant_data_api import PlantDataAPI
@@ -49,16 +58,6 @@ SERVICE_MARK_WATERED = "mark_watered"
 SERVICE_MARK_FERTILIZED = "mark_fertilized"
 SERVICE_MARK_INSPECTED = "mark_inspected"
 SERVICE_RESET_DATABASE = "reset_database"
-
-EVENT_PLANT_ADDED = f"{DOMAIN}_plant_added"
-EVENT_PLANT_REMOVED = f"{DOMAIN}_plant_removed"
-EVENT_PLANT_DATA_FETCHED = f"{DOMAIN}_plant_data_fetched"
-EVENT_USER_PLANT_ADDED = f"{DOMAIN}_user_plant_added"
-EVENT_USER_PLANT_REMOVED = f"{DOMAIN}_user_plant_removed"
-EVENT_PLANT_WATERED = f"{DOMAIN}_watered"
-EVENT_PLANT_FERTILIZED = f"{DOMAIN}_fertilized"
-EVENT_PLANT_INSPECTED = f"{DOMAIN}_inspected"
-EVENT_DATABASE_RESET = f"{DOMAIN}_database_reset"
 
 SERVICES = (
     SERVICE_ADD_PLANT,
@@ -95,11 +94,25 @@ SCHEMA_ADD_USER_PLANT = vol.Schema(
         vol.Required("plant_id"): cv.string,
         vol.Required("species"): cv.string,
         vol.Optional("custom_name"): cv.string,
+        # Old-style keys (kept for backward compatibility)
         vol.Optional("humidity_entity"): cv.entity_id,
         vol.Optional("temperature_entity"): cv.entity_id,
         vol.Optional("lux_entity"): cv.entity_id,
         vol.Optional("moisture_entity"): cv.entity_id,
         vol.Optional("air_humidity_entity"): cv.entity_id,
+        # New clean keys (used by config_flow and recommended for direct service calls)
+        vol.Optional("soil_temperature"): cv.entity_id,
+        vol.Optional("soil_moisture"): cv.entity_id,
+        vol.Optional("soil_humidity"): cv.entity_id,
+        vol.Optional("room_temperature"): cv.entity_id,
+        vol.Optional("room_humidity"): cv.entity_id,
+        vol.Optional("room_lux"): cv.entity_id,
+        # Base keys
+        vol.Optional("temperature"): cv.entity_id,
+        vol.Optional("moisture"): cv.entity_id,
+        vol.Optional("humidity"): cv.entity_id,
+        vol.Optional("lux"): cv.entity_id,
+        vol.Optional("air_humidity"): cv.entity_id,
     }
 )
 SCHEMA_PLANT_ID = vol.Schema({vol.Required("plant_id"): cv.string})

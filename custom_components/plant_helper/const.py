@@ -24,3 +24,14 @@ ATTR_FACTS = "facts"
 PERENUAL_DAILY_LIMIT = 100
 TREFLE_DAILY_LIMIT = 500
 INATURALIST_DAILY_LIMIT = 300
+
+# Events
+EVENT_PLANT_ADDED = "plant_helper_plant_added"
+EVENT_PLANT_REMOVED = "plant_helper_plant_removed"
+EVENT_PLANT_DATA_FETCHED = "plant_helper_plant_data_fetched"
+EVENT_USER_PLANT_ADDED = "plant_helper_user_plant_added"
+EVENT_USER_PLANT_REMOVED = "plant_helper_user_plant_removed"
+EVENT_PLANT_WATERED = "plant_helper_watered"
+EVENT_PLANT_FERTILIZED = "plant_helper_fertilized"
+EVENT_PLANT_INSPECTED = "plant_helper_inspected"
+EVENT_DATABASE_RESET = "plant_helper_database_reset"

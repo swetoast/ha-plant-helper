@@ -30,13 +30,11 @@ from .const import (
     PERENUAL_DAILY_LIMIT,
     TREFLE_DAILY_LIMIT,
     INATURALIST_DAILY_LIMIT,
+    EVENT_USER_PLANT_ADDED,
+    EVENT_USER_PLANT_REMOVED,
+    EVENT_DATABASE_RESET,
 )
-
-_LOGGER = logging.getLogger(__name__)
-
-EVENT_USER_PLANT_ADDED = f"{DOMAIN}_user_plant_added"
-EVENT_USER_PLANT_REMOVED = f"{DOMAIN}_user_plant_removed"
-EVENT_DATABASE_RESET = f"{DOMAIN}_database_reset"
+from .plant_care_algorithms import PlantCareAlgorithms
 
 
 ENTITY_KEY_ALIASES = {
@@ -59,6 +57,12 @@ async def async_setup_entry(
     storage = runtime_data["storage"]
     api = runtime_data.get("api")
     coordinator = runtime_data.get("coordinator")
+    
+    # Reuse the shared algorithms instance from sensor platform (or create if not yet ready)
+    algorithms = runtime_data.get("algorithms")
+    if algorithms is None:
+        algorithms = PlantCareAlgorithms(hass, storage)
+        runtime_data["algorithms"] = algorithms
 
     # Track plant binary sensors for dynamic add/remove
     plant_entities: dict[str, list[BinarySensorEntity]] = {}
@@ -94,6 +98,7 @@ async def async_setup_entry(
                 plant_data=plant_data,
                 plant_info=plant_info,
                 storage=storage,
+                algorithms=algorithms,
             ),
             PlantLowLightSensor(
                 hass=hass,
@@ -102,6 +107,7 @@ async def async_setup_entry(
                 plant_data=plant_data,
                 plant_info=plant_info,
                 storage=storage,
+                algorithms=algorithms,
             ),
             PlantTemperatureIssueSensor(
                 hass=hass,
@@ -110,6 +116,7 @@ async def async_setup_entry(
                 plant_data=plant_data,
                 plant_info=plant_info,
                 storage=storage,
+                algorithms=algorithms,
             ),
         ]
         
@@ -150,6 +157,7 @@ async def async_setup_entry(
                 plant_data=plant_data,
                 plant_info=plant_info,
                 storage=storage,
+                algorithms=algorithms,
             ),
             PlantLowLightSensor(
                 hass=hass,
@@ -158,6 +166,7 @@ async def async_setup_entry(
                 plant_data=plant_data,
                 plant_info=plant_info,
                 storage=storage,
+                algorithms=algorithms,
             ),
             PlantTemperatureIssueSensor(
                 hass=hass,
@@ -166,6 +175,7 @@ async def async_setup_entry(
                 plant_data=plant_data,
                 plant_info=plant_info,
                 storage=storage,
+                algorithms=algorithms,
             ),
         ]
 
@@ -543,6 +553,7 @@ class PlantBinaryBase(PlantHelperBinaryBase):
         plant_data: dict[str, Any],
         plant_info: dict[str, Any],
         storage: Any,
+        algorithms: PlantCareAlgorithms | None = None,
     ) -> None:
         """Initialize plant binary sensor."""
         super().__init__(hass, entry)
@@ -550,6 +561,8 @@ class PlantBinaryBase(PlantHelperBinaryBase):
         self._plant_data = plant_data
         self._plant_info = plant_info
         self._storage = storage
+        self._algorithms = algorithms
+        self._cached_metrics: dict[str, Any] | None = None
 
     async def async_added_to_hass(self) -> None:
         """Register event listeners when added to HA."""
@@ -562,6 +575,16 @@ class PlantBinaryBase(PlantHelperBinaryBase):
                 self._handle_plant_event,
             )
         )
+    
+    def _metrics(self) -> dict[str, Any]:
+        """Get cached metrics or compute them."""
+        if self._cached_metrics is None and self._algorithms:
+            self._cached_metrics = self._algorithms.compute_metrics(
+                self._plant_id,
+                self._plant_data,
+                self._plant_info,
+            )
+        return self._cached_metrics or {}
 
     @callback
     def _handle_plant_event(self, event: Event) -> None:
@@ -581,6 +604,9 @@ class PlantBinaryBase(PlantHelperBinaryBase):
         latest_plant_info = self._storage.get_plant(species)
         if latest_plant_info:
             self._plant_info = latest_plant_info
+        
+        # Clear cached metrics to force recompute
+        self._cached_metrics = None
 
         self.async_schedule_update_ha_state(True)
 
@@ -632,6 +658,12 @@ class PlantBinaryBase(PlantHelperBinaryBase):
     @callback
     def _handle_sensor_update(self, event: Any) -> None:
         """Handle linked entity update."""
+        if self._algorithms:
+            self.hass.async_create_task(
+                self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
+            )
+        # Clear cached metrics so the next read reflects the new sensor value
+        self._cached_metrics = None
         self.async_schedule_update_ha_state(True)
 
 
@@ -648,9 +680,10 @@ class PlantNeedsWaterSensor(PlantBinaryBase):
         plant_data: dict[str, Any],
         plant_info: dict[str, Any],
         storage: Any,
+        algorithms: PlantCareAlgorithms | None = None,
     ) -> None:
         """Initialize water sensor."""
-        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage)
+        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage, algorithms)
         name = plant_data.get("custom_name") or plant_id
         self._attr_name = f"{name} Needs Water"
         self._attr_unique_id = f"{DOMAIN}_{plant_id}_needs_water"
@@ -658,21 +691,41 @@ class PlantNeedsWaterSensor(PlantBinaryBase):
 
     @property
     def is_on(self) -> bool:
-        """Return true if plant likely needs water."""
-        moisture = self._get_sensor_value("moisture")
-
-        if moisture is None:
-            return False
-
-        # Get fresh plant_info from storage to ensure thresholds are current
-        species = self._plant_data.get("species")
-        fresh_plant_info = self._storage.get_plant(species) if species else {}
-        thresholds = (fresh_plant_info or {}).get("thresholds", {})
+        """Return true if plant needs water (smart physics-based logic)."""
+        if not self._algorithms:
+            # Fallback to simple threshold check if algorithms unavailable
+            moisture = self._get_sensor_value("moisture")
+            if moisture is None:
+                return False
+            thresholds = (self._plant_info or {}).get("thresholds", {})
+            moisture_min = thresholds.get("soil_moisture_min", 30)
+            return moisture < float(moisture_min)
         
-        # Use defaults matching plant_care_algorithms.py
-        moisture_min = thresholds.get("soil_moisture_min") or thresholds.get("humidity_min") or 30
-
-        return moisture < float(moisture_min)
+        # Use smart calculated moisture and predictive metrics
+        metrics = self._metrics()
+        
+        # Get calculated moisture (blended or modeled)
+        calculated_moisture = metrics.get("calculated_soil_moisture")
+        if calculated_moisture is None:
+            return False
+        
+        # Get thresholds
+        thresholds = (self._plant_info or {}).get("thresholds", {})
+        moisture_min = thresholds.get("soil_moisture_min", 30)
+        
+        # Get predictive metrics
+        days_until_watering = metrics.get("days_until_watering", 999)
+        watering_urgency = metrics.get("watering_urgency", 0)
+        
+        # Smart logic: trigger if any of these conditions:
+        # 1. Moisture below minimum threshold
+        # 2. Less than 1 day until watering needed
+        # 3. Watering urgency high (>= 70/100)
+        return (
+            calculated_moisture < float(moisture_min)
+            or days_until_watering < 1.0
+            or watering_urgency >= 70
+        )
 
     @property
     def icon(self) -> str:
@@ -681,16 +734,29 @@ class PlantNeedsWaterSensor(PlantBinaryBase):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return attributes."""
-        # Get fresh plant_info from storage to ensure thresholds are current
-        species = self._plant_data.get("species")
-        fresh_plant_info = self._storage.get_plant(species) if species else {}
-        thresholds = (fresh_plant_info or {}).get("thresholds", {})
+        """Return attributes with smart watering metrics."""
+        if not self._algorithms:
+            # Fallback to simple attributes
+            thresholds = (self._plant_info or {}).get("thresholds", {})
+            return {
+                "soil_moisture": self._get_sensor_value("moisture"),
+                "soil_moisture_min": thresholds.get("soil_moisture_min", 30),
+                "source_entity": _get_linked_entity(self._plant_data, "moisture"),
+            }
         
-        # Use defaults matching plant_care_algorithms.py
+        # Smart metrics from algorithms
+        metrics = self._metrics()
+        thresholds = (self._plant_info or {}).get("thresholds", {})
+        
         return {
-            "soil_moisture": self._get_sensor_value("moisture"),
-            "soil_moisture_min": thresholds.get("soil_moisture_min") or thresholds.get("humidity_min") or 30,
+            "calculated_soil_moisture": metrics.get("calculated_soil_moisture"),
+            "soil_moisture_min": thresholds.get("soil_moisture_min", 30),
+            "soil_moisture_source": metrics.get("soil_moisture_source"),
+            "days_until_watering": metrics.get("days_until_watering"),
+            "watering_urgency": metrics.get("watering_urgency"),
+            "drying_rate_per_hour": metrics.get("drying_rate_per_hour"),
+            "days_since_watered": metrics.get("days_since_watered"),
+            "raw_moisture_sensor": self._get_sensor_value("moisture"),
             "source_entity": _get_linked_entity(self._plant_data, "moisture"),
         }
 
@@ -708,9 +774,10 @@ class PlantLowLightSensor(PlantBinaryBase):
         plant_data: dict[str, Any],
         plant_info: dict[str, Any],
         storage: Any,
+        algorithms: PlantCareAlgorithms | None = None,
     ) -> None:
         """Initialize low light sensor."""
-        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage)
+        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage, algorithms)
         name = plant_data.get("custom_name") or plant_id
         self._attr_name = f"{name} Low Light"
         self._attr_unique_id = f"{DOMAIN}_{plant_id}_low_light"
@@ -768,9 +835,10 @@ class PlantTemperatureIssueSensor(PlantBinaryBase):
         plant_data: dict[str, Any],
         plant_info: dict[str, Any],
         storage: Any,
+        algorithms: PlantCareAlgorithms | None = None,
     ) -> None:
         """Initialize temperature issue sensor."""
-        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage)
+        super().__init__(hass, entry, plant_id, plant_data, plant_info, storage, algorithms)
         name = plant_data.get("custom_name") or plant_id
         self._attr_name = f"{name} Temperature Issue"
         self._attr_unique_id = f"{DOMAIN}_{plant_id}_temperature_issue"

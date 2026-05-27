@@ -24,19 +24,18 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .const import (
+    EVENT_PLANT_ADDED,
+    EVENT_PLANT_REMOVED,
+    EVENT_PLANT_DATA_FETCHED,
+    EVENT_USER_PLANT_ADDED,
+    EVENT_USER_PLANT_REMOVED,
+    EVENT_PLANT_WATERED,
+    EVENT_PLANT_FERTILIZED,
+    EVENT_PLANT_INSPECTED,
+    EVENT_DATABASE_RESET,
+)
 from .plant_care_algorithms import PlantCareAlgorithms
-
-_LOGGER = logging.getLogger(__name__)
-
-EVENT_PLANT_ADDED = f"{DOMAIN}_plant_added"
-EVENT_PLANT_REMOVED = f"{DOMAIN}_plant_removed"
-EVENT_PLANT_DATA_FETCHED = f"{DOMAIN}_plant_data_fetched"
-EVENT_USER_PLANT_ADDED = f"{DOMAIN}_user_plant_added"
-EVENT_USER_PLANT_REMOVED = f"{DOMAIN}_user_plant_removed"
-EVENT_PLANT_WATERED = f"{DOMAIN}_watered"
-EVENT_PLANT_FERTILIZED = f"{DOMAIN}_fertilized"
-EVENT_PLANT_INSPECTED = f"{DOMAIN}_inspected"
-EVENT_DATABASE_RESET = f"{DOMAIN}_database_reset"
 
 ENTITY_KEY_ALIASES = {
     "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity", "soil_moisture", "soil_humidity"),

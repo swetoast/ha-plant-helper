@@ -53,7 +53,6 @@ class PlantCareAlgorithms:
             "temperature": self._linked_state_float(plant_data, "temperature"),
             "lux": self._linked_state_float(plant_data, "lux"),
             "air_humidity": self._linked_state_float(plant_data, "air_humidity"),
-            "soil_moisture": self._linked_state_float(plant_data, "moisture"),
         }
         self._samples[plant_id].append(sample)
         self._last_sample_at[plant_id] = now
