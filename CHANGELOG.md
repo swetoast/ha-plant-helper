@@ -5,6 +5,30 @@ All notable changes to Plant Helper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-05-29
+
+### Bug fixes
+
+- Watering alerts now clear (the headline bug). PlantBinaryBase now listens to watered/fertilized/inspected/fetched/added events and reloads plant_data from storage on each, so sensorless plants update correctly. Source-sensor updates and the binary sensor's is_on path also refresh state first.
+- Stale time-dependent metrics. Both platforms now disable polling (should_poll = False) and add a 5-minute async_track_time_interval that recomputes modeled moisture, days-until-watering, maintenance windows, and growth mode even when no linked sensor ticks.
+ -Found and fixed a latent crash I'd missed in the audit: sensor.py referenced _LOGGER in two except blocks but never defined it — any entity-removal error would have raised NameError. Now defined. (Pre-existing in your upload.)
+
+### API robustness
+
+- All three providers use response.json(content_type=None) so HTML error pages don't throw.
+- calls_made now counted via a real limiter delta instead of optimistic += 1, so usage counters match reality.
+- Connectivity sensor calls reset_if_needed() before reading counts, so post-midnight numbers are correct.
+- re import in iNaturalist hoisted to module top.
+
+### Maintainability & packaging
+
+- New helpers.py centralizes the linked-entity resolver + alias map + name extractors that were duplicated (and had drifted) across five files.
+- record_runtime_sample made synchronous (it never awaited) and called directly.
+- New services.yaml documenting all 9 services with selectors.
+- state_class = MEASUREMENT on the four % sensors for long-term statistics.
+- Database summary attributes capped at 100 names to stay under HA's state-size limit.
+- .editorconfig + .gitattributes to keep line endings LF; binary_sensor.py converted from CRLF.
+
 ## [3.1.3] - 2026-05-27
 
 ### Fixed
