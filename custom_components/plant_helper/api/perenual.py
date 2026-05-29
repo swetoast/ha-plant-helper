@@ -47,23 +47,27 @@ class PerenualProvider:
             self.last_error = "Perenual daily limit reached or call interval not ready"
             return ProviderResult(False, "perenual", api_checked=True, api_called=False, message=self.last_error)
 
+        start_calls = self.limiter.calls_today
+
+        def _calls() -> int:
+            return self.limiter.calls_today - start_calls
+
         try:
             payload = await self._get_json(
                 f"{self.base_url}/v2/species-list",
                 {"key": self.api_key, "q": search_name, "page": 1},
             )
             if payload is None:
-                return ProviderResult(False, "perenual", api_checked=True, api_called=True, calls_made=1, message=self.last_error or "Perenual search failed")
+                return ProviderResult(False, "perenual", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message=self.last_error or "Perenual search failed")
 
             results = payload.get("data") or []
             if not results:
-                return ProviderResult(False, "perenual", api_checked=True, api_called=True, calls_made=1, message="Perenual returned no results")
+                return ProviderResult(False, "perenual", api_checked=True, api_called=True, calls_made=_calls(), message="Perenual returned no results")
 
             selected = self._select_best(search_name, results)
             if not selected:
-                return ProviderResult(False, "perenual", api_checked=True, api_called=True, calls_made=1, message="No usable Perenual match")
+                return ProviderResult(False, "perenual", api_checked=True, api_called=True, calls_made=_calls(), message="No usable Perenual match")
 
-            calls = 1
             species_id = selected.get("id")
             detail = selected
 
@@ -72,7 +76,6 @@ class PerenualProvider:
                     f"{self.base_url}/v2/species/details/{species_id}",
                     {"key": self.api_key},
                 )
-                calls += 1
                 if detail_payload:
                     detail = detail_payload
 
@@ -84,20 +87,18 @@ class PerenualProvider:
                     f"{self.base_url}/species-care-guide-list",
                     {"key": self.api_key, "species_id": species_id, "page": 1},
                 )
-                calls += 1
 
             if fetch_diseases:
                 diseases = await self._get_json(
                     f"{self.base_url}/pest-disease-list",
                     {"key": self.api_key, "q": search_name, "page": 1},
                 )
-                calls += 1
 
             data = self._normalize_plant(detail, care_guides=care_guides, diseases=diseases)
             self.last_error = None
             self.last_success = datetime.now().isoformat()
 
-            return ProviderResult(True, "perenual", data=data, api_checked=True, api_called=True, calls_made=calls, message="Perenual match found")
+            return ProviderResult(True, "perenual", data=data, api_checked=True, api_called=True, calls_made=_calls(), message="Perenual match found")
 
         except Exception as err:
             _LOGGER.exception("Perenual lookup failed for %s", search_name)
@@ -121,7 +122,7 @@ class PerenualProvider:
                 text = await response.text()
                 self.last_error = f"Perenual HTTP {response.status}: {text[:200]}"
                 return None
-            return await response.json()
+            return await response.json(content_type=None)
 
     def _select_best(self, search_name: str, results: list[dict[str, Any]]) -> dict[str, Any] | None:
         """Select best Perenual result."""

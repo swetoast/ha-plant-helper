@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Any
 
@@ -88,7 +89,7 @@ class INaturalistProvider:
                 text = await response.text()
                 self.last_error = f"iNaturalist HTTP {response.status}: {text[:200]}"
                 return None
-            return await response.json()
+            return await response.json(content_type=None)
 
     def _clean_query(self, query: str) -> str:
         """Clean scientific/common name for iNaturalist search.
@@ -98,8 +99,6 @@ class INaturalistProvider:
         - 'Cultivar Name' in quotes
         - Cultivar suffixes like 'Neon', 'Golden', etc.
         """
-        import re
-        
         # Remove (group), (species), etc.
         query = re.sub(r'\s*\([^)]+\)\s*', ' ', query)
         

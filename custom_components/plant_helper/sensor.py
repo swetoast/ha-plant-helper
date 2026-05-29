@@ -11,22 +11,28 @@ Creates:
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .const import (
-    EVENT_PLANT_ADDED,
-    EVENT_PLANT_REMOVED,
     EVENT_PLANT_DATA_FETCHED,
     EVENT_USER_PLANT_ADDED,
     EVENT_USER_PLANT_REMOVED,
@@ -35,14 +41,19 @@ from .const import (
     EVENT_PLANT_INSPECTED,
     EVENT_DATABASE_RESET,
 )
+from .helpers import get_linked_entity as _get_linked_entity
 from .plant_care_algorithms import PlantCareAlgorithms
 
-ENTITY_KEY_ALIASES = {
-    "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity", "soil_moisture", "soil_humidity"),
-    "temperature": ("temperature", "temperature_entity", "temp", "temp_entity", "room_temperature", "soil_temperature"),
-    "lux": ("lux", "lux_entity", "light", "light_entity", "room_lux"),
-    "air_humidity": ("air_humidity", "air_humidity_entity", "room_humidity"),
-}
+_LOGGER = logging.getLogger(__name__)
+
+# How often time-dependent derived metrics (modeled soil moisture,
+# days-until-watering, maintenance state, growth mode) are recomputed even
+# when no linked source sensor has changed.
+METRIC_REFRESH_INTERVAL = timedelta(minutes=5)
+
+# Cap on how many names are flattened into summary-sensor attributes, to stay
+# well under Home Assistant's per-state attribute size limit on large caches.
+MAX_SUMMARY_NAMES = 100
 
 CARE_ACTION_OPTIONS = [
     "none",
@@ -214,15 +225,6 @@ def _build_plant_sensor_suite(
     ]
 
 
-def _get_linked_entity(plant_data: dict[str, Any], key: str) -> str | None:
-    entities = plant_data.get("entities", {}) if isinstance(plant_data, dict) else {}
-    for alias in ENTITY_KEY_ALIASES.get(key, (key, f"{key}_entity")):
-        value = entities.get(alias)
-        if value:
-            return str(value)
-    return None
-
-
 class PlantSummaryBaseSensor(SensorEntity):
     """Base class for summary sensors."""
 
@@ -262,10 +264,13 @@ class PlantDatabaseSensor(PlantSummaryBaseSensor):
             [data.get("common_name") or species for species, data in plants.items()],
             key=lambda item: item.lower(),
         )
+        species_keys = sorted(plants.keys())
+        truncated = len(names) > MAX_SUMMARY_NAMES
         return {
             "cached_species_count": len(plants),
-            "cached_common_names": ", ".join(names),
-            "cached_species": ", ".join(sorted(plants.keys())),
+            "cached_common_names": ", ".join(names[:MAX_SUMMARY_NAMES]),
+            "cached_species": ", ".join(species_keys[:MAX_SUMMARY_NAMES]),
+            "names_truncated": truncated,
             "updated_at": dt_util.now().isoformat(),
         }
 
@@ -311,6 +316,7 @@ class PlantDerivedBaseSensor(SensorEntity):
     """Base class for per-plant derived sensors."""
 
     _attr_has_entity_name = True
+    _attr_should_poll = False
 
     def __init__(
         self,
@@ -372,17 +378,40 @@ class PlantDerivedBaseSensor(SensorEntity):
                 self.hass.bus.async_listen(event_type, self._handle_plant_event)
             )
 
-        self.hass.async_create_task(
-            self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
+        self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
+
+        self.async_on_remove(
+            async_track_time_interval(
+                self.hass,
+                self._handle_metric_refresh,
+                METRIC_REFRESH_INTERVAL,
+            )
         )
 
     @callback
-    def _handle_source_update(self, event: Event) -> None:
-        self.hass.async_create_task(
-            self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
-        )
+    def _handle_metric_refresh(self, now) -> None:
+        # Recompute time-dependent metrics even when no linked source sensor
+        # has changed (modeled moisture, maintenance windows, growth mode).
+        self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
         self._cached_metrics = None
         self.async_schedule_update_ha_state(True)
+
+    @callback
+    def _handle_source_update(self, event: Event) -> None:
+        self._refresh_plant_state()
+        self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
+        self._cached_metrics = None
+        self.async_schedule_update_ha_state(True)
+
+    def _refresh_plant_state(self) -> None:
+        """Reload this plant's data and species info from storage."""
+        latest_plant_data = self._storage.get_user_plant(self._plant_id)
+        if latest_plant_data:
+            self._plant_data = latest_plant_data
+        species = self._plant_data.get("species")
+        latest_plant_info = self._storage.get_plant(species) if species else None
+        if latest_plant_info:
+            self._plant_info = latest_plant_info
 
     @callback
     def _handle_plant_event(self, event: Event) -> None:
@@ -391,15 +420,7 @@ class PlantDerivedBaseSensor(SensorEntity):
         if event.data.get("plant_id") not in (None, self._plant_id):
             return
 
-        latest_plant_data = self._storage.get_user_plant(self._plant_id)
-        if latest_plant_data:
-            self._plant_data = latest_plant_data
-
-        species = self._plant_data.get("species")
-        latest_plant_info = self._storage.get_plant(species)
-        if latest_plant_info:
-            self._plant_info = latest_plant_info
-
+        self._refresh_plant_state()
         self._cached_metrics = None
         self.async_schedule_update_ha_state(True)
 
@@ -524,6 +545,7 @@ class PlantCalculatedSoilMoistureSensor(PlantDerivedBaseSensor):
     """Calculated soil moisture estimate for the plant."""
 
     _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:water-percent"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -559,6 +581,7 @@ class PlantLightScoreSensor(PlantDerivedBaseSensor):
     """Daily accumulated light score for the plant."""
 
     _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:white-balance-sunny"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -591,6 +614,7 @@ class PlantTemperatureStressLoadSensor(PlantDerivedBaseSensor):
     """Temperature stress duration/load for the plant."""
 
     _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:thermometer-alert"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -623,6 +647,7 @@ class PlantHealthScoreSensor(PlantDerivedBaseSensor):
     """Weighted overall health score for the plant."""
 
     _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:heart-pulse"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

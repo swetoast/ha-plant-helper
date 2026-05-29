@@ -44,20 +44,24 @@ class TrefleProvider:
         if not self.limiter.can_call():
             return ProviderResult(False, "trefle", api_checked=True, api_called=False, message="Trefle limit reached or interval not ready")
 
+        start_calls = self.limiter.calls_today
+
+        def _calls() -> int:
+            return self.limiter.calls_today - start_calls
+
         try:
             payload = await self._get_json(f"{self.base_url}/plants/search", {"token": self.api_key, "q": search_name, "page": 1})
             if payload is None:
-                return ProviderResult(False, "trefle", api_checked=True, api_called=True, calls_made=1, message=self.last_error or "Trefle search failed")
+                return ProviderResult(False, "trefle", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message=self.last_error or "Trefle search failed")
 
             results = payload.get("data") or []
             if not results:
-                return ProviderResult(False, "trefle", api_checked=True, api_called=True, calls_made=1, message="Trefle returned no results")
+                return ProviderResult(False, "trefle", api_checked=True, api_called=True, calls_made=_calls(), message="Trefle returned no results")
 
             selected = self._select_best(search_name, results)
             if not selected:
-                return ProviderResult(False, "trefle", api_checked=True, api_called=True, calls_made=1, message="No usable Trefle match")
+                return ProviderResult(False, "trefle", api_checked=True, api_called=True, calls_made=_calls(), message="No usable Trefle match")
 
-            calls = 1
             detail_data = selected
             links = selected.get("links") or {}
             plant_link = links.get("plant")
@@ -67,13 +71,10 @@ class TrefleProvider:
             detail_payload = None
             if plant_link:
                 detail_payload = await self._get_path(plant_link)
-                calls += 1
             if not detail_payload and self_link:
                 detail_payload = await self._get_path(self_link)
-                calls += 1
             if not detail_payload and slug:
                 detail_payload = await self._get_path(f"/api/v1/plants/{slug}")
-                calls += 1
 
             if detail_payload and isinstance(detail_payload.get("data"), dict):
                 detail_data = {**selected, **detail_payload["data"]}
@@ -81,7 +82,7 @@ class TrefleProvider:
             data = self._normalize(detail_data)
             self.last_error = None
             self.last_success = datetime.now().isoformat()
-            return ProviderResult(True, "trefle", data=data, api_checked=True, api_called=True, calls_made=calls, message="Trefle match found")
+            return ProviderResult(True, "trefle", data=data, api_checked=True, api_called=True, calls_made=_calls(), message="Trefle match found")
 
         except Exception as err:
             _LOGGER.exception("Trefle lookup failed for %s", search_name)
@@ -103,7 +104,7 @@ class TrefleProvider:
                 text = await response.text()
                 self.last_error = f"Trefle HTTP {response.status}: {text[:200]}"
                 return None
-            return await response.json()
+            return await response.json(content_type=None)
 
     async def _get_path(self, path: str) -> dict[str, Any] | None:
         """GET Trefle path returned by links."""

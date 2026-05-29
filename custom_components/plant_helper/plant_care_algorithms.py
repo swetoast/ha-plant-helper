@@ -15,6 +15,8 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .helpers import get_linked_entity
+
 _LOGGER = logging.getLogger(__name__)
 
 MAX_RUNTIME_SAMPLES = 432  # ~3 days at 10 minute cadence
@@ -33,7 +35,7 @@ class PlantCareAlgorithms:
         )
         self._last_sample_at: dict[str, datetime] = {}
 
-    async def record_runtime_sample(
+    def record_runtime_sample(
         self,
         plant_id: str,
         plant_data: dict[str, Any],
@@ -42,6 +44,9 @@ class PlantCareAlgorithms:
 
         Samples are throttled to avoid excessive processing while still enabling
         daily light accumulation and stress-duration calculations.
+
+        This is a synchronous callback-safe method; it performs no awaiting and
+        can be called directly from entity update callbacks.
         """
         now = dt_util.now()
         last_sample_at = self._last_sample_at.get(plant_id)
@@ -678,19 +683,7 @@ class PlantCareAlgorithms:
             return None
 
     def _get_linked_entity(self, plant_data: dict[str, Any], key: str) -> str | None:
-        entities = plant_data.get("entities", {}) if isinstance(plant_data, dict) else {}
-        aliases = {
-            "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity", "soil_moisture", "soil_humidity"),
-            "temperature": ("temperature", "temperature_entity", "temp", "temp_entity", "room_temperature", "soil_temperature"),
-            "lux": ("lux", "lux_entity", "light", "light_entity", "room_lux"),
-            "air_humidity": ("air_humidity", "air_humidity_entity", "room_humidity"),
-        }.get(key, (key, f"{key}_entity"))
-
-        for alias in aliases:
-            value = entities.get(alias)
-            if value:
-                return str(value)
-        return None
+        return get_linked_entity(plant_data, key)
 
     def _parse_datetime(self, value: Any) -> datetime | None:
         if not value:

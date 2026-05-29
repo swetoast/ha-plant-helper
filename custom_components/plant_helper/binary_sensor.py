@@ -33,18 +33,19 @@ from .const import (
     EVENT_USER_PLANT_ADDED,
     EVENT_USER_PLANT_REMOVED,
     EVENT_DATABASE_RESET,
+    EVENT_PLANT_DATA_FETCHED,
+    EVENT_PLANT_WATERED,
+    EVENT_PLANT_FERTILIZED,
+    EVENT_PLANT_INSPECTED,
 )
+from .helpers import get_linked_entity as _get_linked_entity
 from .plant_care_algorithms import PlantCareAlgorithms
 
+_LOGGER = logging.getLogger(__name__)
 
-ENTITY_KEY_ALIASES = {
-    "humidity": ("humidity", "humidity_entity", "moisture", "moisture_entity", "soil_moisture", "soil_humidity"),
-    "moisture": ("moisture", "moisture_entity", "humidity", "humidity_entity", "soil_moisture", "soil_humidity"),
-    "temperature": ("temperature", "temperature_entity", "temp", "temp_entity", "room_temperature", "soil_temperature"),
-    "temp": ("temp", "temp_entity", "temperature", "temperature_entity", "room_temperature", "soil_temperature"),
-    "lux": ("lux", "lux_entity", "light", "light_entity", "room_lux"),
-    "air_humidity": ("air_humidity", "air_humidity_entity", "room_humidity"),
-}
+# Recompute time-dependent metrics on this cadence even when no linked source
+# sensor has changed (mirrors the sensor platform).
+METRIC_REFRESH_INTERVAL = timedelta(minutes=5)
 
 
 async def async_setup_entry(
@@ -222,18 +223,6 @@ async def async_setup_entry(
     _LOGGER.info("Created %d Plant Helper binary sensors", len(entities))
 
 
-def _get_linked_entity(plant_data: dict[str, Any], key: str) -> str | None:
-    """Get linked entity from configured plant data."""
-    entities = plant_data.get("entities", {})
-
-    for alias in ENTITY_KEY_ALIASES.get(key, (key,)):
-        entity_id = entities.get(alias)
-        if entity_id:
-            return entity_id
-
-    return None
-
-
 def _safe_float(value: Any) -> float | None:
     """Convert value to float safely."""
     try:
@@ -335,6 +324,8 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
         if perenual_provider is not None:
             limiter = getattr(perenual_provider, "limiter", None)
             if limiter is not None:
+                if hasattr(limiter, "reset_if_needed"):
+                    limiter.reset_if_needed()
                 perenual_calls = int(getattr(limiter, "calls_today", 0))
         
         perenual_at_limit = perenual_calls >= PERENUAL_DAILY_LIMIT
@@ -348,6 +339,8 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
         if trefle_provider is not None:
             limiter = getattr(trefle_provider, "limiter", None)
             if limiter is not None:
+                if hasattr(limiter, "reset_if_needed"):
+                    limiter.reset_if_needed()
                 trefle_calls = int(getattr(limiter, "calls_today", 0))
         
         trefle_at_limit = trefle_calls >= TREFLE_DAILY_LIMIT
@@ -360,6 +353,8 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
         if inaturalist_provider is not None:
             limiter = getattr(inaturalist_provider, "limiter", None)
             if limiter is not None:
+                if hasattr(limiter, "reset_if_needed"):
+                    limiter.reset_if_needed()
                 inaturalist_calls = int(getattr(limiter, "calls_today", 0))
         
         inaturalist_at_limit = inaturalist_calls >= INATURALIST_DAILY_LIMIT
@@ -545,6 +540,8 @@ class PlantHelperAPIConnectivityBinarySensor(PlantHelperBinaryBase):
 class PlantBinaryBase(PlantHelperBinaryBase):
     """Base binary sensor for configured plants."""
 
+    _attr_should_poll = False
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -568,14 +565,50 @@ class PlantBinaryBase(PlantHelperBinaryBase):
         """Register event listeners when added to HA."""
         await super().async_added_to_hass()
 
-        # Listen for plant data updates
+        # Refresh on species fetch and on every care action (watered,
+        # fertilized, inspected). Previously only plant_data_fetched was
+        # handled, so marking a plant watered never cleared a "needs water"
+        # alert for plants without a physical moisture sensor.
+        for event_type in (
+            EVENT_PLANT_DATA_FETCHED,
+            EVENT_PLANT_WATERED,
+            EVENT_PLANT_FERTILIZED,
+            EVENT_PLANT_INSPECTED,
+            EVENT_USER_PLANT_ADDED,
+        ):
+            self.async_on_remove(
+                self.hass.bus.async_listen(event_type, self._handle_plant_event)
+            )
+
+        # Recompute time-dependent metrics on a fixed cadence even when no
+        # linked source sensor changes (e.g. modeled drying for sensorless
+        # plants).
         self.async_on_remove(
-            self.hass.bus.async_listen(
-                f"{DOMAIN}_plant_data_fetched",
-                self._handle_plant_event,
+            async_track_time_interval(
+                self.hass,
+                self._handle_metric_refresh,
+                METRIC_REFRESH_INTERVAL,
             )
         )
-    
+
+    @callback
+    def _handle_metric_refresh(self, now) -> None:
+        """Periodic recompute of time-dependent metrics."""
+        if self._algorithms:
+            self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
+        self._cached_metrics = None
+        self.async_schedule_update_ha_state(True)
+
+    def _refresh_plant_state(self) -> None:
+        """Reload this plant's data and species info from storage."""
+        latest_plant_data = self._storage.get_user_plant(self._plant_id)
+        if latest_plant_data:
+            self._plant_data = latest_plant_data
+        species = self._plant_data.get("species")
+        latest_plant_info = self._storage.get_plant(species) if species else None
+        if latest_plant_info:
+            self._plant_info = latest_plant_info
+
     def _metrics(self) -> dict[str, Any]:
         """Get cached metrics or compute them."""
         if self._cached_metrics is None and self._algorithms:
@@ -588,26 +621,14 @@ class PlantBinaryBase(PlantHelperBinaryBase):
 
     @callback
     def _handle_plant_event(self, event: Event) -> None:
-        """Update plant info when species data is fetched."""
+        """Refresh plant data/species info on care or fetch events."""
         if event.data.get("entry_id") not in (None, self._entry.entry_id):
             return
         if event.data.get("plant_id") not in (None, self._plant_id):
             return
 
-        # Refresh plant_data
-        latest_plant_data = self._storage.get_user_plant(self._plant_id)
-        if latest_plant_data:
-            self._plant_data = latest_plant_data
-
-        # Refresh plant_info (this will update thresholds!)
-        species = self._plant_data.get("species")
-        latest_plant_info = self._storage.get_plant(species)
-        if latest_plant_info:
-            self._plant_info = latest_plant_info
-        
-        # Clear cached metrics to force recompute
+        self._refresh_plant_state()
         self._cached_metrics = None
-
         self.async_schedule_update_ha_state(True)
 
     @property
@@ -632,7 +653,7 @@ class PlantBinaryBase(PlantHelperBinaryBase):
             return None
 
         state = self.hass.states.get(entity_id)
-        if not state or state.state in ("unknown", "unavailable", None):
+        if not state or state.state in ("unknown", "unavailable", "none", None):
             return None
 
         return _safe_float(state.state)
@@ -658,10 +679,10 @@ class PlantBinaryBase(PlantHelperBinaryBase):
     @callback
     def _handle_sensor_update(self, event: Any) -> None:
         """Handle linked entity update."""
+        # Reload plant_data so freshly-recorded care timestamps are reflected.
+        self._refresh_plant_state()
         if self._algorithms:
-            self.hass.async_create_task(
-                self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
-            )
+            self._algorithms.record_runtime_sample(self._plant_id, self._plant_data)
         # Clear cached metrics so the next read reflects the new sensor value
         self._cached_metrics = None
         self.async_schedule_update_ha_state(True)

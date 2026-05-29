@@ -28,6 +28,10 @@ from .const import (
     EVENT_USER_PLANT_REMOVED,
     EVENT_DATABASE_RESET,
 )
+from .helpers import (
+    extract_common_name as _extract_common_name,
+    extract_species_key as _extract_species_key,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -938,23 +942,3 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                 await coordinator.async_request_refresh()
             except Exception:
                 _LOGGER.exception("Failed to refresh Plant Helper coordinator")
-
-
-def _extract_species_key(data: dict[str, Any], fallback: str) -> str:
-    """Extract species key."""
-    for key in ("species", "scientific_name", "scientificName", "latin_name", "latinName", "name"):
-        value = data.get(key)
-        if isinstance(value, list) and value and str(value[0]).strip():
-            return str(value[0]).strip()
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return fallback.strip()
-
-
-def _extract_common_name(data: dict[str, Any], fallback: str) -> str:
-    """Extract common name."""
-    for key in ("common_name", "commonName", "common", "name"):
-        value = data.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return fallback.strip()
