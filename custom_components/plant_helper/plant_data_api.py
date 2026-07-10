@@ -49,15 +49,34 @@ class PlantDataAPI:
         self._last_provider: str | None = None
         self._base_url = self.perenual.base_url
 
-    @property
-    def _api_calls_today(self) -> int:
-        """Compatibility property for binary sensor."""
-        return self.perenual.limiter.calls_today
+    def provider_status(self) -> dict[str, Any]:
+        """Per-provider health/diagnostics for the API binary sensors."""
+        def _rl(limiter) -> dict[str, Any]:
+            limit = getattr(limiter, "daily_limit", None)
+            used = getattr(limiter, "calls_today", 0)
+            rate_limited = limit is not None and used >= limit
+            return {"calls_today": used, "daily_limit": limit, "rate_limited": rate_limited}
 
-    @property
-    def _last_reset(self):
-        """Compatibility property for binary sensor."""
-        return self.perenual.limiter.last_reset
+        return {
+            "perenual": {
+                "enabled": bool(self.perenual.api_key),
+                "has_key": bool(self.perenual.api_key),
+                **_rl(self.perenual.limiter),
+            },
+            "trefle": {
+                "enabled": bool(self.trefle.enabled and self.trefle.api_key),
+                "has_key": bool(self.trefle.api_key),
+                **_rl(self.trefle.limiter),
+            },
+            "inaturalist": {
+                "enabled": bool(self.inaturalist.enabled),
+                "has_key": False,
+                "rate_limited": False,
+            },
+            "last_provider": self._last_provider,
+            "last_error": self._last_error,
+            "last_success": self._last_success,
+        }
 
     async def fetch_perenual_plant(
         self,
@@ -87,8 +106,16 @@ class PlantDataAPI:
         fetch_care_guides: bool = True,
         fetch_diseases: bool = True,
     ) -> ProviderResult:
-        """Fetch plant through provider chain."""
-        search_name = search_name.strip()
+        """Resolve and merge species data across all three providers.
+
+        Perenual (care) + iNaturalist (identity/photo, keyless) + Trefle
+        (botanical). iNaturalist is a first-class resolver, not just a photo add-
+        on, so adding a plant returns useful data even with no API keys. The
+        merged record is cached under the resolved scientific name.
+        """
+        from .enrichment import merge_provider_data
+
+        search_name = (search_name or "").strip()
         if not search_name:
             self._last_error = "Empty plant search"
             return ProviderResult(False, "none", message=self._last_error)
@@ -96,67 +123,75 @@ class PlantDataAPI:
         if not force_fetch and self.storage:
             cached = self.storage.get_plant_by_name(search_name)
             if cached:
-                self._last_error = None
-                self._last_success = datetime.now().isoformat()
-                self._last_provider = "local_cache"
+                self._record_success("local_cache")
                 return ProviderResult(
-                    True,
-                    "local_cache",
-                    data=cached,
-                    api_checked=False,
-                    api_called=False,
-                    message="Local database cache hit",
+                    True, "local_cache", data=cached,
+                    api_checked=False, api_called=False, message="Local database cache hit",
                 )
 
+        parts: list[dict[str, Any]] = []
+        calls = 0
+        messages: dict[str, str] = {}
+
+        # 1. Perenual — care data (needs an API key).
         perenual_result = await self.perenual.fetch(
-            search_name,
-            fetch_care_guides=fetch_care_guides,
-            fetch_diseases=fetch_diseases,
+            search_name, fetch_care_guides=fetch_care_guides, fetch_diseases=fetch_diseases
         )
+        calls += perenual_result.calls_made
+        messages["perenual"] = perenual_result.message
         if perenual_result.found and perenual_result.data:
-            data = await self._enrich(perenual_result.data)
-            self._record_success("perenual")
-            return ProviderResult(
-                True,
-                "perenual",
-                data=data,
-                api_checked=True,
-                api_called=True,
-                calls_made=perenual_result.calls_made,
-                message="Perenual primary provider matched plant",
-                metadata={"perenual": perenual_result.metadata},
-            )
+            parts.append({**perenual_result.data, "provider": "perenual"})
 
-        trefle_result = await self.trefle.fetch(search_name)
+        # Best identity query so far (a resolved scientific name searches better).
+        identity_query = search_name
+        for part in parts:
+            sci = part.get("scientific_name")
+            if sci:
+                identity_query = sci[0] if isinstance(sci, list) else sci
+                break
+
+        # 2. iNaturalist — identity + photo (keyless, always try).
+        inat_result = await self.inaturalist.resolve(identity_query)
+        calls += inat_result.calls_made
+        messages["inaturalist"] = inat_result.message
+        if inat_result.found and inat_result.data:
+            parts.append(inat_result.data)
+            if inat_result.data.get("scientific_name"):
+                identity_query = inat_result.data["scientific_name"]
+
+        # 3. Trefle — botanical priors (needs a token; often offline).
+        trefle_result = await self.trefle.fetch(identity_query)
+        calls += trefle_result.calls_made
+        messages["trefle"] = trefle_result.message
         if trefle_result.found and trefle_result.data:
-            data = await self._enrich(trefle_result.data)
-            self._record_success("trefle")
+            parts.append({**trefle_result.data, "provider": "trefle"})
+
+        if not parts:
+            self._last_error = (
+                f"No plant found for '{search_name}'. "
+                f"Perenual: {messages['perenual']}; iNaturalist: {messages['inaturalist']}; "
+                f"Trefle: {messages['trefle']}"
+            )
             return ProviderResult(
-                True,
-                "trefle",
-                data=data,
-                api_checked=True,
-                api_called=True,
-                calls_made=perenual_result.calls_made + trefle_result.calls_made,
-                message="Perenual miss, Trefle fallback matched plant",
-                metadata={
-                    "perenual_message": perenual_result.message,
-                    "trefle_message": trefle_result.message,
-                },
+                False, "none", api_checked=True, api_called=True, calls_made=calls,
+                message=self._last_error, metadata=messages,
             )
 
-        self._last_error = f"No plant found. Perenual: {perenual_result.message}; Trefle: {trefle_result.message}"
+        merged = merge_provider_data(parts)
+        used = merged.get("providers", [])
+        if self.storage:
+            # Cache under the search term (the plant's species field) so later
+            # lookups by that term hit the rich data, and also under the resolved
+            # scientific name for cross-reference.
+            await self.storage.async_add_plant(search_name, merged)
+            sci = merged.get("scientific_name")
+            if sci and sci != search_name and self.storage.get_plant(sci) is None:
+                await self.storage.async_add_plant(sci, merged)
+        self._record_success("+".join(used) or "none")
         return ProviderResult(
-            False,
-            "none",
-            api_checked=True,
-            api_called=perenual_result.api_called or trefle_result.api_called,
-            calls_made=perenual_result.calls_made + trefle_result.calls_made,
-            message=self._last_error,
-            metadata={
-                "perenual_message": perenual_result.message,
-                "trefle_message": trefle_result.message,
-            },
+            True, "+".join(used) or "none", data=merged,
+            api_checked=True, api_called=True, calls_made=calls,
+            message=f"Merged providers: {', '.join(used)}", metadata=messages,
         )
 
     async def _enrich(self, plant_data: dict[str, Any]) -> dict[str, Any]:

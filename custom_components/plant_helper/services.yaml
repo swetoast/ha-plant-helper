@@ -1,193 +1,27 @@
-add_plant:
-  name: Add plant (manual)
+recalibrate:
+  name: Recalibrate plant
   description: >-
-    Add or update a species in the local Plant Helper cache manually,
-    without calling any online provider.
+    Wipe a plant's learned baseline and sample history to restart the 14-day
+    calibration. Use after repotting, changing soil, or moving the plant to a
+    new location (or between indoor and outdoor).
   fields:
-    species:
-      name: Species
-      description: Species / scientific name used as the cache key.
+    plant_id:
+      name: Plant ID
+      description: The configured plant instance to recalibrate.
       required: true
-      example: Monstera deliciosa
-      selector:
-        text:
-    common_name:
-      name: Common name
-      description: Friendly display name.
-      example: Swiss cheese plant
-      selector:
-        text:
-    thresholds:
-      name: Thresholds
-      description: Optional care thresholds (soil_moisture_min, temperature_min, etc.).
-      selector:
-        object:
-    tips:
-      name: Tips
-      description: Optional care tips with "direct" and "seasonal" lists.
-      selector:
-        object:
-    facts:
-      name: Facts
-      description: Optional list of plant facts.
-      selector:
-        object:
-
-remove_plant:
-  name: Remove cached species
-  description: Remove a single species from the local cache.
-  fields:
-    species:
-      name: Species
-      description: Species / cache key to remove.
-      required: true
-      example: Monstera deliciosa
+      example: monstera_livingroom
       selector:
         text:
 
-fetch_plant_data:
-  name: Fetch plant data
+refresh_species:
+  name: Refresh species data
   description: >-
-    Look up a plant through the provider chain (local cache, Perenual,
-    Trefle fallback, iNaturalist enrichment) and cache the result.
-  fields:
-    species:
-      name: Species or common name
-      description: Search term.
-      required: true
-      example: Snake plant
-      selector:
-        text:
-    force_fetch:
-      name: Force fetch
-      description: Bypass the local cache and always query online providers.
-      default: false
-      selector:
-        boolean:
-    fetch_care_guides:
-      name: Fetch care guides
-      default: true
-      selector:
-        boolean:
-    fetch_diseases:
-      name: Fetch diseases
-      default: true
-      selector:
-        boolean:
-
-add_user_plant:
-  name: Add configured plant
-  description: >-
-    Create a configured plant instance that links Home Assistant sensors to
-    a cached species. The species must already exist in the cache.
+    Re-fetch species enrichment (Perenual, Trefle, iNaturalist) for one plant or
+    all plants, updating care context and the provider diagnostic sensors.
   fields:
     plant_id:
       name: Plant ID
-      description: Unique slug for this plant instance.
-      required: true
-      example: living_room_monstera
+      description: Optional — a single plant to refresh. Omit to refresh all.
+      example: snake_plant
       selector:
         text:
-    species:
-      name: Species
-      description: Cached species key this plant refers to.
-      required: true
-      example: Monstera deliciosa
-      selector:
-        text:
-    custom_name:
-      name: Custom name
-      description: Friendly name for the plant device.
-      example: Monstera by the window
-      selector:
-        text:
-    soil_temperature:
-      name: Soil temperature sensor
-      selector:
-        entity:
-          domain: sensor
-    soil_moisture:
-      name: Soil moisture sensor
-      selector:
-        entity:
-          domain: sensor
-    soil_humidity:
-      name: Soil humidity sensor
-      selector:
-        entity:
-          domain: sensor
-    room_temperature:
-      name: Room temperature sensor
-      selector:
-        entity:
-          domain: sensor
-    room_humidity:
-      name: Room humidity sensor
-      selector:
-        entity:
-          domain: sensor
-    room_lux:
-      name: Room light (lux) sensor
-      selector:
-        entity:
-          domain: sensor
-
-remove_user_plant:
-  name: Remove configured plant
-  description: Remove a configured plant instance and its sensors.
-  fields:
-    plant_id:
-      name: Plant ID
-      description: The configured plant instance to remove.
-      required: true
-      example: living_room_monstera
-      selector:
-        text:
-
-mark_watered:
-  name: Mark watered
-  description: Record that a configured plant was watered now.
-  fields:
-    plant_id:
-      name: Plant ID
-      required: true
-      example: living_room_monstera
-      selector:
-        text:
-
-mark_fertilized:
-  name: Mark fertilized
-  description: Record that a configured plant was fertilized now.
-  fields:
-    plant_id:
-      name: Plant ID
-      required: true
-      example: living_room_monstera
-      selector:
-        text:
-
-mark_inspected:
-  name: Mark inspected
-  description: Record that a configured plant was inspected now.
-  fields:
-    plant_id:
-      name: Plant ID
-      required: true
-      example: living_room_monstera
-      selector:
-        text:
-
-reset_database:
-  name: Reset plant database
-  description: >-
-    Clear the local Plant Helper database. API keys and integration settings
-    are not affected.
-  fields:
-    clear_user_plants:
-      name: Also remove configured plants
-      description: >-
-        Remove configured plant instances too. Recommended, because configured
-        plants reference cached species.
-      default: true
-      selector:
-        boolean:

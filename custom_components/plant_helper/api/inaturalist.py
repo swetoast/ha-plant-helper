@@ -34,6 +34,56 @@ class INaturalistProvider:
         self.last_error: str | None = None
         self.last_success: str | None = None
 
+    async def resolve(self, query: str) -> ProviderResult:
+        """Resolve a plant's identity via the taxa endpoint (keyless).
+
+        Returns scientific name, preferred common name, a photo, and the
+        Wikipedia summary — the identity backbone that works with no API key, so
+        adding a plant always gets *some* data even without Perenual/Trefle.
+        """
+        if not self.enabled:
+            return ProviderResult(False, "inaturalist", message="iNaturalist disabled")
+        cleaned = self._clean_query(query or "")
+        if not cleaned:
+            return ProviderResult(False, "inaturalist", message="No query for iNaturalist")
+        try:
+            params: dict[str, Any] = {
+                "q": cleaned,
+                "is_active": "true",
+                "rank": "species,genus,subspecies,variety,hybrid",
+                "per_page": 1,
+                "locale": "en",
+            }
+            payload = await self._get_json(f"{self.base_url}/taxa", params)
+            if payload is None:
+                return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, calls_made=1, message=self.last_error or "iNaturalist taxa request failed")
+            results = payload.get("results") or []
+            if not results:
+                return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, calls_made=1, message="No iNaturalist taxa match")
+            taxon = results[0]
+            default_photo = taxon.get("default_photo") or {}
+            photo = default_photo.get("medium_url") or default_photo.get("url") or default_photo.get("square_url")
+            summary = taxon.get("wikipedia_summary")
+            if isinstance(summary, str):
+                summary = re.sub(r"<[^>]+>", "", summary).strip() or None
+            data = {
+                "provider": "inaturalist",
+                "scientific_name": taxon.get("name"),
+                "common_name": taxon.get("preferred_common_name"),
+                "description": summary,
+                "wikipedia_url": taxon.get("wikipedia_url"),
+                "photo": photo,
+                "photos": [photo] if photo else [],
+                "taxon_id": taxon.get("id"),
+            }
+            self.last_error = None
+            self.last_success = datetime.now().isoformat()
+            return ProviderResult(True, "inaturalist", data=data, api_checked=True, api_called=True, calls_made=1, message=f"Resolved to {taxon.get('name')}")
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception("iNaturalist taxa resolve failed for %s", query)
+            self.last_error = str(err)
+            return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, message=f"iNaturalist error: {err}")
+
     async def enrich(self, plant_data: dict[str, Any]) -> ProviderResult:
         """Enrich an already identified plant with iNaturalist observations."""
         if not self.enabled:

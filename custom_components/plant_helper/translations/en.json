@@ -3,50 +3,123 @@
     "step": {
       "user": {
         "title": "Plant Helper",
-        "description": "Configure Plant Helper API providers."
+        "description": "{info}",
+        "data": {
+          "forecast_entity": "Forecast source (weather entity or a sensor with a forecast attribute)",
+          "ozone_entity": "Ozone sensor (optional — enables the outdoor ozone advisory)",
+          "perenual_api_key": "Perenual API key (optional — species context)",
+          "trefle_api_key": "Trefle API token (optional — species context fallback)",
+          "enable_trefle_fallback": "Enable Trefle fallback",
+          "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
+          "update_interval": "Update interval"
+        }
       }
     },
     "abort": {
-      "already_configured": "Plant Helper is already configured."
+      "single_instance_allowed": "Plant Helper is already configured. Manage plants from its Configure screen."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Plant Helper Configuration",
-        "description": "{info}"
+        "title": "Plant Helper",
+        "menu_options": {
+          "add_plant": "Add a plant",
+          "edit_plant_select": "Edit a plant",
+          "remove_plant": "Remove a plant",
+          "global_settings": "Global settings"
+        }
       },
-      "add_plant_search": {
-        "title": "Add Plant",
-        "description": "{info}"
+      "add_plant": {
+        "title": "Add a plant",
+        "description": "{info}",
+        "data": {
+          "name": "Plant name",
+          "species": "Species (optional)",
+          "placement": "Placement",
+          "profile": "Care profile",
+          "custom_multiplier": "Custom dryness multiplier (custom profile only)",
+          "soil_moisture": "Soil moisture sensor (required)",
+          "soil_temperature": "Soil temperature sensor",
+          "lux": "Light (lux) sensor",
+          "battery": "Battery sensor (percentage or high/middle/low)",
+          "rain_limit_mm": "Rain suppression threshold (mm, outdoor)"
+        }
       },
-      "add_plant_details": {
-        "title": "Plant Care Source Sensors",
-        "description": "{info}"
+      "edit_plant_select": {
+        "title": "Edit a plant",
+        "data": {
+          "plant_id": "Plant to edit"
+        }
       },
-      "fetch_species": {
-        "title": "Fetch Species Data",
-        "description": "{info}"
-      },
-      "settings": {
-        "title": "Integration Settings",
-        "description": "{info}"
+      "edit_plant": {
+        "title": "Edit plant",
+        "description": "{info}",
+        "data": {
+          "name": "Plant name",
+          "species": "Species (optional)",
+          "placement": "Placement",
+          "profile": "Care profile",
+          "custom_multiplier": "Custom dryness multiplier (custom profile only)",
+          "soil_moisture": "Soil moisture sensor (required)",
+          "soil_temperature": "Soil temperature sensor",
+          "lux": "Light (lux) sensor",
+          "battery": "Battery sensor (percentage or high/middle/low)",
+          "rain_limit_mm": "Rain suppression threshold (mm, outdoor)"
+        }
       },
       "remove_plant": {
-        "title": "Remove Configured Plant",
-        "description": "{info}"
+        "title": "Remove a plant",
+        "description": "{info}",
+        "data": {
+          "plant_id": "Plant to remove"
+        }
       },
-      "view_plants": {
-        "title": "View Plants",
-        "description": "{info}"
-      },
-      "reset_database": {
-        "title": "Reset Plant Database",
-        "description": "{info}"
-      },
-      "result": {
-        "title": "Result",
-        "description": "{info}"
+      "global_settings": {
+        "title": "Global settings",
+        "description": "{info}",
+        "data": {
+          "forecast_entity": "Forecast source (weather entity or a sensor with a forecast attribute)",
+          "ozone_entity": "Ozone sensor (optional — outdoor ozone advisory)",
+          "perenual_api_key": "Perenual API key (optional)",
+          "trefle_api_key": "Trefle API token (optional)",
+          "enable_trefle_fallback": "Enable Trefle fallback",
+          "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
+          "update_interval": "Update interval"
+        }
+      }
+    },
+    "error": {
+      "name_required": "Please give the plant a name.",
+      "moisture_required": "A soil-moisture sensor is required.",
+      "moisture_not_numeric": "That soil-moisture sensor isn't reporting a number.",
+      "moisture_out_of_range": "Soil moisture should read 0-100%. Check you picked the right sensor.",
+      "custom_multiplier_range": "The custom multiplier must be between 0 and 1 (e.g. 0.5)."
+    },
+    "abort": {
+      "no_plants": "There are no configured plants yet. Add one first.",
+      "plant_not_found": "That plant could not be found."
+    }
+  },
+  "services": {
+    "recalibrate": {
+      "name": "Recalibrate plant",
+      "description": "Wipe a plant's learned baseline and sample history to restart the 14-day calibration.",
+      "fields": {
+        "plant_id": {
+          "name": "Plant ID",
+          "description": "The configured plant instance to recalibrate."
+        }
+      }
+    },
+    "refresh_species": {
+      "name": "Refresh species data",
+      "description": "Re-fetch species enrichment (Perenual, Trefle, iNaturalist) for one plant or all.",
+      "fields": {
+        "plant_id": {
+          "name": "Plant ID",
+          "description": "Optional single plant to refresh; omit for all."
+        }
       }
     }
   }

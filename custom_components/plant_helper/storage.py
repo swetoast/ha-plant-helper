@@ -207,11 +207,6 @@ class PlantStorage:
             "custom_name": custom_name or species,
             "entities": entities or {},
             "added_date": dt_util.now().isoformat(),
-            "last_watered": None,
-            "last_fertilized": None,
-            "last_inspected": None,
-            "moisture_history": [],
-            "light_history": [],
         }
 
         await self.async_save()
