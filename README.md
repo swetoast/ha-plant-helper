@@ -1,11 +1,4 @@
-
-
-
 # Plant Helper
-[![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)](https://github.com/swetoast/ha-plant-helper/releases)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg)](https://www.home-assistant.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
 
 A Home Assistant custom integration that turns local soil, temperature, and light sensors into calibrated, time based plant-care guidance. It can also use regional solar irradiance data and a weather forecast for outdoor plants.
 
@@ -275,6 +268,14 @@ For example, if a plant has been dry for five days, it will still show five days
 - **Indoor obstruction uses delayed outdoor data.** Because outdoor lux is delayed, obstruction detection compares indoor light with concurrent delayed outdoor data.
 - **Migration from v3 may leave old entities.** Unique IDs changed in v4. Remove orphaned v3 entities manually under **Settings > Entities** if needed.
 - **Air-quality support is limited to ozone.** The advisory is for outdoor plants only. It never changes health score or care action.
+
+## Species enrichment and API diagnostics
+
+If you provide a species name and optional API keys, Plant Helper fetches species context once a day from Perenual, Trefle, and iNaturalist. The Species sensor can show common name, scientific name, care level, watering guidance, sunlight preference, toxicity context, suggested care profile, reference watering interval, botanical preferences, and a photo.
+
+This is context only. The calibrated engine still makes every care decision from measured plant conditions and the learned baseline.
+
+Each provider gets a hub-level API diagnostic binary sensor grouped under Diagnostics. These sensors show `last_success`, `last_error`, `calls_today`, `daily_limit`, and `enabled`, similar to the SMHI STRÅNG and weather API issue sensors.
 
 ## Troubleshooting
 
