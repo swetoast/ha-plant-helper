@@ -240,3 +240,40 @@ check("day D DLI independent of next-day samples",
       abs(by_date[date(2026, 6, 10)] - expected_complete_day) / expected_complete_day < 0.02)
 
 print("\nALL ORCHESTRATION TESTS PASSED (with audit fixes)")
+
+
+print("== learned watering interval (full->dry from locked baseline) ==")
+# span 60 (m_max 90 -> m_dry 30) at 6%/day = 10 day interval.
+_inp_locked = eng.EngineInputs(
+    now=now, placement="indoor", calibrating=False,
+    m_max=90.0, m_dry=30.0, drying_rate=6.0,
+    moisture_raw=[RawReading(now, 70.0)],
+)
+_r = eng.compute(_inp_locked)
+check("interval = span/rate = 10.0 days", _r.learned_watering_interval_days == 10.0)
+
+_inp_calib = eng.EngineInputs(
+    now=now, placement="indoor", calibrating=True,
+    m_max=90.0, m_dry=30.0, drying_rate=6.0,
+    moisture_raw=[RawReading(now, 70.0)],
+)
+check("interval None while calibrating", eng.compute(_inp_calib).learned_watering_interval_days is None)
+
+_inp_norate = eng.EngineInputs(
+    now=now, placement="indoor", calibrating=False,
+    m_max=90.0, m_dry=30.0, drying_rate=0.0,
+    moisture_raw=[RawReading(now, 70.0)],
+)
+check("interval None when no drying rate", eng.compute(_inp_norate).learned_watering_interval_days is None)
+
+print("\nENGINE INTERVAL TESTS PASSED")
+
+# m_dry=0 must not be falsily skipped (audit fix).
+_inp_zero = eng.EngineInputs(
+    now=now, placement="indoor", calibrating=False,
+    m_max=80.0, m_dry=0.0, drying_rate=4.0,
+    moisture_raw=[RawReading(now, 50.0)],
+)
+check("interval computes with m_dry=0 (80/4=20)", eng.compute(_inp_zero).learned_watering_interval_days == 20.0)
+
+print("\nENGINE INTERVAL EDGE PASSED")

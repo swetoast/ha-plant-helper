@@ -115,6 +115,7 @@ class EngineResult:
     air_quality: aq.AirQualityAssessment | None = None
     light_hours_today: float | None = None
     daylight_hours: float | None = None
+    learned_watering_interval_days: float | None = None
 
     def summary(self) -> dict[str, object]:
         """Flat dict for entity attributes / debugging."""
@@ -172,6 +173,18 @@ def compute(inp: EngineInputs) -> EngineResult:
         par_s, LIGHT_HOURS_PAR_THRESHOLD, inp.macro_gap
     )
 
+    # The plant's own full->dry interval (days), once calibration has locked the
+    # baseline: span between wet and dry thresholds over the learned drying rate.
+    # Uses the raw learned rate (species-natural cycle), not today's thermal-
+    # adjusted rate. None while calibrating. Consumed only by the read-only
+    # species-insight layer, never by care decisions.
+    learned_watering_interval_days = None
+    if (not inp.calibrating and inp.m_max is not None and inp.m_dry is not None
+            and inp.drying_rate and inp.drying_rate > 0):
+        span = inp.m_max - inp.m_dry
+        if span > 0:
+            learned_watering_interval_days = round(span / inp.drying_rate, 1)
+
     have_valid = any(s.usable for s in (moisture_s + soil_temp_s + lux_s))
     gate = care_gate(battery=battery, have_any_valid_sensor=have_valid)
 
@@ -206,6 +219,7 @@ def compute(inp: EngineInputs) -> EngineResult:
             air_quality=air_quality,
             light_hours_today=light_hours_today,
             daylight_hours=inp.daylight_hours,
+            learned_watering_interval_days=learned_watering_interval_days,
         )
 
     # --- Thermal (also yields the drying modifier moisture consumes) -------
@@ -303,6 +317,7 @@ def compute(inp: EngineInputs) -> EngineResult:
         air_quality=air_quality,
         light_hours_today=light_hours_today,
         daylight_hours=inp.daylight_hours,
+        learned_watering_interval_days=learned_watering_interval_days,
     )
 
 

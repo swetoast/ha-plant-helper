@@ -78,7 +78,7 @@ inat = {"provider": "inaturalist", "scientific_name": "Dracaena trifasciata",
         "common_name": "mother-in-law's tongue", "photo": "https://inat/photo.jpg",
         "photos": ["https://inat/photo.jpg"], "wikipedia_url": "https://en.wikipedia.org/x",
         "description": "A hardy succulent."}
-tre = {"provider": "trefle", "family": "Asparagaceae",
+tre = {"provider": "trefle", "family": {"id": 356, "name": "Asparagaceae", "slug": "asparagaceae"},
        "growth": {"light": 7, "soil_moisture": 3,
                   "minimum_temperature": {"deg_c": 10}, "maximum_temperature": {"deg_c": 30},
                   "ph_minimum": 6.0, "ph_maximum": 7.5}}
@@ -86,13 +86,17 @@ tre = {"provider": "trefle", "family": "Asparagaceae",
 m = en.merge_provider_data([per, inat, tre])
 check("scientific name from iNaturalist (canonical)", m["scientific_name"] == "Dracaena trifasciata")
 check("common name from Perenual", m["common_name"] == "Snake Plant")
-check("family from Trefle", m["family"] == "Asparagaceae")
+check("family extracted to string from Trefle object", m["family"] == "Asparagaceae")
 check("care fields from Perenual", m["watering"] == "Minimum" and m["poisonous_to_pets"] == 1)
 check("Trefle botanical from nested growth", m["light"] == 7 and m["minimum_temperature_c"] == 10 and m["maximum_temperature_c"] == 30)
 check("Trefle pH from nested growth", m["ph_min"] == 6.0 and m["ph_max"] == 7.5)
 check("photo prefers Perenual image, else iNat", m["photo"] == "https://per/img.jpg")
 check("all three providers listed", m["providers"] == ["perenual", "inaturalist", "trefle"])
 check("merged summarizes cleanly", en.summarize_enrichment(m)["suggested_profile"] == "dry_tolerant")
+sm = en.summarize_enrichment(m)
+check("wikipedia link surfaced", sm["wikipedia_url"] == "https://en.wikipedia.org/x")
+check("photo url surfaced", sm["photo"] == "https://per/img.jpg")
+check("family in summary is a string", sm["family"] == "Asparagaceae")
 
 # iNaturalist alone (no API keys) still yields usable identity + photo.
 only_inat = en.merge_provider_data([inat])

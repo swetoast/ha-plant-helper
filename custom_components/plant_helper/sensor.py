@@ -228,6 +228,20 @@ class PlantSpeciesInfoSensor(_PlantSensorBase):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        # Enrichment display context + the read-only species-insight layer
+        # (confidence, provider-vs-learned comparison, explanations). None of it
+        # affects care — the calibrated engine still owns every decision.
+        from .enrichment import species_insight
+
         info = dict(self._info())
-        info.pop("photo", None)  # surfaced as the entity picture instead
+        result = self._result
+        calibrating = bool(result.calibrating) if result is not None else True
+        learned_interval = (
+            result.learned_watering_interval_days if result is not None else None
+        )
+        info.update(
+            species_insight(
+                info, calibrating=calibrating, learned_interval_days=learned_interval
+            )
+        )
         return info

@@ -139,7 +139,7 @@ def summarize_enrichment(data: dict[str, Any] | None) -> dict[str, Any]:
 
     put("common_name", data.get("common_name"))
     put("scientific_name", _first(data.get("scientific_name")) or data.get("species"))
-    put("family", data.get("family"))
+    put("family", _family_name(data.get("family")))
     put("cycle", data.get("cycle"))
     put("care_level", data.get("care_level"))
     put("maintenance", data.get("maintenance"))
@@ -160,7 +160,8 @@ def summarize_enrichment(data: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(desc, str) and desc:
         put("description", desc[:500])
 
-    put("photo", _photo_url(data))
+    put("photo", data.get("photo") or _photo_url(data))
+    put("wikipedia_url", data.get("wikipedia_url"))
     put("reference_watering_days", reference_watering_days(data))
     put("suggested_profile", suggested_profile(data))
     providers = data.get("providers")
@@ -177,6 +178,16 @@ def _pick(*values: Any) -> Any:
     for v in values:
         if v not in (None, "", [], {}):
             return v
+    return None
+
+
+def _family_name(value: Any) -> str | None:
+    """Family as a plain string. Trefle returns a nested object ({name, ...});
+    Perenual/iNaturalist return a string. Normalize to the name."""
+    if isinstance(value, dict):
+        return value.get("name") or value.get("common_name")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
     return None
 
 
@@ -201,7 +212,7 @@ def merge_provider_data(parts: list[dict[str, Any]]) -> dict[str, Any]:
         _first(tre.get("scientific_name")), _first(per.get("species")),
     )
     out["common_name"] = _pick(per.get("common_name"), inat.get("common_name"), tre.get("common_name"))
-    out["family"] = _pick(tre.get("family"), inat.get("family"), per.get("family"))
+    out["family"] = _family_name(_pick(per.get("family"), inat.get("family"), tre.get("family")))
 
     for key in (
         "watering", "sunlight", "cycle", "care_level", "maintenance",
@@ -258,4 +269,136 @@ def _trefle_botanical(tre: dict[str, Any]) -> dict[str, Any]:
     ):
         if val not in (None, "", [], {}):
             out[key] = val
+    return out
+
+
+# --- species insight: priors, confidence, explanations (read-only) --------
+#
+# Level 2 + 2.5 of the "a say, not the wheel" design. These attributes let the
+# external providers offer confidence checks and explanations WITHOUT ever
+# changing a care decision. The calibrated engine still owns every decision; this
+# only annotates. Pure and testable — the coordinator supplies the learned side.
+
+_SIGNAL_FIELDS = (
+    "watering", "sunlight", "care_level", "drought_tolerant", "indoor",
+    "soil_moisture_pref_0_10", "light_requirement_0_10", "reference_watering_days",
+    "min_temperature_c", "max_temperature_c", "description", "poisonous_to_pets",
+)
+
+
+def species_data_quality(enrichment: dict[str, Any]) -> str:
+    """How much usable species data the providers actually returned."""
+    if not enrichment:
+        return "none"
+    fields = sum(1 for f in _SIGNAL_FIELDS if enrichment.get(f) not in (None, "", [], {}))
+    providers = len((enrichment.get("source") or "").split(",")) if enrichment.get("source") else 0
+    if fields == 0:
+        return "none"
+    if fields >= 6 or providers >= 3:
+        return "high"
+    if fields >= 3 or providers >= 2:
+        return "medium"
+    return "low"
+
+
+def light_preference(enrichment: dict[str, Any]) -> str | None:
+    """A coarse light-need label from Trefle's 0-10 scale or Perenual's sunlight."""
+    light = enrichment.get("light_requirement_0_10")
+    try:
+        if light is not None:
+            lv = float(light)
+            if lv <= 3:
+                return "low_light"
+            if lv <= 6:
+                return "bright_indirect"
+            return "full_sun"
+    except (TypeError, ValueError):
+        pass
+    sun = enrichment.get("sunlight")
+    tokens = " ".join(sun).lower() if isinstance(sun, list) else str(sun or "").lower()
+    if not tokens:
+        return None
+    if "full" in tokens and "sun" in tokens:
+        return "full_sun"
+    if "part" in tokens or "indirect" in tokens or "filtered" in tokens:
+        return "bright_indirect"
+    if "shade" in tokens or "low" in tokens:
+        return "low_light"
+    return None
+
+
+def _watering_comparison(reference: float | None, learned: float | None) -> str:
+    if learned is None:
+        return "calibrating"
+    if reference is None:
+        return "no_reference"
+    if reference <= 0:
+        return "no_reference"
+    ratio = learned / reference
+    if ratio < 0.7:
+        return "dries_faster_than_reference"
+    if ratio > 1.4:
+        return "dries_slower_than_reference"
+    return "matches_reference"
+
+
+def _baseline_fit(reference: float | None, learned: float | None, calibrating: bool) -> str:
+    if calibrating or learned is None:
+        return "pending"
+    if reference is None or reference <= 0:
+        return "unknown"  # nothing to compare against
+    ratio = learned / reference
+    # Deliberately lenient: indoor light and pots vary a lot. Only a large gap
+    # is worth a "look", never a hard "wrong".
+    if ratio < 0.3 or ratio > 3.0:
+        return "outside_expected"
+    return "plausible"
+
+
+def _calibration_hint(enrichment: dict[str, Any], quality: str, calibrating: bool) -> str | None:
+    """Explanation only (Level 2.5). Contextualizes; never suppresses an alert."""
+    if not calibrating:
+        return None
+    if quality == "none":
+        return "No species reference available yet; care is based entirely on this plant's own calibration."
+    profile = enrichment.get("suggested_profile")
+    if profile == "dry_tolerant" or enrichment.get("drought_tolerant"):
+        return ("Reference suggests a drought-tolerant species, so damp readings early on may be "
+                "normal — alerts still fire, but expect fewer once the baseline locks.")
+    if profile == "moisture_loving":
+        return ("Reference suggests a moisture-loving species, so dry readings while learning are "
+                "expected to prompt watering.")
+    return "Species reference loaded; the baseline is still learning this plant's own behaviour."
+
+
+def species_insight(
+    enrichment: dict[str, Any] | None,
+    *,
+    calibrating: bool,
+    learned_interval_days: float | None = None,
+) -> dict[str, Any]:
+    """Read-only species-insight attributes (priors, confidence, explanations).
+
+    `learned_interval_days` is the plant's own full->dry interval once known
+    (None during calibration / until the engine exposes it). Nothing here feeds
+    back into care decisions.
+    """
+    enrichment = enrichment or {}
+    quality = species_data_quality(enrichment)
+    reference = enrichment.get("reference_watering_days")
+    out: dict[str, Any] = {
+        "species_data_quality": quality,
+        "provider_reference_watering_days": reference,
+        "learned_watering_interval_days": learned_interval_days,
+        "watering_interval_comparison": _watering_comparison(reference, learned_interval_days),
+        "baseline_species_fit": _baseline_fit(reference, learned_interval_days, calibrating),
+    }
+    light = light_preference(enrichment)
+    if light:
+        out["light_preference"] = light
+    if enrichment.get("suggested_profile"):
+        out["suggested_profile"] = enrichment["suggested_profile"]
+    hint = _calibration_hint(enrichment, quality, calibrating)
+    if hint:
+        out["calibration_hint"] = hint
     return out
