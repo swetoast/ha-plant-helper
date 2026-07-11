@@ -25,8 +25,7 @@ entered seasonal dormancy.
 8. [Services](#services)
 9. [Managing plants (add / edit / remove)](#managing-plants-add--edit--remove)
 10. [Data persistence](#data-persistence)
-11. [Known limitations](#known-limitations)
-12. [Troubleshooting](#troubleshooting)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -287,28 +286,6 @@ Assistant **restart or an outage does not restart the clock**:
 
 ---
 
-## Known limitations
-
-- **First two weeks are calibration.** New plants show neutral states and a
-  frozen Health score for ~14 days while baselines build. This is by design.
-- **SMHI STRÅNG lags ~a day and is delivered per calendar day.** STRÅNG
-  publishes hourly data for a full calendar day, ~a day behind. Outdoor **DLI is
-  the integral of the most recent *complete* STRÅNG day** — a true per-day light
-  integral that is stable across local midnight (a just-started day is skipped
-  until it completes). Fine for a slowly-changing plant; not a live sunlight
-  meter.
-- **Indoor obstruction is lag-paired.** Because outdoor lux is lagged, indoor
-  obstruction is evaluated against concurrent-but-delayed outdoor data.
-- **Migration from v3.** Entity unique IDs changed in v4. After upgrading you may
-  see orphaned v3 entities in **Settings → Entities**; remove them manually.
-- **Air-quality advisory** is limited to ground-level **ozone** (the one
-  pollutant with real plant relevance), outdoor plants only, and is **advisory
-  only** — it never changes the care action or health score. SO₂ and
-  particulates are intentionally excluded (negligible at ambient levels). The
-  ozone thresholds are instantaneous proxies, not the cumulative AOT40 metric.
-
----
-
 ## Species enrichment & API diagnostics
 
 If you provide a species name (and optionally a Perenual API key), Plant Helper
@@ -321,8 +298,7 @@ decision.
 
 Each provider gets a hub-level **API diagnostic** binary sensor (Perenual API,
 Trefle API, iNaturalist API), grouped under Diagnostics, showing `last_success`,
-`last_error`, `calls_today`, `daily_limit`, and `enabled` — mirroring the SMHI
-STRÅNG / AccuWeather API-issue sensors.
+`last_error`, `calls_today`, `daily_limit`, and `enabled`.
 
 ## Troubleshooting
 
