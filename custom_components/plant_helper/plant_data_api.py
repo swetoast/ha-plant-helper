@@ -133,34 +133,33 @@ class PlantDataAPI:
         calls = 0
         messages: dict[str, str] = {}
 
-        # 1. Perenual — care data (needs an API key).
+        # 1. iNaturalist FIRST (keyless) — resolve the canonical scientific name
+        #    and identity/photo. Everything else is looked up by that name.
+        inat_result = await self.inaturalist.resolve(search_name)
+        calls += inat_result.calls_made
+        messages["inaturalist"] = inat_result.message
+        if inat_result.found and inat_result.data:
+            parts.append(inat_result.data)
+
+        scientific = None
+        for part in parts:
+            if part.get("scientific_name"):
+                scientific = part["scientific_name"]
+                break
+        lookup_term = scientific or search_name
+
+        # 2. Perenual — care data, looked up BY SCIENTIFIC NAME (its search needs
+        #    the botanical name to match correctly).
         perenual_result = await self.perenual.fetch(
-            search_name, fetch_care_guides=fetch_care_guides, fetch_diseases=fetch_diseases
+            lookup_term, fetch_care_guides=fetch_care_guides, fetch_diseases=fetch_diseases
         )
         calls += perenual_result.calls_made
         messages["perenual"] = perenual_result.message
         if perenual_result.found and perenual_result.data:
             parts.append({**perenual_result.data, "provider": "perenual"})
 
-        # Best identity query so far (a resolved scientific name searches better).
-        identity_query = search_name
-        for part in parts:
-            sci = part.get("scientific_name")
-            if sci:
-                identity_query = sci[0] if isinstance(sci, list) else sci
-                break
-
-        # 2. iNaturalist — identity + photo (keyless, always try).
-        inat_result = await self.inaturalist.resolve(identity_query)
-        calls += inat_result.calls_made
-        messages["inaturalist"] = inat_result.message
-        if inat_result.found and inat_result.data:
-            parts.append(inat_result.data)
-            if inat_result.data.get("scientific_name"):
-                identity_query = inat_result.data["scientific_name"]
-
-        # 3. Trefle — botanical priors (needs a token; often offline).
-        trefle_result = await self.trefle.fetch(identity_query)
+        # 3. Trefle — botanical priors, also by scientific name (search -> detail).
+        trefle_result = await self.trefle.fetch(lookup_term)
         calls += trefle_result.calls_made
         messages["trefle"] = trefle_result.message
         if trefle_result.found and trefle_result.data:

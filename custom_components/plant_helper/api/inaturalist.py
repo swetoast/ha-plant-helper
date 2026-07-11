@@ -50,31 +50,56 @@ class INaturalistProvider:
             params: dict[str, Any] = {
                 "q": cleaned,
                 "is_active": "true",
-                "rank": "species,genus,subspecies,variety,hybrid",
-                "per_page": 1,
+                "per_page": 10,
                 "locale": "en",
             }
-            payload = await self._get_json(f"{self.base_url}/taxa", params)
+            payload = await self._get_json(f"{self.base_url}/taxa/autocomplete", params)
             if payload is None:
-                return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, calls_made=1, message=self.last_error or "iNaturalist taxa request failed")
+                return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, calls_made=1, message=self.last_error or "iNaturalist autocomplete failed")
             results = payload.get("results") or []
-            if not results:
-                return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, calls_made=1, message="No iNaturalist taxa match")
-            taxon = results[0]
+            # Prefer the best-ranked plant taxon (autocomplete mixes kingdoms).
+            taxon = None
+            for cand in results:
+                if cand.get("iconic_taxon_name") == "Plantae":
+                    taxon = cand
+                    break
+            if taxon is None and results:
+                taxon = results[0]
+            if taxon is None:
+                return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, calls_made=1, message="No iNaturalist match")
             default_photo = taxon.get("default_photo") or {}
-            photo = default_photo.get("medium_url") or default_photo.get("url") or default_photo.get("square_url")
+            photo = (
+                default_photo.get("medium_url")
+                or default_photo.get("url")
+                or default_photo.get("square_url")
+            )
+            # iNaturalist size qualifier: prefer a real display size over 'square'.
+            if isinstance(photo, str):
+                photo = photo.replace("/square.", "/medium.")
+            taxon_id = taxon.get("id")
+            # Sparse taxa can lack a default photo; fall back to the best-voted
+            # observation photo (this is how v3 reliably got images).
+            if not photo and taxon_id:
+                photo = await self._observation_photo(taxon_id)
             summary = taxon.get("wikipedia_summary")
             if isinstance(summary, str):
                 summary = re.sub(r"<[^>]+>", "", summary).strip() or None
+            family = None
+            for anc in taxon.get("ancestors") or []:
+                if anc.get("rank") == "family":
+                    family = anc.get("name")
+                    break
             data = {
                 "provider": "inaturalist",
                 "scientific_name": taxon.get("name"),
                 "common_name": taxon.get("preferred_common_name"),
+                "family": family,
                 "description": summary,
                 "wikipedia_url": taxon.get("wikipedia_url"),
                 "photo": photo,
                 "photos": [photo] if photo else [],
-                "taxon_id": taxon.get("id"),
+                "taxon_id": taxon_id,
+                "observations_count": taxon.get("observations_count"),
             }
             self.last_error = None
             self.last_success = datetime.now().isoformat()
@@ -83,6 +108,32 @@ class INaturalistProvider:
             _LOGGER.exception("iNaturalist taxa resolve failed for %s", query)
             self.last_error = str(err)
             return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, message=f"iNaturalist error: {err}")
+
+    async def _observation_photo(self, taxon_id: Any) -> str | None:
+        """Best-voted observation photo for a taxon (fallback when the taxon has
+        no default photo). Returns a medium-size URL or None."""
+        try:
+            params = {
+                "taxon_id": taxon_id,
+                "photos": "true",
+                "per_page": 1,
+                "order_by": "votes",
+                "quality_grade": "research",
+            }
+            payload = await self._get_json(f"{self.base_url}/observations", params)
+            if not payload:
+                return None
+            for obs in payload.get("results") or []:
+                for photo in obs.get("photos") or []:
+                    url = (
+                        photo.get("large_url") or photo.get("medium_url")
+                        or photo.get("url")
+                    )
+                    if isinstance(url, str) and url.startswith("http"):
+                        return url.replace("/square.", "/medium.")
+            return None
+        except Exception:  # noqa: BLE001 - photo is optional
+            return None
 
     async def enrich(self, plant_data: dict[str, Any]) -> ProviderResult:
         """Enrich an already identified plant with iNaturalist observations."""

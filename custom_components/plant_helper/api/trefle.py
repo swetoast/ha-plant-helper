@@ -50,7 +50,7 @@ class TrefleProvider:
             return self.limiter.calls_today - start_calls
 
         try:
-            payload = await self._get_json(f"{self.base_url}/plants/search", {"token": self.api_key, "q": search_name, "page": 1})
+            payload = await self._get_json(f"{self.base_url}/species/search", {"token": self.api_key, "q": search_name, "page": 1})
             if payload is None:
                 return ProviderResult(False, "trefle", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message=self.last_error or "Trefle search failed")
 
@@ -74,7 +74,7 @@ class TrefleProvider:
             if not detail_payload and self_link:
                 detail_payload = await self._get_path(self_link)
             if not detail_payload and slug:
-                detail_payload = await self._get_path(f"/api/v1/plants/{slug}")
+                detail_payload = await self._get_path(f"/api/v1/species/{slug}")
 
             if detail_payload and isinstance(detail_payload.get("data"), dict):
                 detail_data = {**selected, **detail_payload["data"]}
@@ -131,11 +131,13 @@ class TrefleProvider:
 
     def _normalize(self, data: dict[str, Any]) -> dict[str, Any]:
         """Normalize Trefle data to Plant Helper format."""
-        scientific_name = data.get("scientific_name")
+        main0 = data.get("main_species") or {}
+        scientific_name = data.get("scientific_name") or main0.get("scientific_name")
         common_name = data.get("common_name") or scientific_name or data.get("slug")
         species = scientific_name or data.get("slug") or common_name
-        growth = data.get("growth") or {}
-        specifications = data.get("specifications") or {}
+        main = data.get("main_species") or {}
+        growth = data.get("growth") or main.get("growth") or {}
+        specifications = data.get("specifications") or main.get("specifications") or {}
         images = data.get("images") or {}
 
         return {

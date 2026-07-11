@@ -45,7 +45,19 @@ _LOGGER = logging.getLogger(__name__)
 
 UPDATE_INTERVAL = timedelta(minutes=10)
 ENRICHMENT_INTERVAL = timedelta(hours=24)
+STRANG_INTERVAL = timedelta(minutes=60)   # STRÅNG publishes hourly
 SUN_ENTITY = "sun.sun"
+
+# Neutral macro used before the first STRÅNG API fetch lands (treated as stale so
+# the light model falls back to the learned baseline rather than inventing data).
+from .sources.smhi import MacroReading as _MacroReading  # noqa: E402
+
+_EMPTY_MACRO = _MacroReading(
+    par=None, global_irradiance=None, diffuse_irradiance=None,
+    direct_horizontal=None, direct_normal=None, outdoor_lux=None,
+    data_stale=True, api_issue=False, age_hours=None,
+    selected_data_time=None, stale=True,
+)
 
 
 def _state_float(hass: HomeAssistant, entity_id: str | None) -> float | None:
@@ -107,6 +119,9 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         forecast_entity: str | None,
         ozone_entity: str | None = None,
         api: Any = None,
+        radiation_source: str = "auto",
+        latitude: float | None = None,
+        longitude: float | None = None,
     ) -> None:
         super().__init__(
             hass, _LOGGER, name="plant_helper", update_interval=UPDATE_INTERVAL
@@ -126,6 +141,15 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         self._api_health: dict[str, dict[str, Any]] = {}
         self._last_enrichment = None
 
+        # STRÅNG radiation source: 'sensors' (read HA sensors), 'api' (fetch from
+        # SMHI), or 'auto' (API when the home location is inside Nordic coverage).
+        from .sources import strang_api as _sa
+        self._latitude = latitude
+        self._longitude = longitude
+        self._use_strang_api = _sa.use_strang_api(radiation_source, latitude, longitude)
+        self._strang_macro = None  # cached MacroReading from the API
+        self._last_strang = None
+
     @property
     def enrichment(self) -> dict[str, dict[str, Any]]:
         return self._enrichment
@@ -139,7 +163,24 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         sdata = self._samples.data
 
         # --- shared macro sources -----------------------------------------
-        macro = await smhi_src.read_macro(self.hass, self._strang_entities)
+        if self._use_strang_api:
+            # Cached STRÅNG API reading (refreshed hourly in the background); the
+            # full PAR/lux series is buffered by that refresh, so no per-cycle
+            # append here. Empty until the first fetch completes.
+            macro = self._strang_macro or _EMPTY_MACRO
+            self.hass.async_create_task(self._refresh_strang(now))
+        else:
+            macro = await smhi_src.read_macro(self.hass, self._strang_entities)
+            par_sample = smhi_src.macro_par_sample(macro, now)
+            if par_sample.usable:
+                sstore.append_reading(
+                    sdata, "global:par", par_sample.ts, par_sample.value, now,
+                    dedupe=True,
+                )
+            if macro.outdoor_lux is not None and not macro.stale:
+                ts = macro.selected_data_time or now
+                sstore.append_reading(sdata, "global:outdoor_lux", ts, macro.outdoor_lux, now, dedupe=True)
+
         forecast = (
             await forecast_src.async_fetch_forecast(self.hass, self._forecast_entity, now)
             if self._forecast_entity
@@ -147,15 +188,6 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         )
         elevation = _sun_elevation(self.hass)
 
-        par_sample = smhi_src.macro_par_sample(macro, now)
-        if par_sample.usable:
-            sstore.append_reading(
-                sdata, "global:par", par_sample.ts, par_sample.value, now,
-                dedupe=True,
-            )
-        if macro.outdoor_lux is not None and not macro.stale:
-            ts = macro.selected_data_time or now
-            sstore.append_reading(sdata, "global:outdoor_lux", ts, macro.outdoor_lux, now, dedupe=True)
         if elevation is not None:
             sstore.append_reading(sdata, "global:elevation", now, elevation, now)
 
@@ -182,6 +214,44 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         did_refresh = await self._maybe_refresh_enrichment(now)
         if did_refresh:
             self.async_update_listeners()
+
+    async def _refresh_strang(self, now) -> None:
+        """Fetch STRÅNG radiation from SMHI (throttled hourly) and buffer the full
+        series. Off the update's critical path so a slow endpoint can't stall the
+        cycle. Falls back to sensors if the location turns out uncovered."""
+        if self._last_strang is not None and (now - self._last_strang) < STRANG_INTERVAL:
+            return
+        self._last_strang = now
+
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+        from .sources import strang_api as sa
+
+        try:
+            session = async_get_clientsession(self.hass)
+            macro, series = await sa.fetch_macro(
+                session, self._latitude, self._longitude, now
+            )
+        except Exception:  # noqa: BLE001 - network best-effort
+            _LOGGER.debug("STRÅNG API fetch failed", exc_info=True)
+            return
+
+        if not sa.has_usable_data(series):
+            # Location returns nothing usable (fuzzy edge / outside coverage):
+            # stop using the API and let the sensor path take over.
+            _LOGGER.info("STRÅNG API returned no usable data; falling back to sensors")
+            self._use_strang_api = False
+            return
+
+        self._strang_macro = macro
+        sdata = self._samples.data
+        for ts, value in series.get("par", []):
+            sstore.append_reading(sdata, "global:par", ts, value, now, dedupe=True)
+        for ts, value in series.get("global", []):
+            sstore.append_reading(
+                sdata, "global:outdoor_lux", ts, value * sa.GLOBAL_W_TO_LUX, now, dedupe=True
+            )
+        self._samples.schedule_save()
+        self.async_update_listeners()
 
     async def _maybe_refresh_enrichment(self, now) -> bool:
         """Fetch species context once a day; keep per-provider API health fresh.

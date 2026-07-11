@@ -11,7 +11,8 @@
           "trefle_api_key": "Trefle API token (optional — species context fallback)",
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
-          "update_interval": "Update interval"
+          "update_interval": "Update interval",
+          "radiation_source": "Radiation source (auto = SMHI STRÅNG API in Nordic coverage, else your sensors)"
         }
       }
     },
@@ -85,7 +86,8 @@
           "trefle_api_key": "Trefle API token (optional)",
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
-          "update_interval": "Update interval"
+          "update_interval": "Update interval",
+          "radiation_source": "Radiation source (auto = SMHI STRÅNG API in Nordic coverage, else your sensors)"
         }
       }
     },

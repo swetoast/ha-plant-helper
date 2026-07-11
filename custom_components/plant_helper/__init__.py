@@ -29,6 +29,8 @@ from .const import (
     CONF_ENABLE_INATURALIST_ENRICHMENT,
     CONF_ENABLE_TREFLE_FALLBACK,
     CONF_FORECAST_ENTITY,
+    CONF_RADIATION_SOURCE,
+    DEFAULT_RADIATION_SOURCE,
     CONF_OZONE_ENTITY,
     CONF_PERENUAL_API_KEY,
     CONF_TREFLE_API_KEY,
@@ -106,6 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     plants = _coordinator_plants(storage.get_all_user_plants(), storage)
     forecast_entity = entry.options.get(CONF_FORECAST_ENTITY) or entry.data.get(CONF_FORECAST_ENTITY)
     ozone_entity = entry.options.get(CONF_OZONE_ENTITY) or entry.data.get(CONF_OZONE_ENTITY)
+    radiation_source = entry.options.get(CONF_RADIATION_SOURCE, DEFAULT_RADIATION_SOURCE)
 
     coordinator = PlantHelperCoordinator(
         hass,
@@ -116,6 +119,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         forecast_entity=forecast_entity,
         ozone_entity=ozone_entity,
         api=api,
+        radiation_source=radiation_source,
+        latitude=hass.config.latitude,
+        longitude=hass.config.longitude,
     )
     await coordinator.async_config_entry_first_refresh()
 

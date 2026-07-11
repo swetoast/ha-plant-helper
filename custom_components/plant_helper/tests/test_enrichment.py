@@ -90,12 +90,12 @@ check("family extracted to string from Trefle object", m["family"] == "Asparagac
 check("care fields from Perenual", m["watering"] == "Minimum" and m["poisonous_to_pets"] == 1)
 check("Trefle botanical from nested growth", m["light"] == 7 and m["minimum_temperature_c"] == 10 and m["maximum_temperature_c"] == 30)
 check("Trefle pH from nested growth", m["ph_min"] == 6.0 and m["ph_max"] == 7.5)
-check("photo prefers Perenual image, else iNat", m["photo"] == "https://per/img.jpg")
+check("photo prefers iNaturalist (real) over Perenual", m["photo"] == "https://inat/photo.jpg")
 check("all three providers listed", m["providers"] == ["perenual", "inaturalist", "trefle"])
 check("merged summarizes cleanly", en.summarize_enrichment(m)["suggested_profile"] == "dry_tolerant")
 sm = en.summarize_enrichment(m)
 check("wikipedia link surfaced", sm["wikipedia_url"] == "https://en.wikipedia.org/x")
-check("photo url surfaced", sm["photo"] == "https://per/img.jpg")
+check("photo url surfaced (iNat)", sm["photo"] == "https://inat/photo.jpg")
 check("family in summary is a string", sm["family"] == "Asparagaceae")
 
 # iNaturalist alone (no API keys) still yields usable identity + photo.
@@ -108,6 +108,19 @@ check("iNat-only providers list", only_inat["providers"] == ["inaturalist"])
 m2 = en.merge_provider_data([per, inat])
 check("photo falls back to iNat when no perenual image",
       en.merge_provider_data([inat])["photo"] == "https://inat/photo.jpg")
+
+print("== Perenual free-tier placeholder rejected ==")
+_ph = "https://s3.wasabisys.com/perenual/image/upgrade_access.jpg?X-Amz-Signature=abc"
+per_paywall = {"provider": "perenual", "common_name": "Snake Plant",
+               "default_image": {"regular_url": _ph}}
+inat_photo = {"provider": "inaturalist", "scientific_name": "Dracaena trifasciata",
+              "photo": "https://inaturalist.org/photos/1/medium.jpg"}
+mp = en.merge_provider_data([per_paywall, inat_photo])
+check("placeholder rejected, real iNat photo used", mp["photo"] == "https://inaturalist.org/photos/1/medium.jpg")
+# Perenual placeholder alone -> no photo (not a broken 404 link)
+only_paywall = en.merge_provider_data([per_paywall])
+check("placeholder-only merge -> no photo", "photo" not in only_paywall)
+check("summarize drops placeholder", "photo" not in en.summarize_enrichment({"default_image": {"regular_url": _ph}}))
 check("two-provider merge lists both", m2["providers"] == ["perenual", "inaturalist"])
 
 print("== source reflects real providers (not local_cache) ==")
@@ -118,5 +131,27 @@ cached = {**m, "provider": "local_cache"}
 check("cached read still shows real providers as source", en.summarize_enrichment(cached)["source"] == "perenual, inaturalist, trefle")
 # Only when there are no providers does it fall back to the provider tag.
 check("no providers -> provider tag", en.summarize_enrichment({"common_name": "X", "provider": "local_cache"})["source"] == "local_cache")
+
+print("\nALL ENRICHMENT TESTS PASSED")
+
+
+print("== corrected pipeline: right sci name -> rich, honest data ==")
+_inat = {"provider": "inaturalist", "scientific_name": "Dracaena trifasciata",
+         "common_name": "snake plant", "family": "Asparagaceae",
+         "photo": "https://inaturalist.org/photos/9/medium.jpg",
+         "wikipedia_url": "https://en.wikipedia.org/wiki/Dracaena_trifasciata"}
+_per = {"provider": "perenual", "common_name": "Snake Plant",
+        "scientific_name": ["Dracaena trifasciata"], "cycle": "Perennial",
+        "watering": "Minimum", "sunlight": ["part shade"],
+        "default_image": {"regular_url": "https://s3/perenual/image/upgrade_access.jpg"}}
+_tre = {"provider": "trefle", "family": {"name": "Asparagaceae"},
+        "growth": {"light": 7, "atmospheric_humidity": 4,
+                   "minimum_temperature": {"deg_c": 10}, "maximum_temperature": {"deg_c": 35}}}
+_s = en.summarize_enrichment(en.merge_provider_data([_inat, _per, _tre]))
+check("correct scientific name from autocomplete-shaped iNat", _s["scientific_name"] == "Dracaena trifasciata")
+check("real photo, paywall rejected", _s["photo"] == "https://inaturalist.org/photos/9/medium.jpg")
+check("Trefle soil moisture via atmospheric_humidity alias", _s["soil_moisture_pref_0_10"] == 4)
+check("reference watering from Perenual word", _s["reference_watering_days"] == 14.0)
+check("data quality high with 3 real providers", en.species_data_quality(_s) == "high")
 
 print("\nALL ENRICHMENT TESTS PASSED")

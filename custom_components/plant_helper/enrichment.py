@@ -21,35 +21,56 @@ def _first(value: Any) -> Any:
     return value
 
 
+def _valid_photo(url: Any) -> str | None:
+    """A usable photo URL, or None. Rejects Perenual's free-tier placeholder
+    (an 'upgrade_access.jpg' image that 404s) and non-http values."""
+    if not isinstance(url, str) or not url.startswith("http"):
+        return None
+    low = url.lower()
+    if "upgrade_access" in low or "upgrade-access" in low or "/upgrade." in low:
+        return None
+    return url
+
+
 def _photo_url(data: dict[str, Any]) -> str | None:
-    """Best available image URL across the providers' shapes."""
+    """Best available image URL across the providers' shapes (placeholders rejected)."""
     img = data.get("default_image")
     if isinstance(img, dict):
         for k in ("regular_url", "medium_url", "original_url", "small_url", "thumbnail"):
-            if img.get(k):
-                return img[k]
-    if isinstance(img, str) and img.startswith("http"):
-        return img
+            got = _valid_photo(img.get(k))
+            if got:
+                return got
+    got = _valid_photo(img) if isinstance(img, str) else None
+    if got:
+        return got
     photos = data.get("photos")
     if isinstance(photos, list) and photos:
         first = photos[0]
         if isinstance(first, str):
-            return first
-        if isinstance(first, dict):
-            return first.get("medium_url") or first.get("url")
-    # Nested iNaturalist enrichment block (older cache shape).
+            got = _valid_photo(first)
+            if got:
+                return got
+        elif isinstance(first, dict):
+            got = _valid_photo(first.get("medium_url") or first.get("url"))
+            if got:
+                return got
     inat = data.get("inat")
     if isinstance(inat, dict):
         ip = inat.get("photos")
         if isinstance(ip, list) and ip:
             f = ip[0]
             if isinstance(f, dict):
-                return f.get("url") or f.get("medium_url")
-            if isinstance(f, str):
-                return f
+                got = _valid_photo(f.get("url") or f.get("medium_url"))
+                if got:
+                    return got
+            elif isinstance(f, str):
+                got = _valid_photo(f)
+                if got:
+                    return got
     for k in ("image_url", "image"):
-        if isinstance(data.get(k), str) and data[k].startswith("http"):
-            return data[k]
+        got = _valid_photo(data.get(k))
+        if got:
+            return got
     return None
 
 
@@ -160,7 +181,7 @@ def summarize_enrichment(data: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(desc, str) and desc:
         put("description", desc[:500])
 
-    put("photo", data.get("photo") or _photo_url(data))
+    put("photo", _valid_photo(data.get("photo")) or _photo_url(data))
     put("wikipedia_url", data.get("wikipedia_url"))
     put("reference_watering_days", reference_watering_days(data))
     put("suggested_profile", suggested_profile(data))
@@ -228,7 +249,10 @@ def merge_provider_data(parts: list[dict[str, Any]]) -> dict[str, Any]:
     out.update(_trefle_botanical(tre))
 
     out["description"] = _pick(per.get("description"), inat.get("description"))
-    out["photo"] = _pick(_photo_url(per), inat.get("photo"), _photo_url(inat))
+    # iNaturalist first: its photos are real and keyless. Perenual's free-tier
+    # image is an 'upgrade_access' placeholder that 404s, so it comes last and
+    # only if it passes the placeholder filter.
+    out["photo"] = _pick(_valid_photo(inat.get("photo")), _photo_url(inat), _photo_url(per))
     out["photos"] = _pick(inat.get("photos"), per.get("photos")) or []
     out["wikipedia_url"] = inat.get("wikipedia_url")
     out["providers"] = [p for p in ("perenual", "inaturalist", "trefle") if p in by]
@@ -256,7 +280,10 @@ def _trefle_botanical(tre: dict[str, Any]) -> dict[str, Any]:
         return node.get("deg_c") if isinstance(node, dict) else node
 
     light = _num(growth.get("light"), tre.get("light"))
-    soil = _num(growth.get("soil_moisture"), tre.get("soil_moisture"))
+    soil = _num(
+        growth.get("soil_moisture"), growth.get("soil_humidity"),
+        growth.get("atmospheric_humidity"), tre.get("soil_moisture"),
+    )
     min_t = _num(_deg_c(growth.get("minimum_temperature")), tre.get("minimum_temperature_c"))
     max_t = _num(_deg_c(growth.get("maximum_temperature")), tre.get("maximum_temperature_c"))
     ph_min = _num(growth.get("ph_minimum"), tre.get("ph_min"))

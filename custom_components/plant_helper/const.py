@@ -64,3 +64,9 @@ CONF_OZONE_ENTITY = "ozone_entity"
 
 # Integration author (shown as the device "manufacturer" / "by ..." in HA).
 AUTHOR = "Peter Skopa (@swetoast)"
+
+# STRÅNG radiation source: 'auto' (API in Nordic coverage, else sensors),
+# 'api' (always fetch from SMHI), or 'sensors' (read HA STRÅNG sensors).
+CONF_RADIATION_SOURCE = "radiation_source"
+DEFAULT_RADIATION_SOURCE = "auto"
+RADIATION_SOURCES = ["auto", "api", "sensors"]

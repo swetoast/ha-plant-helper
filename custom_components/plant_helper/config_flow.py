@@ -34,16 +34,19 @@ from .const import (
     CONF_FORECAST_ENTITY,
     CONF_OZONE_ENTITY,
     CONF_PERENUAL_API_KEY,
+    CONF_RADIATION_SOURCE,
     CONF_TREFLE_API_KEY,
     CONF_UPDATE_INTERVAL,
     DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
     DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_PLACEMENT,
+    DEFAULT_RADIATION_SOURCE,
     DEFAULT_PROFILE,
     DEFAULT_RAIN_LIMIT_MM,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     PLACEMENTS,
+    RADIATION_SOURCES,
     PROFILES,
 )
 from .plant_config import (
@@ -164,6 +167,10 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s", mode="box")
             ),
+            vol.Required(
+                CONF_RADIATION_SOURCE,
+                default=o.get(CONF_RADIATION_SOURCE, DEFAULT_RADIATION_SOURCE),
+            ): _select(RADIATION_SOURCES),
         }
     )
 
