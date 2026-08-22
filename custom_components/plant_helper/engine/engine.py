@@ -116,6 +116,7 @@ class EngineResult:
     light_hours_today: float | None = None
     daylight_hours: float | None = None
     learned_watering_interval_days: float | None = None
+    environment: dict[str, object] = field(default_factory=dict)
 
     def summary(self) -> dict[str, object]:
         """Flat dict for entity attributes / debugging."""

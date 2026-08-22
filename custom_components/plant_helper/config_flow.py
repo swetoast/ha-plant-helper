@@ -30,6 +30,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_ENABLE_INATURALIST_ENRICHMENT,
+    CONF_ENABLE_OPEN_METEO,
     CONF_ENABLE_TREFLE_FALLBACK,
     CONF_FORECAST_ENTITY,
     CONF_OZONE_ENTITY,
@@ -38,6 +39,7 @@ from .const import (
     CONF_TREFLE_API_KEY,
     CONF_UPDATE_INTERVAL,
     DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
+    DEFAULT_ENABLE_OPEN_METEO,
     DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_PLACEMENT,
     DEFAULT_RADIATION_SOURCE,
@@ -145,6 +147,10 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
     o = options or {}
     return vol.Schema(
         {
+            vol.Optional(
+                CONF_ENABLE_OPEN_METEO,
+                default=o.get(CONF_ENABLE_OPEN_METEO, DEFAULT_ENABLE_OPEN_METEO),
+            ): selector.BooleanSelector(),
             _optional(CONF_FORECAST_ENTITY, o.get(CONF_FORECAST_ENTITY)):
                 selector.EntitySelector(selector.EntitySelectorConfig(domain=["weather", "sensor"])),
             _optional(CONF_OZONE_ENTITY, o.get(CONF_OZONE_ENTITY)):
@@ -159,6 +165,7 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
             ): selector.BooleanSelector(),
             vol.Optional(
                 CONF_ENABLE_INATURALIST_ENRICHMENT,
+    CONF_ENABLE_OPEN_METEO,
                 default=o.get(CONF_ENABLE_INATURALIST_ENRICHMENT, DEFAULT_ENABLE_INATURALIST_ENRICHMENT),
             ): selector.BooleanSelector(),
             vol.Optional(
@@ -435,5 +442,6 @@ _REMOVE_INFO = "Removing a plant deletes its entities. Its learned baseline is k
 _SETTINGS_INFO = (
     "Global settings shared by all plants. Forecast source enables rain "
     "suppression and severe-weather alerts; the ozone sensor enables the outdoor "
-    "ozone advisory. API keys are optional and only used for species context."
+    "ozone advisory. Open-Meteo can add regional outdoor plant context without "
+    "replacing local sensors. API keys are optional and only used for species context."
 )

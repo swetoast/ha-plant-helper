@@ -35,3 +35,23 @@ def extract_common_name(data: dict[str, Any], fallback: str) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return fallback.strip()
+
+
+def get_linked_entity(plant_data: dict[str, Any], key: str) -> str | None:
+    """Return a configured linked entity from current or legacy plant records."""
+    containers = [plant_data.get("entities"), plant_data.get("sensors"), plant_data]
+    aliases = {
+        "moisture": ("moisture", "soil_moisture"),
+        "temperature": ("temperature", "soil_temperature", "soil_temp"),
+        "lux": ("lux", "room_lux"),
+        "air_humidity": ("air_humidity", "humidity"),
+        "battery": ("battery", "battery_entity"),
+    }
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        for candidate in aliases.get(key, (key,)):
+            value = container.get(candidate)
+            if isinstance(value, str) and value:
+                return value
+    return None

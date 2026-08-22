@@ -70,3 +70,7 @@ AUTHOR = "Peter Skopa (@swetoast)"
 CONF_RADIATION_SOURCE = "radiation_source"
 DEFAULT_RADIATION_SOURCE = "auto"
 RADIATION_SOURCES = ["auto", "api", "sensors"]
+
+# Optional Open-Meteo context; local plant sensors always take precedence.
+CONF_ENABLE_OPEN_METEO = "enable_open_meteo"
+DEFAULT_ENABLE_OPEN_METEO = False

@@ -311,3 +311,12 @@ Trefle API, iNaturalist API), grouped under Diagnostics, showing `last_success`,
 | Moisture always `dry_too_long` | Wrong profile (too strict) or a mis-scaled moisture sensor. Check `calculated_moisture` vs your raw sensor. |
 | Nothing updates after adding a plant | The integration should auto-reload; if not, reload it manually. |
 | Recalibration needed | Repotted / moved the plant → call `plant_helper.recalibrate`. |
+
+
+## Open-Meteo plant environment context
+
+Plant Helper can optionally add regional Open-Meteo model context for indoor and outdoor plants. Enable it under **Configure > Global settings**. Local physical plant sensors always take precedence.
+
+The diagnostic **Environment** sensor includes air temperature, relative humidity, precipitation, precipitation probability, reference evapotranspiration (ET₀), vapour pressure deficit, shortwave radiation, wind speed, wind gusts, soil temperature at 6 cm, and soil moisture for the 3–9 cm and 9–27 cm layers.
+
+For outdoor plants, values are identified as `outdoor_model_context`. For indoor plants, values are identified as `outside_context` and are intended for daylight and exterior-weather interpretation only.

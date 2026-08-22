@@ -5,6 +5,36 @@ All notable changes to Plant Helper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-08-22
+
+### Added
+
+- Added optional Open-Meteo plant environment context, configurable from Plant Helper global settings and disabled by default.
+- Added regional model context for air temperature, relative humidity, precipitation, precipitation probability, reference evapotranspiration (ET₀), vapour pressure deficit, shortwave radiation, wind speed, wind gusts, soil temperature at 6 cm, and soil moisture at 3–9 cm and 9–27 cm.
+- Added a per-plant **Environment** diagnostic sensor that identifies values as `outdoor_model_context` for outdoor plants and `outside_context` for indoor plants.
+- Added an Open-Meteo source module with unit preservation and one-hour successful-refresh throttling.
+- Added focused tests for the selected Open-Meteo variable set and unit handling.
+
+### Changed
+
+- Extended the v4 engine result with an environmental-context field without changing the existing moisture, light, thermal, health, calibration, dormancy, or care-action calculations.
+- Preserved configured physical plant sensors as the authoritative sources for soil moisture, soil temperature, illuminance, and battery state.
+- Updated the setup and global-settings translations with the Open-Meteo option.
+- Updated the README with the Open-Meteo context behavior, selected variables, and indoor/outdoor distinction.
+- Bumped the integration version from `4.0.21` to `4.1.0`.
+
+### Fixed
+
+- Added the missing `get_linked_entity()` helper required by `plant_care_algorithms.py`, restoring relative-import validation and compatibility with current and legacy entity-key layouts.
+
+### Known limitations
+
+- Open-Meteo values are exposed as diagnostic context only and do not yet alter watering urgency, drying rate, rain suppression, health score, thermal state, light score, care actions, dormancy, or calibration.
+- Optional Open-Meteo requests currently run in the main coordinator update path.
+- Previously fetched Open-Meteo values are not yet marked as stale after a later request failure.
+- Failed Open-Meteo requests can retry on each coordinator cycle until a successful refresh updates the throttle timestamp.
+- Environment diagnostic entities are created even when Open-Meteo context is disabled.
+
 ## [3.2.0] - 2026-05-29
 
 ### Bug fixes

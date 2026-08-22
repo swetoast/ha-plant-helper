@@ -40,6 +40,7 @@ from .engine.validation import (
 )
 from .sources import forecast as forecast_src
 from .sources import smhi as smhi_src
+from .sources import open_meteo as open_meteo_src
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,6 +123,7 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         radiation_source: str = "auto",
         latitude: float | None = None,
         longitude: float | None = None,
+        open_meteo_enabled: bool = False,
     ) -> None:
         super().__init__(
             hass, _LOGGER, name="plant_helper", update_interval=UPDATE_INTERVAL
@@ -149,6 +151,10 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         self._use_strang_api = _sa.use_strang_api(radiation_source, latitude, longitude)
         self._strang_macro = None  # cached MacroReading from the API
         self._last_strang = None
+        self._open_meteo_enabled = open_meteo_enabled
+        self._open_meteo_environment = None
+        self._open_meteo_error: str | None = None
+        self._last_open_meteo = None
 
     @property
     def enrichment(self) -> dict[str, dict[str, Any]]:
@@ -191,6 +197,9 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         if elevation is not None:
             sstore.append_reading(sdata, "global:elevation", now, elevation, now)
 
+        if self._open_meteo_enabled:
+            await self._refresh_open_meteo(now)
+
         results: dict[str, eng.EngineResult] = {}
         for plant_id, cfg in self._plants.items():
             try:
@@ -214,6 +223,20 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         did_refresh = await self._maybe_refresh_enrichment(now)
         if did_refresh:
             self.async_update_listeners()
+
+    async def _refresh_open_meteo(self, now) -> None:
+        """Refresh Open-Meteo context at most once per hour."""
+        if self._last_open_meteo and (now - self._last_open_meteo) < timedelta(hours=1):
+            return
+        try:
+            from homeassistant.helpers.aiohttp_client import async_get_clientsession
+            self._open_meteo_environment = await open_meteo_src.async_fetch(
+                async_get_clientsession(self.hass), self._latitude, self._longitude)
+            self._open_meteo_error = None
+            self._last_open_meteo = now
+        except Exception as err:  # best-effort regional context
+            self._open_meteo_error = str(err)
+            _LOGGER.warning("Plant Helper: Open-Meteo context unavailable: %s", err)
 
     async def _refresh_strang(self, now) -> None:
         """Fetch STRÅNG radiation from SMHI (throttled hourly) and buffer the full
@@ -401,6 +424,15 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
             daylight_hours=_daylight_hours(self.hass),
         )
         result = eng.compute(inputs)
+        if self._open_meteo_environment is not None:
+            result.environment = {
+                "placement": placement,
+                "role": "outdoor_model_context" if placement == "outdoor" else "outside_context",
+                **self._open_meteo_environment.attributes(),
+            }
+        elif self._open_meteo_error:
+            result.environment = {"placement": placement, "source": "Open-Meteo",
+                                  "available": False, "error": self._open_meteo_error}
         self._update_condition_timers(plant_id, result, now)
         return result
 

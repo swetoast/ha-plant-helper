@@ -21,12 +21,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
+    DEFAULT_ENABLE_OPEN_METEO,
     DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_PLACEMENT,
     DEFAULT_PROFILE,
     DEFAULT_RAIN_LIMIT_MM,
     DOMAIN,
     CONF_ENABLE_INATURALIST_ENRICHMENT,
+    CONF_ENABLE_OPEN_METEO,
     CONF_ENABLE_TREFLE_FALLBACK,
     CONF_FORECAST_ENTITY,
     CONF_RADIATION_SOURCE,
@@ -122,6 +124,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         radiation_source=radiation_source,
         latitude=hass.config.latitude,
         longitude=hass.config.longitude,
+        open_meteo_enabled=_opt(CONF_ENABLE_OPEN_METEO, DEFAULT_ENABLE_OPEN_METEO),
     )
     await coordinator.async_config_entry_first_refresh()
 

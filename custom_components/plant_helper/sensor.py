@@ -39,6 +39,7 @@ async def async_setup_entry(
                 PlantThermalStateSensor(coordinator, entry, plant_id, name),
                 PlantCalibrationSensor(coordinator, entry, plant_id, name),
                 PlantSpeciesInfoSensor(coordinator, entry, plant_id, name),
+                PlantEnvironmentSensor(coordinator, entry, plant_id, name),
             ]
         )
     async_add_entities(entities)
@@ -245,3 +246,26 @@ class PlantSpeciesInfoSensor(_PlantSensorBase):
             )
         )
         return info
+
+
+class PlantEnvironmentSensor(_PlantSensorBase):
+    """Regional model context without overriding physical plant sensors."""
+    _attr_icon = "mdi:sprout-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry, plant_id, name):
+        super().__init__(coordinator, entry, plant_id, name, "environment", "Environment")
+
+    @property
+    def native_value(self) -> str | None:
+        result = self._result
+        if not result or not result.environment:
+            return "disabled"
+        if result.environment.get("available") is False:
+            return "unavailable"
+        return str(result.environment.get("role", "context"))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        result = self._result
+        return dict(result.environment) if result and result.environment else {}
