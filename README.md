@@ -2,37 +2,44 @@
 
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![HACS](https://img.shields.io/badge/HACS-Custom%20Repository-41BDF5)](https://hacs.xyz/)
-[![Version](https://img.shields.io/badge/version-4.0.31-blue)](custom_components/plant_helper/manifest.json)
+[![Version](https://img.shields.io/badge/version-4.2.0-blue)](custom_components/plant_helper/manifest.json)
 
-Plant Helper is a Home Assistant custom integration that turns local soil moisture, soil temperature, and light readings into calibrated, time-based plant-care guidance. It combines each plant's own learned behavior with optional STRÅNG solar radiation, weather forecasts, and read-only species context.
+Plant Helper is a Home Assistant custom integration that turns soil-moisture, soil-temperature, and light readings into calibrated, time-based plant-care guidance. It learns how each plant behaves in its actual location and combines that local history with optional solar-radiation data, weather forecasts, and read-only species context.
 
-> **Release status:** Automated tests cover the decision engine, learning lifecycle, persistence logic, configuration contracts, and repository structure. The final live Home Assistant lifecycle checklist remains the release gate for v4.0.35.
+> **Release status:** Automated tests cover the decision engine, calibration and adaptation behavior, persistence, placement transitions, weather-source processing, and repository-level Home Assistant contracts. Final verification in a running Home Assistant instance is still required before version 4.2.0 is described as field-verified.
 
 ## Highlights
 
 - UI-based setup and plant management
-- Per-placement 14-day calibration that extends when evidence is incomplete
 - Independent indoor and outdoor learned baselines
-- Conservative post-lock adaptation of the learned saturated-moisture peak
-- Gap-aware telemetry validation that avoids learning across missing or invalid data
-- Reboot-safe calibration, samples, condition timers, and daily history
-- Direct SMHI STRÅNG support in Nordic coverage, with source-locked estimated Open-Meteo radiation fallback elsewhere
-- Optional weather hazards, probability-aware rain suppression, bounded outdoor ET0 drying pressure, ozone advisory, and species context
-- Health, care, moisture, light, temperature, calibration, species, and diagnostic entities
+- Fourteen-day calibration that extends when evidence is incomplete
+- Conservative post-calibration adaptation of the saturated-moisture peak
+- Profile-aware dry-threshold regeneration
+- Gap-aware validation that avoids learning across missing or invalid telemetry
+- Restart-safe calibration, samples, timers, daily history, and learned state
+- STRÅNG solar radiation in Nordic coverage
+- Source-isolated estimated Open-Meteo radiation fallback elsewhere
+- Optional Home Assistant or Open-Meteo weather forecasts
+- Bounded outdoor ET₀ drying-pressure adjustment
+- Precipitation-probability-aware rain suppression
+- Weather hazards, ozone advisory, dormancy, and species context
+- Plant-level care, health, moisture, light, temperature, calibration, species, and diagnostic entities
 
 ## Requirements
 
 - A recent Home Assistant release
 - One soil-moisture sensor per plant
 - Optional soil-temperature, illuminance, and battery sensors
-- Optional weather forecast source
-- STRÅNG radiation through the direct SMHI API or existing Home Assistant sensors
+- Optional Home Assistant weather forecast entity
+- Optional internet access for STRÅNG, Open-Meteo, and species providers
+
+Physical plant sensors remain authoritative. Modelled Open-Meteo soil values are regional context only and never replace or calibrate a local plant sensor.
 
 ## Installation
 
 ### HACS custom repository
 
-Until Plant Helper is accepted into the default HACS catalogue:
+Until Plant Helper is available through the default HACS catalogue:
 
 1. Open **HACS**.
 2. Select **Integrations**.
@@ -40,7 +47,8 @@ Until Plant Helper is accepted into the default HACS catalogue:
 4. Add `https://github.com/swetoast/ha-plant-helper` as an **Integration** repository.
 5. Install **Plant Helper**.
 6. Restart Home Assistant.
-7. Open **Settings > Devices & services > Add integration** and select **Plant Helper**.
+7. Open **Settings > Devices & services > Add integration**.
+8. Select **Plant Helper**.
 
 ### Manual installation
 
@@ -53,17 +61,34 @@ Until Plant Helper is accepted into the default HACS catalogue:
 
 ### Global settings
 
-- **Forecast source:** optional weather entity or sensor carrying a forecast attribute
+- **Forecast source:** optional Home Assistant weather entity or sensor containing a forecast attribute
+- **Outdoor weather source:** automatic, Home Assistant, Open-Meteo, or disabled
+- **Radiation source:** automatic, direct STRÅNG API, or existing Home Assistant STRÅNG sensors
 - **Ozone sensor:** optional outdoor ozone advisory source
 - **Perenual API key:** optional species context
-- **Trefle API token:** optional botanical context
+- **Trefle API token:** optional botanical fallback context
 - **iNaturalist enrichment:** optional keyless identity and photo context
 - **Update interval:** default 300 seconds, accepted range 60–3600 seconds
-- **Radiation source:** automatic, direct STRÅNG API, or existing STRÅNG sensors
+
+### Outdoor weather-source behavior
+
+- **Automatic:** preserves a configured Home Assistant forecast; otherwise uses Open-Meteo
+- **Home Assistant:** uses the configured Home Assistant forecast source
+- **Open-Meteo:** uses one shared location-level Open-Meteo request for all plants
+- **Disabled:** does not provide forecast-based outdoor context
+
+### Radiation-source behavior
+
+- **Automatic inside Nordic coverage:** prefers the direct STRÅNG API
+- **Automatic outside Nordic coverage:** uses source-isolated estimated PAR derived from Open-Meteo shortwave radiation
+- **Direct API:** uses STRÅNG explicitly
+- **Home Assistant sensors:** uses the configured STRÅNG sensor entities explicitly
+
+Explicit STRÅNG modes are never silently replaced by Open-Meteo. Radiation histories use separate storage keys so a complete daily-light calculation cannot mix providers within one calendar day.
 
 ### Per-plant settings
 
-- **Plant name:** required display name and stable plant ID basis
+- **Plant name:** required display name and stable plant identifier basis
 - **Species:** optional read-only provider context
 - **Soil moisture:** required percentage sensor
 - **Soil temperature:** optional temperature compensation and thermal context
@@ -75,23 +100,52 @@ Until Plant Helper is accepted into the default HACS catalogue:
 
 ## Calibration and learning
 
-Each placement has its own learned model. A new placement begins a 14-day calibration, and calibration extends rather than locking if the required observations are incomplete. The Health sensor is unavailable while calibrating, and the separate **Calibration** diagnostic reports the learning state.
+Each placement has its own learned baseline. Moving a plant between indoor and outdoor locations does not erase the other placement's data.
+
+A placement begins with a fourteen-day calibration period. If the required evidence is incomplete, calibration extends instead of locking a partial baseline. The Health sensor is unavailable during calibration, while the separate **Calibration** diagnostic reports the current learning state.
 
 Plant Helper learns:
 
-- saturated moisture peak
+- saturated soil-moisture peak
 - dry threshold
 - drying rate
-- outdoor DLI target or indoor window transmission
-- normal soil-temperature mean and daily swing
+- outdoor daily-light target
+- indoor window-transmission factors
+- normal soil-temperature mean
+- normal daily soil-temperature swing
 
-After lock, qualified higher moisture peaks may slowly adapt the learned maximum using a bounded EWMA. The dry threshold is regenerated from the stored standard or custom profile policy. Drying rate, DLI, window transmission, and thermal constants remain locked until dedicated bounded adaptation policies are implemented.
+After calibration, a validated and well-covered new moisture peak can slowly adjust the learned saturated-moisture maximum. The maximum can only move upward and uses a bounded exponentially weighted moving average. The dry threshold is then regenerated from the plant's stored standard or custom care profile.
 
-See [Learning lifecycle](docs/LEARNING_LIFECYCLE.md) for the twelve-stage ownership and verification map.
+Drying rate, daily-light target, window transmission, thermal mean, and thermal swing remain locked until dedicated bounded adaptation policies are implemented.
+
+See [Learning lifecycle](docs/LEARNING_LIFECYCLE.md) for the complete state-ownership and verification map.
+
+## Outdoor drying projection
+
+For outdoor plants, Plant Helper combines the learned local drying rate with bounded environmental pressure:
+
+- ET₀ around 3 mm over the next 24 hours is neutral
+- ET₀ influence is limited to 0.85–1.15
+- the final combined environmental modifier is limited to 0.60–1.15
+- missing, stale, invalid, or indoor ET₀ is neutral
+- VPD remains diagnostic context to avoid double-counting environmental drying pressure
+
+ET₀ changes only the current projection. It is never written into the learned baseline.
+
+## Rain suppression
+
+Outdoor watering guidance can be suppressed when meaningful rain is expected.
+
+- Forecast precipitation must meet the plant's configured rain threshold.
+- When probability is available, the maximum probability within 48 hours must be at least 60%.
+- Low-confidence rain does not suppress watering guidance.
+- Forecast providers without probability retain amount-only behavior.
+- Invalid probabilities cannot suppress guidance.
+- Suppression is re-evaluated during every coordinator update.
 
 ## Entities
 
-Each plant exposes:
+Each configured plant exposes:
 
 - Health
 - Care action
@@ -107,9 +161,24 @@ Each plant exposes:
 - Dormant
 - Optional ozone advisory
 
-Hub-level entities report radiation-source and species-provider health.
+Hub-level diagnostics report radiation-source and species-provider health.
 
-The Species entity is context only. Provider data never overrides the calibrated care engine.
+The Species entity is context only. Provider data cannot override calibrated plant-care decisions.
+
+## Diagnostic attributes
+
+Depending on placement and available sources, diagnostics can include:
+
+- learned drying rate
+- effective drying rate
+- ET₀ for the next 24 hours
+- ET₀ drying modifier
+- forecast precipitation for the next 48 hours
+- maximum precipitation probability for the next 48 hours
+- active radiation source
+- whether radiation is estimated
+- active radiation source-lock key
+- radiation data age and sample counts
 
 ## Services
 
@@ -133,6 +202,19 @@ data:
   plant_id: monstera_livingroom
 ```
 
+## Persistence
+
+Plant Helper preserves:
+
+- local sample history
+- calibration progress
+- indoor and outdoor learned baselines
+- compact daily history
+- dormancy state
+- dry, wet, cold, and warm condition timers
+
+Removing an individual plant purges its device, entities, configuration, samples, learned state, timers, and history.
+
 ## Removing the integration
 
 1. Open **Settings > Devices & services**.
@@ -141,16 +223,32 @@ data:
 4. If installed through HACS, uninstall Plant Helper from HACS after deleting the integration entry.
 5. Restart Home Assistant if requested.
 
-Removing an individual plant from Plant Helper purges its device, entities, configuration, samples, learned state, timers, and history.
+## Verification status
 
-## Quality and verification
+Automated verification covers the pure decision engine and repository-level Home Assistant contracts. The current suite includes 61 tests plus Python syntax, relative-import, symbol, and release-package integrity checks.
 
+The live Home Assistant lifecycle checklist remains required for:
+
+1. Initial setup and entity creation
+2. Options and placement changes
+3. Returning to a previously calibrated placement
+4. Daily-boundary adaptation and persistence
+5. Restart recovery during and after calibration
+6. Recalibration, unload, and reload behavior
+
+Project references:
+
+- [Changelog](CHANGELOG.md)
 - [Quality roadmap](docs/QUALITY_ROADMAP.md)
 - [Learning lifecycle and live-test checklist](docs/LEARNING_LIFECYCLE.md)
+- [HACS repository notes](docs/HACS.md)
 - [Build history](BUILD_PLAN.md)
 
-For this revision, automated verification is complete for the pure engine and repository-level Home Assistant contracts. A real Home
-Assistant test-load remains required to verify config-entry setup, options changes, entities, services, placement transitions, persistence, and clean reload/unload behavior before v4.0.35 is described as field-proven or field-verified.
+## Weather data attribution
+
+When Open-Meteo is selected, weather data is provided by [Open-Meteo.com](https://open-meteo.com/) under CC BY 4.0.
+
+Open-Meteo radiation is estimated from modelled shortwave radiation and must not be treated as measured PAR. Modelled soil moisture describes regional grid-cell conditions and does not represent moisture in an individual pot or planter.
 
 ## Support
 
@@ -159,8 +257,3 @@ Use [GitHub Issues](https://github.com/swetoast/ha-plant-helper/issues) for repr
 ## License
 
 See [LICENSE](LICENSE).
-
-
-## Weather data attribution
-
-When Open-Meteo is selected, weather data is provided by [Open-Meteo.com](https://open-meteo.com/) under CC BY 4.0. Modelled regional soil values are diagnostic context only and never replace local plant sensors.
