@@ -12,7 +12,8 @@
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
           "update_interval": "Update interval",
-          "radiation_source": "Radiation source (auto = SMHI STRÅNG API in Nordic coverage, else your sensors)"
+          "radiation_source": "Radiation source (auto = SMHI STRÅNG API in Nordic coverage, else your sensors)",
+          "outdoor_data_source": "Outdoor weather source"
         }
       }
     },
@@ -44,13 +45,15 @@
           "soil_temperature": "Soil temperature sensor",
           "lux": "Light (lux) sensor",
           "battery": "Battery sensor (percentage or high/middle/low)",
-          "rain_limit_mm": "Rain suppression threshold (mm, outdoor)"
+          "rain_limit_mm": "Rain suppression threshold (mm, outdoor)",
+          "outdoor_data_source": "Outdoor weather source"
         }
       },
       "edit_plant_select": {
         "title": "Edit a plant",
         "data": {
-          "plant_id": "Plant to edit"
+          "plant_id": "Plant to edit",
+          "outdoor_data_source": "Outdoor weather source"
         }
       },
       "edit_plant": {
@@ -66,14 +69,16 @@
           "soil_temperature": "Soil temperature sensor",
           "lux": "Light (lux) sensor",
           "battery": "Battery sensor (percentage or high/middle/low)",
-          "rain_limit_mm": "Rain suppression threshold (mm, outdoor)"
+          "rain_limit_mm": "Rain suppression threshold (mm, outdoor)",
+          "outdoor_data_source": "Outdoor weather source"
         }
       },
       "remove_plant": {
         "title": "Remove a plant",
         "description": "{info}",
         "data": {
-          "plant_id": "Plant to remove"
+          "plant_id": "Plant to remove",
+          "outdoor_data_source": "Outdoor weather source"
         }
       },
       "global_settings": {
@@ -87,7 +92,8 @@
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
           "update_interval": "Update interval",
-          "radiation_source": "Radiation source (auto = SMHI STRÅNG API in Nordic coverage, else your sensors)"
+          "radiation_source": "Radiation source (auto = SMHI STRÅNG API in Nordic coverage, else your sensors)",
+          "outdoor_data_source": "Outdoor weather source"
         }
       }
     },

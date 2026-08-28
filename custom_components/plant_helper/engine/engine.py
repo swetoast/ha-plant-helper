@@ -78,6 +78,7 @@ class EngineInputs:
     profile_rain_limit_mm: float = 1.0
     ozone_ugm3: float | None = None      # optional outdoor air-quality advisory
     daylight_hours: float | None = None  # from sun.sun (astronomical day length)
+    et0_next_24h_mm: float | None = None  # Open-Meteo reference ET0; outdoor only
 
     # Dormancy tracking (persisted between cycles).
     currently_dormant: bool = False
@@ -116,6 +117,12 @@ class EngineResult:
     light_hours_today: float | None = None
     daylight_hours: float | None = None
     learned_watering_interval_days: float | None = None
+    et0_next_24h_mm: float | None = None
+    et0_drying_modifier: float = 1.0
+    effective_drying_rate: float | None = None
+    learned_drying_rate: float | None = None
+    forecast_precip_48h_mm: float | None = None
+    forecast_precip_probability_max_48h: float | None = None
 
     def summary(self) -> dict[str, object]:
         """Flat dict for entity attributes / debugging."""
@@ -142,6 +149,11 @@ class EngineResult:
             out["calculated_moisture"] = self.moisture.calculated_moisture
             out["days_until_dry"] = self.moisture.days_until_dry
             out["suppressed_by_rain"] = self.moisture.suppressed
+            out["effective_drying_rate"] = self.effective_drying_rate
+            out["et0_next_24h_mm"] = self.et0_next_24h_mm
+            out["et0_drying_modifier"] = self.et0_drying_modifier
+            out["forecast_precip_48h_mm"] = self.forecast_precip_48h_mm
+            out["forecast_precip_probability_max_48h"] = self.forecast_precip_probability_max_48h
         if self.light is not None:
             out["light_state"] = self.light.state
             out["light_score"] = self.light.score
@@ -220,6 +232,10 @@ def compute(inp: EngineInputs) -> EngineResult:
             light_hours_today=light_hours_today,
             daylight_hours=inp.daylight_hours,
             learned_watering_interval_days=learned_watering_interval_days,
+            et0_next_24h_mm=inp.et0_next_24h_mm if inp.placement == "outdoor" else None,
+            et0_drying_modifier=1.0,
+            effective_drying_rate=None,
+            learned_drying_rate=inp.drying_rate,
         )
 
     # --- Thermal (also yields the drying modifier moisture consumes) -------
@@ -253,16 +269,26 @@ def compute(inp: EngineInputs) -> EngineResult:
         cloud=cloud, forecast_next24=next24, hazard=hazard, hazard_type=hazard_type,
     )
 
-    # --- Moisture (drying rate pre-modulated by cloud/forecast) ------------
+    # --- Moisture (learned rate, bounded environmental pressure) -----------
     compensated = mm.temperature_compensate(moisture_s, soil_temp_s)
+    et0_modifier = th.drying_modifier_from_et0(
+        inp.et0_next_24h_mm, placement=inp.placement
+    )
+    combined_drying_modifier = th.combine_drying_modifiers(
+        thermal.drying_modifier, et0_modifier
+    )
     effective_drying = (
-        inp.drying_rate * thermal.drying_modifier if inp.drying_rate else inp.drying_rate
+        inp.drying_rate * combined_drying_modifier if inp.drying_rate else inp.drying_rate
     )
     precip48 = th.aggregate_forecast_precip(inp.forecast, horizon_hours=48.0)
+    precip_probability48 = th.max_forecast_precip_probability(
+        inp.forecast, horizon_hours=48.0
+    )
     moisture = mm.evaluate_moisture(
         now=inp.now, compensated=compensated, max_gap=inp.local_gap,
         m_dry=inp.m_dry, m_max=inp.m_max, drying_rate=effective_drying,
         placement=inp.placement, forecast_precip_mm=precip48,
+        forecast_precip_probability=precip_probability48,
         profile_rain_limit_mm=inp.profile_rain_limit_mm, dormant=dorm_res.dormant,
         dry_run_minutes=inp.dry_run_minutes, wet_run_minutes=inp.wet_run_minutes,
     )
@@ -318,6 +344,12 @@ def compute(inp: EngineInputs) -> EngineResult:
         light_hours_today=light_hours_today,
         daylight_hours=inp.daylight_hours,
         learned_watering_interval_days=learned_watering_interval_days,
+        et0_next_24h_mm=inp.et0_next_24h_mm if inp.placement == "outdoor" else None,
+        et0_drying_modifier=et0_modifier,
+        effective_drying_rate=effective_drying,
+        learned_drying_rate=inp.drying_rate,
+        forecast_precip_48h_mm=precip48,
+        forecast_precip_probability_max_48h=precip_probability48,
     )
 
 

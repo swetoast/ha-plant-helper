@@ -32,6 +32,7 @@ from .const import (
     CONF_ENABLE_INATURALIST_ENRICHMENT,
     CONF_ENABLE_TREFLE_FALLBACK,
     CONF_FORECAST_ENTITY,
+    CONF_OUTDOOR_DATA_SOURCE,
     CONF_OZONE_ENTITY,
     CONF_PERENUAL_API_KEY,
     CONF_RADIATION_SOURCE,
@@ -41,12 +42,14 @@ from .const import (
     DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_PLACEMENT,
     DEFAULT_RADIATION_SOURCE,
+    DEFAULT_OUTDOOR_DATA_SOURCE,
     DEFAULT_PROFILE,
     DEFAULT_RAIN_LIMIT_MM,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     PLACEMENTS,
     RADIATION_SOURCES,
+    OUTDOOR_DATA_SOURCES,
     PROFILES,
 )
 from .plant_config import (
@@ -173,6 +176,10 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_RADIATION_SOURCE,
                 default=o.get(CONF_RADIATION_SOURCE, DEFAULT_RADIATION_SOURCE),
             ): _select(RADIATION_SOURCES),
+            vol.Optional(
+                CONF_OUTDOOR_DATA_SOURCE,
+                default=o.get(CONF_OUTDOOR_DATA_SOURCE, DEFAULT_OUTDOOR_DATA_SOURCE),
+            ): _select(OUTDOOR_DATA_SOURCES),
         }
     )
 

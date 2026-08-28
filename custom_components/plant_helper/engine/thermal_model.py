@@ -44,6 +44,43 @@ WET_CONDITIONS = {"cloudy", "rainy", "pouring", "snowy", "snowy-rainy", "hail"}
 HAZARD_CONDITIONS = {"lightning", "lightning-rainy", "hail", "exceptional"}
 EXTREME_WIND_GUST_KMH = 40.0
 
+# Outdoor ET0 drying pressure. ET0 is a reference surface, not the plant or pot,
+# so its influence is deliberately modest and bounded. Around 3 mm/day is
+# neutral; each 1 mm/day deviation changes the learned rate by 5%, capped at
+# -15% / +15%. Missing, invalid, or indoor ET0 is neutral.
+ET0_NEUTRAL_MM_DAY = 3.0
+ET0_CHANGE_PER_MM = 0.05
+ET0_MODIFIER_MIN = 0.85
+ET0_MODIFIER_MAX = 1.15
+COMBINED_DRYING_MODIFIER_MIN = 0.60
+COMBINED_DRYING_MODIFIER_MAX = 1.15
+
+
+def drying_modifier_from_et0(
+    et0_next_24h_mm: float | None,
+    *,
+    placement: str,
+) -> float:
+    """Bounded outdoor modifier from 24-hour reference evapotranspiration."""
+    if placement != "outdoor" or et0_next_24h_mm is None:
+        return 1.0
+    try:
+        et0 = float(et0_next_24h_mm)
+    except (TypeError, ValueError):
+        return 1.0
+    if et0 < 0.0 or et0 > 30.0:
+        return 1.0
+    raw = 1.0 + (et0 - ET0_NEUTRAL_MM_DAY) * ET0_CHANGE_PER_MM
+    return max(ET0_MODIFIER_MIN, min(ET0_MODIFIER_MAX, raw))
+
+
+def combine_drying_modifiers(environmental: float, et0: float) -> float:
+    """Combine existing weather context with ET0 under one strict bound."""
+    return max(
+        COMBINED_DRYING_MODIFIER_MIN,
+        min(COMBINED_DRYING_MODIFIER_MAX, environmental * et0),
+    )
+
 
 def cloud_factor(diffuse_irradiance: float | None, global_irradiance: float | None) -> float | None:
     """Fraction of light that is diffuse (0 clear .. 1 fully overcast)."""
@@ -83,6 +120,7 @@ class ForecastHour:
     condition: str
     wind_gust_kmh: float | None = None
     precipitation_mm: float | None = None
+    precipitation_probability: float | None = None
 
 
 def detect_hazard(
@@ -119,6 +157,22 @@ def aggregate_forecast_precip(
         for fh in forecast
         if 0 <= fh.hours_ahead <= horizon_hours
     )
+
+
+def max_forecast_precip_probability(
+    forecast: Sequence[ForecastHour],
+    *,
+    horizon_hours: float = 48.0,
+) -> float | None:
+    """Highest valid precipitation probability in the selected horizon."""
+    values = [
+        float(fh.precipitation_probability)
+        for fh in forecast
+        if 0 <= fh.hours_ahead <= horizon_hours
+        and fh.precipitation_probability is not None
+        and 0.0 <= float(fh.precipitation_probability) <= 100.0
+    ]
+    return max(values) if values else None
 
 
 @dataclass(frozen=True, slots=True)

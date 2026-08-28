@@ -6,7 +6,7 @@
 
 Plant Helper is a Home Assistant custom integration that turns local soil moisture, soil temperature, and light readings into calibrated, time-based plant-care guidance. It combines each plant's own learned behavior with optional STRÅNG solar radiation, weather forecasts, and read-only species context.
 
-> **Release status:** Automated tests cover the decision engine, learning lifecycle, persistence logic, configuration contracts, and repository structure. The final live Home Assistant lifecycle checklist remains the release gate for v4.0.31.
+> **Release status:** Automated tests cover the decision engine, learning lifecycle, persistence logic, configuration contracts, and repository structure. The final live Home Assistant lifecycle checklist remains the release gate for v4.0.35.
 
 ## Highlights
 
@@ -16,8 +16,8 @@ Plant Helper is a Home Assistant custom integration that turns local soil moistu
 - Conservative post-lock adaptation of the learned saturated-moisture peak
 - Gap-aware telemetry validation that avoids learning across missing or invalid data
 - Reboot-safe calibration, samples, condition timers, and daily history
-- Direct SMHI STRÅNG support in Nordic coverage, with optional existing HA sensors
-- Optional weather hazards, rain suppression, ozone advisory, and species context
+- Direct SMHI STRÅNG support in Nordic coverage, with source-locked estimated Open-Meteo radiation fallback elsewhere
+- Optional weather hazards, probability-aware rain suppression, bounded outdoor ET0 drying pressure, ozone advisory, and species context
 - Health, care, moisture, light, temperature, calibration, species, and diagnostic entities
 
 ## Requirements
@@ -150,7 +150,7 @@ Removing an individual plant from Plant Helper purges its device, entities, conf
 - [Build history](BUILD_PLAN.md)
 
 For this revision, automated verification is complete for the pure engine and repository-level Home Assistant contracts. A real Home
-Assistant test-load remains required to verify config-entry setup, options changes, entities, services, placement transitions, persistence, and clean reload/unload behavior before v4.0.31 is described as field-proven or field-verified.
+Assistant test-load remains required to verify config-entry setup, options changes, entities, services, placement transitions, persistence, and clean reload/unload behavior before v4.0.35 is described as field-proven or field-verified.
 
 ## Support
 
@@ -159,3 +159,8 @@ Use [GitHub Issues](https://github.com/swetoast/ha-plant-helper/issues) for repr
 ## License
 
 See [LICENSE](LICENSE).
+
+
+## Weather data attribution
+
+When Open-Meteo is selected, weather data is provided by [Open-Meteo.com](https://open-meteo.com/) under CC BY 4.0. Modelled regional soil values are diagnostic context only and never replace local plant sensors.

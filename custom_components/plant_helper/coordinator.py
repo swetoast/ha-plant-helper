@@ -41,6 +41,7 @@ from .engine.validation import (
     current_reading_stale,
 )
 from .sources import forecast as forecast_src
+from .sources import open_meteo as open_meteo_src
 from .sources import smhi as smhi_src
 
 _LOGGER = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         plants: dict[str, dict[str, Any]],
         strang_entities: dict[str, str] | None,
         forecast_entity: str | None,
+        outdoor_data_source: str = "auto",
         ozone_entity: str | None = None,
         api: Any = None,
         radiation_source: str = "auto",
@@ -139,6 +141,9 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         self._plants = plants
         self._strang_entities = strang_entities
         self._forecast_entity = forecast_entity
+        self._outdoor_data_source = outdoor_data_source
+        self._open_meteo_context = None
+        self._last_open_meteo = None
         self._ozone_entity = ozone_entity
         self._api = api
         self._enrichment: dict[str, dict[str, Any]] = {
@@ -157,7 +162,9 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         self._latitude = latitude
         self._longitude = longitude
         self._radiation_source = radiation_source
+        self._in_strang_coverage = _sa.in_nordic_coverage(latitude, longitude)
         self._use_strang_api = _sa.use_strang_api(radiation_source, latitude, longitude)
+        self._par_series_key = "global:par"
         self._strang_macro = None  # cached MacroReading from the API
         self._last_strang = None
         self._strang_failures = 0
@@ -223,11 +230,62 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
                 ts = macro.selected_data_time or now
                 sstore.append_reading(sdata, "global:outdoor_lux", ts, macro.outdoor_lux, now, dedupe=True)
 
-        forecast = (
-            await forecast_src.async_fetch_forecast(self.hass, self._forecast_entity, now)
-            if self._forecast_entity
-            else []
+        use_ha_forecast = self._outdoor_data_source == "home_assistant" or (
+            self._outdoor_data_source == "auto" and bool(self._forecast_entity)
         )
+        if use_ha_forecast and self._forecast_entity:
+            forecast = await forecast_src.async_fetch_forecast(self.hass, self._forecast_entity, now)
+        elif self._outdoor_data_source in {"auto", "open_meteo"}:
+            refresh_due = self._last_open_meteo is None or now - self._last_open_meteo >= timedelta(minutes=30)
+            if refresh_due and self._latitude is not None and self._longitude is not None:
+                from homeassistant.helpers.aiohttp_client import async_get_clientsession
+                context = await open_meteo_src.fetch_context(async_get_clientsession(self.hass), self._latitude, self._longitude, now)
+                if context is not None:
+                    self._open_meteo_context = context
+                    self._last_open_meteo = now
+            forecast = self._open_meteo_context.forecast if self._open_meteo_context else []
+        else:
+            forecast = []
+
+        # Auto-mode global radiation fallback outside STRANG coverage. The
+        # dedicated series key locks each DLI day to one provider.
+        use_open_meteo_radiation = (
+            self._radiation_source == "auto"
+            and not self._in_strang_coverage
+            and self._open_meteo_context is not None
+            and now - self._open_meteo_context.fetched_at <= timedelta(hours=2)
+            and bool(self._open_meteo_context.estimated_par_series)
+        )
+        if use_open_meteo_radiation:
+            self._par_series_key = "global:par:open_meteo"
+            ctx = self._open_meteo_context
+            for ts, value in ctx.estimated_par_series:
+                sstore.append_reading(sdata, self._par_series_key, ts, value, now, dedupe=True)
+            for ts, value in ctx.outdoor_lux_series:
+                sstore.append_reading(sdata, "global:outdoor_lux:open_meteo", ts, value, now, dedupe=True)
+            latest_ts, latest_par = ctx.estimated_par_series[-1]
+            age_hours = max(0.0, (now.replace(tzinfo=None) - latest_ts.replace(tzinfo=None)).total_seconds() / 3600.0)
+            macro = _MacroReading(
+                par=latest_par, global_irradiance=ctx.shortwave_radiation,
+                diffuse_irradiance=ctx.diffuse_radiation,
+                direct_horizontal=None, direct_normal=None,
+                outdoor_lux=(ctx.shortwave_radiation * open_meteo_src.SHORTWAVE_TO_LUX if ctx.shortwave_radiation is not None else None),
+                data_stale=False, api_issue=False, age_hours=age_hours,
+                selected_data_time=latest_ts, stale=False,
+            )
+            self._radiation_status.update({
+                "active_source": "open_meteo", "available": True,
+                "last_success": ctx.fetched_at.isoformat(), "last_error": None,
+                "latest_data_time": latest_ts.isoformat(), "data_age_hours": age_hours,
+                "sample_counts": {"estimated_par": len(ctx.estimated_par_series)},
+                "fallback": True, "estimated": True,
+                "day_source_lock": self._par_series_key,
+            })
+        else:
+            self._par_series_key = "global:par"
+            self._radiation_status["estimated"] = False
+            self._radiation_status["day_source_lock"] = self._par_series_key
+
         elevation = _sun_elevation(self.hass)
 
         if elevation is not None:
@@ -511,7 +569,7 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
             soil_temp_raw=sstore.raw_readings(sdata, f"plant:{plant_id}:soil_temp"),
             lux_raw=sstore.raw_readings(sdata, f"plant:{plant_id}:lux"),
             battery_pct=battery,
-            par_raw=sstore.raw_readings(sdata, "global:par"),
+            par_raw=sstore.raw_readings(sdata, self._par_series_key),
             indoor_light_obs=indoor_obs,
             diffuse_irradiance=macro.diffuse_irradiance,
             global_irradiance=macro.global_irradiance,
@@ -527,6 +585,13 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
             warm_run_minutes=warm_dur,
             ozone_ugm3=ozone,
             daylight_hours=_daylight_hours(self.hass),
+            et0_next_24h_mm=(
+                self._open_meteo_context.et0_next_24h_mm
+                if placement == "outdoor"
+                and self._open_meteo_context is not None
+                and now - self._open_meteo_context.fetched_at <= timedelta(hours=2)
+                else None
+            ),
         )
         result = eng.compute(inputs)
         self._update_condition_timers(plant_id, result, now)
@@ -550,7 +615,7 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
 
         moisture = validate_series(sstore.raw_readings(sdata, f"plant:{plant_id}:moisture"), MOISTURE_SPEC)
         soil_temp = validate_series(sstore.raw_readings(sdata, f"plant:{plant_id}:soil_temp"), SOIL_TEMP_SPEC)
-        par = validate_series(sstore.raw_readings(sdata, "global:par"), PAR_SPEC)
+        par = validate_series(sstore.raw_readings(sdata, self._par_series_key), PAR_SPEC)
         window_obs = self._window_samples(plant_id)
 
         day_index = len(

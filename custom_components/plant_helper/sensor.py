@@ -124,6 +124,12 @@ class PlantMoistureStateSensor(_PlantSensorBase):
             "days_since_watered": m.days_since_watered,
             "watering_urgency": m.urgency,
             "suppressed_by_rain": m.suppressed,
+            "learned_drying_rate": r.learned_drying_rate,
+            "effective_drying_rate": r.effective_drying_rate,
+            "et0_next_24h_mm": r.et0_next_24h_mm,
+            "et0_drying_modifier": r.et0_drying_modifier,
+            "forecast_precip_48h_mm": r.forecast_precip_48h_mm,
+            "forecast_precip_probability_max_48h": r.forecast_precip_probability_max_48h,
             "days_dry": round(run["dry"] / 1440.0, 2) if run.get("dry") else 0,
             "days_wet": round(run["wet"] / 1440.0, 2) if run.get("wet") else 0,
         }
@@ -150,6 +156,9 @@ class PlantLightStateSensor(_PlantSensorBase):
             "adequacy_ratio": r.light.adequacy_ratio,
             "obstruction": r.light.obstruction,
             "source": r.light.source,
+            "radiation_source": self.coordinator.radiation_status.get("active_source"),
+            "radiation_estimated": self.coordinator.radiation_status.get("estimated", False),
+            "radiation_day_source_lock": self.coordinator.radiation_status.get("day_source_lock"),
             "light_hours_today": r.light_hours_today,
             "daylight_hours": r.daylight_hours,
         }

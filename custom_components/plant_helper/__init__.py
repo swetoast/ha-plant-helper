@@ -41,7 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     plants=_coordinator_plants(storage.get_all_user_plants(),storage)
     radiation_source = _opt(CONF_RADIATION_SOURCE, DEFAULT_RADIATION_SOURCE)
     update_interval = _opt(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-    coordinator=PlantHelperCoordinator(hass, learned=learned, samples=samples, plants=plants, strang_entities=None, forecast_entity=_opt(CONF_FORECAST_ENTITY,None), ozone_entity=_opt(CONF_OZONE_ENTITY,None), api=api, radiation_source=radiation_source, update_interval_seconds=update_interval, latitude=hass.config.latitude, longitude=hass.config.longitude)
+    coordinator=PlantHelperCoordinator(hass, learned=learned, samples=samples, plants=plants, strang_entities=None, forecast_entity=_opt(CONF_FORECAST_ENTITY,None), outdoor_data_source=_opt(CONF_OUTDOOR_DATA_SOURCE, DEFAULT_OUTDOOR_DATA_SOURCE), ozone_entity=_opt(CONF_OZONE_ENTITY,None), api=api, radiation_source=radiation_source, update_interval_seconds=update_interval, latitude=hass.config.latitude, longitude=hass.config.longitude)
     await coordinator.async_config_entry_first_refresh()
     hass.data.setdefault(DOMAIN,{})[entry.entry_id]={"storage":storage,"learned":learned,"samples":samples,"api":api,"coordinator":coordinator,"plants":plants,"ozone_enabled":bool(_opt(CONF_OZONE_ENTITY,None)),"entry_id": entry.entry_id}
     await hass.config_entries.async_forward_entry_setups(entry,PLATFORMS)

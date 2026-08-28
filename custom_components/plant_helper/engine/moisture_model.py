@@ -106,9 +106,34 @@ def last_watering(events: Sequence[StepEvent]) -> StepEvent | None:
     return events[-1] if events else None
 
 
-def rain_expected(forecast_precip_mm: float | None, profile_limit_mm: float) -> bool:
-    """Whether aggregate forecast precipitation clears the suppression bar."""
-    return forecast_precip_mm is not None and forecast_precip_mm >= profile_limit_mm
+RAIN_PROBABILITY_MIN = 60.0
+
+
+def rain_expected(
+    forecast_precip_mm: float | None,
+    profile_limit_mm: float,
+    forecast_precip_probability: float | None = None,
+    probability_min: float = RAIN_PROBABILITY_MIN,
+) -> bool:
+    """Whether rain is both sufficient and, when known, sufficiently likely.
+
+    Forecast providers that do not expose probability retain the established
+    amount-only behavior. When probability is available, low-confidence rain
+    cannot suppress a watering alert.
+    """
+    enough_rain = (
+        forecast_precip_mm is not None
+        and forecast_precip_mm >= profile_limit_mm
+    )
+    if not enough_rain:
+        return False
+    if forecast_precip_probability is None:
+        return True
+    try:
+        probability = float(forecast_precip_probability)
+    except (TypeError, ValueError):
+        return False
+    return 0.0 <= probability <= 100.0 and probability >= probability_min
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +161,7 @@ def evaluate_moisture(
     placement: str,
     forecast_precip_mm: float | None,
     profile_rain_limit_mm: float,
+    forecast_precip_probability: float | None = None,
     dormant: bool = False,
     dry_too_long_after: timedelta = DRY_TOO_LONG_AFTER,
     wet_too_long_after: timedelta = WET_TOO_LONG_AFTER,
@@ -226,7 +252,11 @@ def evaluate_moisture(
     if (
         placement == "outdoor"
         and base_state in (GETTING_DRY, DRY_TOO_LONG)
-        and rain_expected(forecast_precip_mm, profile_rain_limit_mm)
+        and rain_expected(
+            forecast_precip_mm,
+            profile_rain_limit_mm,
+            forecast_precip_probability,
+        )
     ):
         # Downgrade, don't mute: keep the underlying state visible and cut
         # urgency. Recomputed every cycle, so it revokes if the forecast changes.

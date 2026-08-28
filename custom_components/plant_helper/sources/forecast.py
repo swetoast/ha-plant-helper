@@ -22,6 +22,7 @@ from ..engine.util import to_float, parse_iso
 _CONDITION_KEYS = ("condition", "weather", "state")
 _GUST_KEYS = ("wind_gust_speed", "wind_gust", "gust_speed", "wind_gust_kmh")
 _PRECIP_KEYS = ("precipitation", "precip", "rain")
+_PRECIP_PROBABILITY_KEYS = ("precipitation_probability", "precipitation_probability_percent", "rain_probability")
 _TIME_KEYS = ("datetime", "time", "timestamp")
 
 
@@ -54,12 +55,14 @@ def _parse_entries(entries: Any, now: datetime) -> list[ForecastHour]:
         condition = _first(entry, _CONDITION_KEYS)
         gust = _first(entry, _GUST_KEYS)
         precip = _first(entry, _PRECIP_KEYS)
+        precip_probability = _first(entry, _PRECIP_PROBABILITY_KEYS)
         out.append(
             ForecastHour(
                 hours_ahead=round(hours_ahead, 3),
                 condition=str(condition).lower() if condition is not None else "",
                 wind_gust_kmh=to_float(gust),
                 precipitation_mm=to_float(precip),
+                precipitation_probability=to_float(precip_probability),
             )
         )
     out.sort(key=lambda f: f.hours_ahead)
