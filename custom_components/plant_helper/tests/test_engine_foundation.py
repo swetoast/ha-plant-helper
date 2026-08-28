@@ -211,3 +211,20 @@ res3 = cal.synthesize_calibration(outdoor, cal.PROFILE_DRY_TOLERANT, placement="
 check("outdoor complete uses DLI gate", res3.status == "complete")
 
 print("\nALL FOUNDATION TESTS PASSED")
+
+
+print("== accumulator: strict complete-day selection ==")
+from plant_helper.engine.accumulator import complete_day_dli, complete_day_light_hours  # noqa: E402
+_partial_day = [Sample(T0 + timedelta(hours=h), 300.0) for h in range(19)]
+check("19-sample day is not treated as complete DLI", complete_day_dli(_partial_day, timedelta(minutes=90)) is None)
+check("19-sample day is not treated as complete light hours", complete_day_light_hours(_partial_day, 10.0, timedelta(minutes=90)) is None)
+_two_hour_day = [Sample(T0 + timedelta(hours=h), 300.0) for h in range(2)]
+check("two-hour day is never returned as complete", complete_day_dli(_two_hour_day, timedelta(minutes=90)) is None)
+_complete_day_start = T0.replace(hour=0)
+_complete_previous = [Sample(_complete_day_start + timedelta(hours=h), 300.0) for h in range(24)]
+_partial_next = [Sample(_complete_day_start + timedelta(days=1, hours=h), 900.0) for h in range(3)]
+_expected_previous = daily_dli(_complete_previous, timedelta(minutes=90))
+check(
+    "complete previous day wins over partial current day",
+    abs(complete_day_dli(_complete_previous + _partial_next, timedelta(minutes=90)) - _expected_previous) < 1e-9,
+)

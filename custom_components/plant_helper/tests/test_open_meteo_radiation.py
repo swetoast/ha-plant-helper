@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from plant_helper.engine.accumulator import Sample, complete_day_dli
+from plant_helper import sample_store as sample_store
 from plant_helper.sources import open_meteo as om
 NOW=datetime(2026,8,28,12,tzinfo=timezone.utc)
 def payload():
@@ -18,10 +19,26 @@ def test_bad_radiation_values_are_not_in_series():
 def test_estimated_series_produces_complete_day_dli():
     ctx=om.parse_response(payload(),NOW)
     assert complete_day_dli([Sample(ts,v) for ts,v in ctx.estimated_par_series],timedelta(minutes=90)) is not None
-def test_coordinator_uses_dedicated_source_key_and_coverage_gate():
-    source=(Path(__file__).resolve().parents[1]/'coordinator.py').read_text()
-    for token in ('not self._in_strang_coverage','global:par:open_meteo','self._par_series_key','day_source_lock','estimated'):
-        assert token in source
+def test_radiation_histories_cannot_complete_each_other():
+    data = sample_store.empty_data()
+    day = datetime(2026, 8, 27, tzinfo=timezone.utc)
+    for hour in range(12):
+        ts = day + timedelta(hours=hour)
+        sample_store.append_reading(data, "global:par", ts, 400.0, ts)
+    for hour in range(12, 24):
+        ts = day + timedelta(hours=hour)
+        sample_store.append_reading(data, "global:par:open_meteo", ts, 400.0, ts)
+
+    strang = sample_store.raw_readings(data, "global:par")
+    estimated = sample_store.raw_readings(data, "global:par:open_meteo")
+    strang_samples = [Sample(r.ts, r.value) for r in strang]
+    estimated_samples = [Sample(r.ts, r.value) for r in estimated]
+    assert complete_day_dli(strang_samples, timedelta(minutes=90)) is None
+    assert complete_day_dli(estimated_samples, timedelta(minutes=90)) is None
+
+    source=(Path(__file__).resolve().parents[1]/"coordinator.py").read_text()
+    assert 'self._par_series_key = "global:par:open_meteo"' in source
+    assert 'self._par_series_key = "global:par"' in source
 def test_explicit_modes_cannot_silently_select_open_meteo():
     source=(Path(__file__).resolve().parents[1]/'coordinator.py').read_text()
     assert 'self._radiation_source == "auto"' in source

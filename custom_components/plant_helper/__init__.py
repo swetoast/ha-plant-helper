@@ -4,12 +4,13 @@ import logging
 from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import *
 from .coordinator import PlantHelperCoordinator
 from .enrichment import summarize_enrichment
 from .learned_store import LearnedStore
-from .learned_store import remove_plant as learned_remove_plant
+from .learned_store import reset_placement as learned_reset_placement
 from .plant_data_api import PlantDataAPI
 from .sample_store import SampleStore, clear_key_prefix
 from .storage import PlantStorage
@@ -67,19 +68,40 @@ async def async_unload_entry(hass,entry):
 def _register_services(hass,entry):
     async def handle_recalibrate(call: ServiceCall):
         plant_id=call.data.get("plant_id"); data=_runtime(hass)
-        if not plant_id or not data: return
-        learned_remove_plant(data["learned"].data,plant_id); clear_key_prefix(data["samples"].data,f"plant:{plant_id}:")
+        if not data:
+            raise ServiceValidationError("Plant Helper is not loaded")
+        if not plant_id:
+            raise ServiceValidationError("plant_id is required")
+        plant = data["plants"].get(plant_id)
+        if not plant:
+            raise ServiceValidationError(f"Unknown Plant Helper plant_id: {plant_id}")
+        placement = plant.get("placement", DEFAULT_PLACEMENT)
+        learned_reset_placement(data["learned"].data, plant_id, placement)
+        clear_key_prefix(data["samples"].data, f"plant:{plant_id}:")
         data["learned"].schedule_save(); data["samples"].schedule_save(); await data["coordinator"].async_request_refresh()
     if not hass.services.has_service(DOMAIN, "recalibrate"): hass.services.async_register(DOMAIN, "recalibrate", handle_recalibrate)
     async def handle_refresh_species(call: ServiceCall):
         data=_runtime(hass)
-        if not data: return
-        targets=[call.data.get("plant_id")] if call.data.get("plant_id") else list(data["plants"])
+        if not data:
+            raise ServiceValidationError("Plant Helper is not loaded")
+        requested = call.data.get("plant_id")
+        if requested and requested not in data["plants"]:
+            raise ServiceValidationError(f"Unknown Plant Helper plant_id: {requested}")
+        targets=[requested] if requested else list(data["plants"])
+        refreshed = 0
         for pid in targets:
             species=data["plants"].get(pid,{}).get("species")
-            if species:
-                try: await data["api"].fetch_plant(species,force_fetch=True)
-                except Exception: _LOGGER.debug("Species refresh failed",exc_info=True)
+            if not species:
+                if requested:
+                    raise ServiceValidationError(f"Plant has no species configured: {pid}")
+                continue
+            try:
+                await data["api"].fetch_plant(species,force_fetch=True)
+                refreshed += 1
+            except Exception as err:
+                _LOGGER.warning("Species refresh failed for %s: %s", pid, type(err).__name__)
+        if requested and refreshed == 0:
+            raise ServiceValidationError(f"Species refresh failed for plant_id: {requested}")
         entry_id = data.get("entry_id")
         if entry_id: await hass.config_entries.async_reload(entry_id)
     if not hass.services.has_service(DOMAIN, "refresh_species"): hass.services.async_register(DOMAIN, "refresh_species", handle_refresh_species)

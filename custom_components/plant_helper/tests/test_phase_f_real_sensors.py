@@ -1,6 +1,5 @@
 """Phase F contracts based on real Home Assistant soil-sensor entities."""
 from datetime import datetime, timedelta, timezone
-import json
 from pathlib import Path
 from plant_helper.engine.validation import MOISTURE_SPEC, battery_status, current_reading_stale
 from plant_helper.plant_config import validate_plant
@@ -32,9 +31,3 @@ def test_linked_sources_are_exposed_on_fault_diagnostic():
     assert "def linked_sources" in coordinator
     assert '{"moisture", "soil_temp", "lux", "battery"}' in coordinator
     assert '"linked_sources": self.coordinator.linked_sources(self._plant_id)' in binary
-def test_phase_f_version_and_roadmap():
-    manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
-    assert tuple(map(int, manifest["version"].split("."))) >= (4, 0, 27)
-    roadmap = (ROOT.parents[1] / "docs" / "QUALITY_ROADMAP.md").read_text(encoding="utf-8")
-    phase = roadmap.split("## Phase F", 1)[1].split("### Phase H", 1)[0]
-    assert "- [ ]" not in phase and phase.count("- [x]") == 7

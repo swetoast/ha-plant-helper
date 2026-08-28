@@ -87,7 +87,7 @@ class TrefleProvider:
         except Exception as err:
             _LOGGER.exception("Trefle lookup failed for %s", search_name)
             self.last_error = str(err)
-            return ProviderResult(False, "trefle", api_checked=True, api_called=True, message=f"Trefle error: {err}")
+            return ProviderResult(False, "trefle", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message="Trefle request failed")
 
     async def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """GET JSON from Trefle."""
@@ -101,8 +101,7 @@ class TrefleProvider:
                 self.last_error = "Trefle invalid token"
                 return None
             if response.status != 200:
-                text = await response.text()
-                self.last_error = f"Trefle HTTP {response.status}: {text[:200]}"
+                self.last_error = f"Trefle HTTP {response.status}"
                 return None
             return await response.json(content_type=None)
 

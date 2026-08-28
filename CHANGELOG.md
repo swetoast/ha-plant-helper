@@ -9,164 +9,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added a persistent per-placement learning system with independent indoor and outdoor baselines.
-- Added a 14-day initial calibration lifecycle that automatically extends when the available observations are insufficient to create a reliable baseline.
-- Added learned plant constants for:
-  - saturated soil-moisture peak
-  - dry threshold
-  - drying rate
-  - outdoor daily light integral target
-  - indoor window-transmission factors
-  - normal soil-temperature mean
-  - normal daily soil-temperature swing
+- Added persistent per-placement learning with independent indoor and outdoor baselines.
+- Added a 14-day calibration lifecycle that extends automatically when observations are insufficient to establish a reliable baseline.
+- Added learned constants for saturated soil-moisture peak, dry threshold, drying rate, outdoor daily light integral, indoor window transmission, normal soil temperature, and normal daily soil-temperature swing.
 - Added conservative post-calibration adaptation of the learned saturated-moisture peak.
-  - Adaptation only occurs from a well-covered day.
-  - The candidate must be a genuine new moisture peak.
-  - The learned maximum can only move upward.
-  - Changes are bounded by an exponentially weighted moving average.
   - Adaptation runs once at the local-day boundary and never during calibration.
-- Added profile-aware dry-threshold regeneration after moisture-peak adaptation.
-  - Standard profiles use their stored profile multiplier.
-  - Custom profiles use their persisted custom multiplier.
-  - Legacy baselines without policy metadata use a ratio-preserving migration fallback.
+  - Only well-covered days with a genuine new peak are eligible.
+  - The learned maximum can move only upward and remains bounded by an exponentially weighted moving average.
+  - The dry threshold is regenerated from the stored standard or custom profile policy.
 - Added complete placement-transition handling.
-  - Placement changes now persist correctly.
   - Indoor and outdoor baselines are preserved separately.
   - Returning to a calibrated placement immediately reuses its complete baseline.
-  - Changing to an uncalibrated placement starts or resumes placement-specific calibration.
+  - Moving to an uncalibrated placement starts or resumes placement-specific calibration.
   - Local sample continuity and condition timers are cleared when placement changes.
 - Added persistent condition timers for prolonged dry, wet, cold, and warm states.
 - Added restart-safe storage for calibration progress, learned baselines, daily history, local samples, dormancy state, and condition timers.
-- Added a twelve-stage learning lifecycle map documenting state ownership, behavioral coverage, structural contracts, and remaining live Home Assistant verification.
-- Added HACS custom-repository metadata and repository documentation.
-- Added a quality roadmap that tracks completed functionality and remaining verification work.
-- Added an Open-Meteo global outdoor-context provider with no API key required for supported non-commercial use.
-- Added selectable outdoor weather sources:
-  - automatic
-  - configured Home Assistant forecast
-  - Open-Meteo
-  - disabled
-- Added Open-Meteo context for:
-  - air temperature
-  - relative humidity
-  - precipitation
-  - precipitation probability
-  - weather conditions
-  - wind gusts
-  - cloud cover
-  - reference evapotranspiration
-  - vapour pressure deficit
-  - shortwave radiation
-  - diffuse radiation
-  - modelled soil temperature
-  - regional modelled soil moisture
-- Added a bounded outdoor reference-evapotranspiration drying modifier.
+- Added Open-Meteo as a keyless global outdoor-context provider for supported non-commercial use.
+- Added selectable outdoor weather sources: automatic, configured Home Assistant forecast, Open-Meteo, and disabled.
+- Added Open-Meteo context for air temperature, relative humidity, precipitation, precipitation probability, weather conditions, wind gusts, cloud cover, reference evapotranspiration, vapour-pressure deficit, shortwave radiation, diffuse radiation, modelled soil temperature, and regional modelled soil moisture.
+- Added a bounded outdoor ET0 drying modifier.
   - A 24-hour ET0 value around 3 mm is neutral.
   - ET0 influence is bounded between 0.85 and 1.15.
   - The final combined environmental drying modifier is bounded between 0.60 and 1.15.
   - Indoor plants, stale context, missing values, and invalid values remain neutral.
   - The calibrated local drying rate remains authoritative and is never overwritten by forecast data.
 - Added precipitation-probability-aware rain suppression.
-  - When probability is available, forecast rain must meet both the configured amount threshold and a minimum probability of 60%.
-  - Low-confidence rain no longer suppresses watering guidance.
-  - Forecast providers without probability retain the established amount-only behavior.
-  - Invalid precipitation probabilities cannot suppress watering guidance.
-- Added an estimated Open-Meteo radiation fallback for locations outside Nordic STRANG coverage.
-  - The fallback is used only when the radiation source is set to automatic.
-  - Explicit STRANG API and Home Assistant sensor modes remain authoritative.
-  - Open-Meteo shortwave radiation is converted into clearly identified estimated PAR and outdoor illuminance histories.
-  - Open-Meteo and STRANG radiation samples use separate storage keys.
-  - Complete daily light calculations cannot mix radiation providers within one calendar day.
-- Added diagnostic attributes for:
-  - learned drying rate
-  - effective drying rate
-  - ET0 for the next 24 hours
-  - ET0 drying modifier
-  - forecast precipitation for the next 48 hours
-  - maximum precipitation probability for the next 48 hours
-  - active radiation source
-  - whether radiation is estimated
-  - active radiation source-lock key
-- Added behavioral tests for calibration, incomplete-calibration extension, baseline locking, post-lock adaptation, placement transitions, threshold regeneration, ET0 behavior, precipitation probability, Open-Meteo parsing, radiation conversion, and source isolation.
+  - When probability is available, forecast rain must meet both the configured amount threshold and a minimum probability of 60 percent.
+  - Providers without probability retain amount-only behavior.
+  - Invalid probability values cannot suppress watering guidance.
+- Added estimated Open-Meteo radiation fallback outside Nordic STRÅNG coverage when automatic radiation selection is enabled.
+- Added separate STRÅNG and Open-Meteo radiation histories so one provider cannot complete another provider's calendar day.
+- Added diagnostics for learned and effective drying rate, ET0, precipitation forecast and probability, active radiation source, estimated status, fallback state, data age, and source-lock key.
+- Added executable Home Assistant boundary tests using lightweight lifecycle fakes without adding a new test dependency.
 
 ### Changed
 
-- Replaced the previous loosely connected calculation paths with a provider-neutral v4 decision engine.
-- Changed moisture guidance to use validated, timestamped, gap-aware sample series.
-- Changed daily learning to reduce raw samples into compact daily records rather than retaining unbounded raw history.
-- Changed calibration status to remain incomplete when required evidence is missing instead of creating a partially valid baseline.
-- Changed outdoor moisture projections to use the learned local drying rate combined with strictly bounded environmental pressure.
-- Changed rain suppression to remain revocable on every coordinator update.
-- Changed radiation-source selection so automatic mode prefers STRANG inside Nordic coverage and uses estimated Open-Meteo radiation elsewhere.
+- Replaced the previous calculation paths with a provider-neutral v4 decision engine based on validated, timestamped, gap-aware samples.
+- Changed daily learning to reduce raw samples into compact daily records rather than retaining unbounded history.
+- Changed calibration to remain incomplete when required evidence is missing rather than creating a partially valid baseline.
+- Changed outdoor moisture projections to combine the learned local drying rate with strictly bounded environmental pressure.
+- Changed rain suppression to be recalculated and revocable on every coordinator update.
+- Changed automatic radiation selection to use STRÅNG inside Nordic coverage and estimated Open-Meteo radiation elsewhere.
 - Changed light calculations to use complete calendar days and source-isolated radiation histories.
-- Changed provider data to remain advisory or environmental context unless a specific, bounded policy explicitly connects it to the decision engine.
-- Changed modelled Open-Meteo soil values to diagnostic regional context only.
-  - They never replace a physical plant sensor.
-  - They are never used to calibrate a plant's local moisture baseline.
+- Changed Open-Meteo requests to use UTC and normalized returned timestamps to timezone-aware UTC before storage or calculation.
+- Changed modelled Open-Meteo soil values to diagnostic regional context only. They never replace a physical plant sensor or calibrate a plant's local moisture baseline.
 - Changed the Species entity to remain read-only context that cannot override learned plant-care decisions.
-- Changed service behavior so recalibration clears the selected plant's learned model and samples while preserving unrelated species context.
-- Changed repository documentation to clearly separate automated behavioral tests, repository-level Home Assistant contracts, and pending live verification.
-- Changed repository packaging to support installation as a HACS custom repository.
-- Changed the public project language to describe tested capabilities and verification status without claiming an externally awarded quality designation.
+- Changed recalibration to clear only the active placement's learned baseline and local sample history while preserving the other placement's baseline and species context.
+- Changed service calls to return actionable validation errors for missing or unknown plant IDs, an unloaded integration, missing species configuration, or a failed targeted refresh.
+- Changed provider request accounting to report actual HTTP calls on successful, partial, and failed workflows.
+- Changed provider diagnostics to expose sanitized failure summaries without remote response bodies.
+- Changed public documentation to focus on installation, configuration, behavior, services, support, attribution, and release history.
 
 ### Fixed
 
-- Fixed placement changes being silently discarded instead of being persisted.
-- Fixed placement-transition code being called without its result affecting runtime behavior.
+- Fixed the manifest version not matching the advertised 4.2.0 release.
+- Fixed placement changes being discarded instead of persisted.
+- Fixed placement-transition decisions not affecting runtime behavior.
 - Fixed target-placement calibration not being explicitly initialized or resumed.
-- Fixed returning to a previously calibrated placement not having an authoritative reuse decision.
+- Fixed returning to a calibrated placement not having an authoritative reuse decision.
 - Fixed cross-placement sample continuity and condition timers surviving placement changes.
-- Fixed post-lock adaptation being implemented as an unused primitive rather than an active daily lifecycle operation.
-- Fixed adapted dry thresholds being rescaled by the previous ratio for all plants.
-  - Standard and custom profiles now regenerate the threshold from their persisted policy.
-- Fixed custom-profile dry thresholds being able to drift away from their configured custom multiplier.
-- Fixed incomplete calibration being able to appear complete without all required evidence.
-- Fixed invalid or missing telemetry being able to contribute across gaps.
+- Fixed recalibration deleting both placement baselines.
+- Fixed post-lock adaptation existing as an unused primitive rather than an active daily lifecycle operation.
+- Fixed standard and custom dry thresholds drifting away from their persisted profile policy after peak adaptation.
+- Fixed incomplete calibration appearing complete without all required evidence.
+- Fixed invalid or missing telemetry contributing across gaps.
+- Fixed partial days being returned by complete-day DLI and light-hour helpers.
+- Fixed partial STRÅNG and Open-Meteo histories being eligible to form a false complete radiation day.
+- Fixed naive and offset Open-Meteo timestamps being mixed with timezone-aware Home Assistant timestamps.
 - Fixed rain suppression trusting low-confidence precipitation forecasts when probability data is available.
-- Fixed invalid precipitation-probability values being eligible to affect watering suppression.
-- Fixed radiation fallback being limited to Nordic STRANG coverage.
-- Fixed the possibility of mixing STRANG and estimated Open-Meteo radiation samples in one daily light calculation.
-- Fixed Open-Meteo context being requested separately for individual plants.
-  - One cached location-level request is now shared by all plants.
+- Fixed invalid precipitation probabilities affecting watering suppression.
+- Fixed radiation fallback being unavailable outside Nordic STRÅNG coverage.
+- Fixed Open-Meteo context being requested separately for individual plants. One cached location-level request is now shared by all plants.
 - Fixed stale Open-Meteo ET0 context being eligible to affect drying projections.
-- Fixed unclear radiation diagnostics by identifying the active provider, estimated status, fallback status, data age, and source-lock key.
-- Fixed repository documentation and release metadata being incomplete for HACS custom-repository use.
+- Fixed unclear radiation diagnostics by identifying the active provider, estimated status, fallback state, data age, and source-lock key.
+- Fixed the iNaturalist observation-photo fallback regressing to the overly restrictive `quality_grade=research` filter.
+- Fixed provider error paths reporting optimistic or missing request counts.
+- Fixed provider diagnostics exposing excerpts from remote response bodies.
+- Fixed invalid service plant IDs being silently ignored.
+- Fixed malformed or unreadable main plant storage preventing startup. Plant Helper now recovers with an empty in-memory store without immediately overwriting the unreadable payload.
 
 ### Security
 
-- Kept all optional provider credentials within the Home Assistant configuration flow and storage paths.
+- Kept optional provider credentials within Home Assistant configuration and storage paths.
 - Added no hardcoded API keys, access tokens, plant identifiers, or private user information.
+- Sanitized provider diagnostics so response bodies and credentials are not exposed in entity attributes or service results.
 - Open-Meteo requires no API key for the supported non-commercial configuration.
-- Provider failures are handled without exposing response bodies or credentials in normal diagnostic output.
 
 ### Documentation
 
 - Rebuilt the README as the primary GitHub and HACS landing page.
-- Added HACS custom-repository installation instructions.
-- Added manual installation and removal instructions.
-- Documented global settings, per-plant settings, entities, services, calibration, adaptation, persistence, and weather-source behavior.
-- Added `docs/QUALITY_ROADMAP.md`.
-- Added `docs/LEARNING_LIFECYCLE.md`.
-- Added `docs/HACS.md`.
-- Added Open-Meteo attribution and clarified that modelled soil values are regional context only.
-- Documented the six live Home Assistant lifecycle checks required before the release is described as field-verified.
+- Added HACS custom-repository and manual installation instructions.
+- Documented global settings, per-plant settings, entities, services, calibration, adaptation, persistence, removal, weather-source behavior, and Open-Meteo attribution.
+- Removed internal roadmap, build-history, lifecycle-map, and repository-note links from the end-user README.
+- Updated recalibration documentation to explain active-placement reset behavior.
+- Updated automatic radiation-source wording to match the implemented STRÅNG and Open-Meteo policy.
 
 ### Testing
 
-- Expanded the automated suite to 61 passing tests.
-- Added complete Python syntax validation.
-- Added relative-import and symbol validation.
-- Added ZIP integrity verification for release packages.
-- Added regression coverage for the existing provider, storage, entity, lifecycle, timer, calibration, and STRANG behavior.
-- Added focused Open-Meteo tests for parsing, units, weather-code normalization, ET0, precipitation probability, shortwave-to-PAR conversion, complete-day DLI, coverage selection, explicit source modes, and source isolation.
+- Expanded the automated suite to 75 passing tests.
+- Added exact version consistency checks across `manifest.json`, `CHANGELOG.md`, and the README release badge.
+- Added Python syntax and import validation.
+- Added ZIP integrity and release-package content verification.
+- Added UTC timestamp and offset-conversion tests for Open-Meteo.
+- Added strict complete-day DLI and light-hour regression tests.
+- Added placement-specific recalibration and cross-provider radiation-isolation tests.
+- Added provider photo-filter, call-count, sanitized-error, service-validation, and storage-recovery tests.
+- Added executable lifecycle boundary tests for setup, store loading, initial refresh, platform forwarding, options reload, unload failure, successful shutdown, persistence saves, service execution, service cleanup, and invalid plant IDs.
 
 ### Known limitations
 
-- Final verification in a running Home Assistant instance is still required for setup, options changes, entity behavior, service behavior, placement transitions, restart recovery, unload, and reload.
+- Final verification in a running Home Assistant installation is still recommended for installation-specific entity behavior, recorder interaction, restart recovery, and external provider behavior. The automated suite exercises the integration lifecycle boundary with lightweight Home Assistant fakes but is not a substitute for a complete live installation test.
 - Open-Meteo radiation is estimated from modelled shortwave radiation and must not be treated as measured PAR.
 - Open-Meteo modelled soil moisture describes regional grid-cell conditions and does not represent moisture in an individual pot or planter.
 - ET0 affects only the current outdoor drying projection and is not learned into the plant baseline.
-- Vapour pressure deficit remains diagnostic context to avoid double-counting environmental drying pressure.
+- Vapour-pressure deficit remains diagnostic context to avoid double-counting environmental drying pressure.
 - Post-lock adaptation currently applies only to the learned saturated-moisture peak and its derived dry threshold.
 - Drying rate, daily light target, window transmission, thermal mean, and thermal swing remain locked after calibration until dedicated bounded adaptation policies are implemented.
 - Open-Meteo use remains subject to its service terms, usage limits, and attribution requirements.

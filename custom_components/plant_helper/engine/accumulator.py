@@ -305,8 +305,9 @@ def _complete_day_samples(
     if not by_date:
         return None
     complete = [d for d, ss in by_date.items() if len(ss) >= min_hours]
-    chosen = max(complete) if complete else max(by_date)
-    return by_date[chosen]
+    if not complete:
+        return None
+    return by_date[max(complete)]
 
 
 def complete_day_dli(

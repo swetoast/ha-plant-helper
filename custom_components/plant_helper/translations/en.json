@@ -12,7 +12,7 @@
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
           "update_interval": "Update interval",
-          "radiation_source": "Radiation source (auto = SMHI STRÅNG API in Nordic coverage, else your sensors)",
+          "radiation_source": "Radiation source (automatic = STRÅNG in Nordic coverage, estimated Open-Meteo radiation elsewhere)",
           "outdoor_data_source": "Outdoor weather source"
         }
       }
@@ -92,7 +92,7 @@
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
           "update_interval": "Update interval",
-          "radiation_source": "Radiation source (auto = SMHI STRÅNG API in Nordic coverage, else your sensors)",
+          "radiation_source": "Radiation source (automatic = STRÅNG in Nordic coverage, estimated Open-Meteo radiation elsewhere)",
           "outdoor_data_source": "Outdoor weather source"
         }
       }
@@ -112,7 +112,7 @@
   "services": {
     "recalibrate": {
       "name": "Recalibrate plant",
-      "description": "Wipe a plant's learned baseline and sample history to restart the 14-day calibration.",
+      "description": "Clear the active-placement baseline and local sample history to restart the 14-day calibration while preserving the other placement's baseline.",
       "fields": {
         "plant_id": {
           "name": "Plant ID",

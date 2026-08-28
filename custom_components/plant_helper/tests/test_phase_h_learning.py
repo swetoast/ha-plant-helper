@@ -82,3 +82,41 @@ def test_options_flow_consumes_placement_transition_decision():
     assert "needs_calibration = learned_swap_placement(" in source
     assert "if needs_calibration:" in source
     assert "reused its complete baseline" in source
+
+
+def test_recalibration_resets_only_active_placement_learning():
+    data = ls.empty_data()
+    ls.set_config(data, "p", {"placement": "outdoor"})
+    ls.set_baseline(data, "p", "indoor", {"m_max": 80.0}, status="complete")
+    ls.set_baseline(data, "p", "outdoor", {"m_max": 90.0}, status="complete")
+    ls.set_calibration(data, "p", "indoor", {"status": "complete", "day_records": [{"day": 1}]})
+    ls.set_calibration(data, "p", "outdoor", {"status": "complete", "day_records": [{"day": 2}]})
+    ls.append_daily(data, "p", {"date": "2026-08-27", "daily_dli": 12.0})
+    ls.set_last_reduced(data, "p", "2026-08-27")
+    ls.set_timer(data, "p", "dry", NOW)
+
+    assert ls.reset_placement(data, "p", "outdoor") is True
+    assert ls.active_baseline(data, "p", "outdoor") is None
+    assert ls.get_calibration(data, "p", "outdoor") == {
+        "status": "calibrating",
+        "day_records": [],
+    }
+    assert ls.active_baseline(data, "p", "indoor")["m_max"] == 80.0
+    assert ls.get_calibration(data, "p", "indoor")["day_records"] == [{"day": 1}]
+    assert ls.get_daily(data, "p") == []
+    assert ls.get_last_reduced(data, "p") is None
+    assert ls.get_timer(data, "p", "dry") is None
+
+
+def test_recalibration_unknown_plant_is_a_noop():
+    data = ls.empty_data()
+    assert ls.reset_placement(data, "missing", "indoor") is False
+    assert data == ls.empty_data()
+
+
+def test_service_uses_active_placement_reset_not_full_plant_delete():
+    source = (Path(__file__).resolve().parents[1] / "__init__.py").read_text()
+    handler = source[source.index("async def handle_recalibrate"):source.index("if not hass.services.has_service(DOMAIN, \"recalibrate\")")]
+    assert "learned_reset_placement" in handler
+    assert 'plant.get("placement", DEFAULT_PLACEMENT)' in handler
+    assert "learned_remove_plant" not in handler

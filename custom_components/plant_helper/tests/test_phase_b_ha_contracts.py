@@ -117,3 +117,7 @@ def test_manifest_and_translation_contract() -> None:
     assert manifest["integration_type"] == "hub"
     assert manifest["iot_class"] == "cloud_polling"
     assert strings == translation
+    radiation_label = strings["config"]["step"]["user"]["data"]["radiation_source"]
+    assert "STRÅNG in Nordic coverage" in radiation_label
+    assert "Open-Meteo radiation elsewhere" in radiation_label
+    assert "else your sensors" not in radiation_label

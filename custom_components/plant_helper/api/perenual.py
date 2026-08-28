@@ -103,7 +103,7 @@ class PerenualProvider:
         except Exception as err:
             _LOGGER.exception("Perenual lookup failed for %s", search_name)
             self.last_error = str(err)
-            return ProviderResult(False, "perenual", api_checked=True, api_called=True, message=f"Perenual error: {err}")
+            return ProviderResult(False, "perenual", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message="Perenual request failed")
 
     async def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """GET JSON and track limits."""
@@ -119,8 +119,7 @@ class PerenualProvider:
                 self.last_error = "Perenual rate limit reached"
                 return None
             if response.status != 200:
-                text = await response.text()
-                self.last_error = f"Perenual HTTP {response.status}: {text[:200]}"
+                self.last_error = f"Perenual HTTP {response.status}"
                 return None
             return await response.json(content_type=None)
 

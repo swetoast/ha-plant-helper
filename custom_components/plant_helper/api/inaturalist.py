@@ -112,7 +112,7 @@ class INaturalistProvider:
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("iNaturalist taxa resolve failed for %s", query)
             self.last_error = str(err)
-            return ProviderResult(False, "inaturalist", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message=f"iNaturalist error: {err}")
+            return ProviderResult(False, "inaturalist", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message="iNaturalist request failed")
 
     async def _observation_photo(self, taxon_id: Any) -> str | None:
         """Best-voted observation photo for a taxon (fallback when the taxon has
@@ -123,7 +123,6 @@ class INaturalistProvider:
                 "photos": "true",
                 "per_page": 1,
                 "order_by": "votes",
-                "quality_grade": "research",
             }
             payload = await self._get_json(f"{self.base_url}/observations", params)
             if not payload:
@@ -154,6 +153,10 @@ class INaturalistProvider:
         
         # Clean the query: remove (group), cultivar names, etc.
         query = self._clean_query(raw_query)
+        start_calls = self.limiter.calls_today
+
+        def _calls() -> int:
+            return self.limiter.calls_today - start_calls
 
         try:
             params: dict[str, Any] = {
@@ -170,18 +173,18 @@ class INaturalistProvider:
 
             payload = await self._get_json(f"{self.base_url}/observations", params)
             if payload is None:
-                return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, calls_made=1, message=self.last_error or "iNaturalist request failed")
+                return ProviderResult(False, "inaturalist", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message=self.last_error or "iNaturalist request failed")
 
             results = payload.get("results") or []
             enrichment = self._normalize(payload, query)
             self.last_error = None
             self.last_success = datetime.now().isoformat()
-            return ProviderResult(bool(results), "inaturalist", data=enrichment, api_checked=True, api_called=True, calls_made=1, message=f"iNaturalist returned {len(results)} observations")
+            return ProviderResult(bool(results), "inaturalist", data=enrichment, api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message=f"iNaturalist returned {len(results)} observations")
 
         except Exception as err:
             _LOGGER.exception("iNaturalist enrichment failed for %s", query)
             self.last_error = str(err)
-            return ProviderResult(False, "inaturalist", api_checked=True, api_called=True, message=f"iNaturalist error: {err}")
+            return ProviderResult(False, "inaturalist", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message="iNaturalist request failed")
 
     async def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """GET JSON from iNaturalist."""
@@ -192,8 +195,7 @@ class INaturalistProvider:
         timeout = aiohttp.ClientTimeout(total=10)
         async with self.session.get(url, params=params, timeout=timeout) as response:
             if response.status != 200:
-                text = await response.text()
-                self.last_error = f"iNaturalist HTTP {response.status}: {text[:200]}"
+                self.last_error = f"iNaturalist HTTP {response.status}"
                 return None
             return await response.json(content_type=None)
 

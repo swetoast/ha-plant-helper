@@ -1,9 +1,10 @@
 recalibrate:
   name: Recalibrate plant
   description: >-
-    Wipe a plant's learned baseline and sample history to restart the 14-day
-    calibration. Use after repotting, changing soil, or moving the plant to a
-    new location (or between indoor and outdoor).
+    Clear the plant's active-placement baseline and local sample history to
+    restart its 14-day calibration. The other placement's learned baseline is
+    preserved. Use after repotting, changing soil, or substantially changing
+    conditions within the current placement.
   fields:
     plant_id:
       name: Plant ID

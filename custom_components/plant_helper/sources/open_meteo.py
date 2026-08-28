@@ -6,7 +6,7 @@ regional diagnostics and never replace a plant's local sensors.
 """
 from __future__ import annotations
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Mapping
 from ..engine.thermal_model import ForecastHour
 from ..engine.util import parse_iso, to_float
@@ -48,6 +48,21 @@ class OutdoorContext:
     outdoor_lux_series: list[tuple[datetime, float]]
 
 
+def _parse_utc(value: Any) -> datetime | None:
+    """Parse a provider timestamp and normalize it to aware UTC.
+
+    Open-Meteo is requested with ``timezone=UTC``. Its timestamps may still be
+    serialized without an explicit offset, so naive values are treated as UTC.
+    Offset-aware values are converted to UTC before entering the sample store.
+    """
+    parsed = parse_iso(value)
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _series(hourly: Mapping[str, Any], key: str) -> list[Any]:
     value = hourly.get(key)
     return value if isinstance(value, list) else []
@@ -85,7 +100,7 @@ def radiation_series(hourly: Mapping[str, Any]) -> tuple[
     par: list[tuple[datetime, float]] = []
     lux: list[tuple[datetime, float]] = []
     for index, raw_ts in enumerate(times):
-        ts = parse_iso(raw_ts)
+        ts = _parse_utc(raw_ts)
         value = _at(shortwave, index)
         if ts is None or value is None or value < 0:
             continue
@@ -102,19 +117,24 @@ def parse_response(payload: Any, now: datetime) -> OutdoorContext | None:
     if not isinstance(hourly, Mapping):
         return None
     times = _series(hourly, "time")
-    parsed = [parse_iso(value) for value in times]
+    parsed = [_parse_utc(value) for value in times]
     valid = [(i, ts) for i, ts in enumerate(parsed) if ts is not None]
     if not valid:
         return None
-    comparable_now = now.replace(tzinfo=None) if now.tzinfo else now
-    current_index = min(valid, key=lambda item: abs((item[1].replace(tzinfo=None) - comparable_now).total_seconds()))[0]
+    comparable_now = _parse_utc(now)
+    if comparable_now is None:
+        return None
+    current_index = min(
+        valid,
+        key=lambda item: abs((item[1] - comparable_now).total_seconds()),
+    )[0]
     forecast: list[ForecastHour] = []
     codes = _series(hourly, "weather_code")
     gusts = _series(hourly, "wind_gusts_10m")
     precip = _series(hourly, "precipitation")
     precip_probability = _series(hourly, "precipitation_probability")
     for i, ts in valid:
-        hours = (ts.replace(tzinfo=None) - comparable_now).total_seconds() / 3600.0
+        hours = (ts - comparable_now).total_seconds() / 3600.0
         if hours < -1 or hours > 48:
             continue
         code = _at(codes, i)
@@ -126,7 +146,7 @@ def parse_response(payload: Any, now: datetime) -> OutdoorContext | None:
         ))
     estimated_par_series, outdoor_lux_series = radiation_series(hourly)
     return OutdoorContext(
-        source="open_meteo", fetched_at=now, forecast=forecast,
+        source="open_meteo", fetched_at=comparable_now, forecast=forecast,
         et0_next_24h_mm=_aggregate(_series(hourly, "et0_fao_evapotranspiration"), current_index, 24, mode="sum"),
         vpd_next_24h_mean_kpa=_aggregate(_series(hourly, "vapour_pressure_deficit"), current_index, 24, mode="mean"),
         precipitation_probability_max_24h=_aggregate(_series(hourly, "precipitation_probability"), current_index, 24, mode="max"),
@@ -147,7 +167,7 @@ async def fetch_context(session: Any, latitude: float, longitude: float, now: da
     params = {
         "latitude": latitude, "longitude": longitude,
         "hourly": ",".join(HOURLY_VARIABLES), "forecast_days": 3,
-        "timezone": "auto", "wind_speed_unit": "kmh", "precipitation_unit": "mm",
+        "timezone": "UTC", "wind_speed_unit": "kmh", "precipitation_unit": "mm",
     }
     try:
         import aiohttp

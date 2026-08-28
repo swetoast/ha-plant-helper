@@ -183,7 +183,7 @@ Depending on placement and available sources, diagnostics can include:
 
 ### `plant_helper.recalibrate`
 
-Restarts calibration for one configured plant by clearing its learned model and local sample history. Species context remains separate.
+Restarts calibration for one configured plant by clearing the active placement's learned baseline and local sample history. The other placement's baseline and species context are preserved.
 
 ```yaml
 service: plant_helper.recalibrate

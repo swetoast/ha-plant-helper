@@ -1,5 +1,6 @@
 """Open-Meteo normalization and source-policy tests."""
 from datetime import datetime, timezone
+from pathlib import Path
 from plant_helper.sources import open_meteo as om
 
 NOW = datetime(2026, 8, 28, 12, tzinfo=timezone.utc)
@@ -31,3 +32,27 @@ def test_wmo_hazards_map_to_existing_engine_conditions():
     p = payload(); p["hourly"]["weather_code"][12] = 96
     c = om.parse_response(p, NOW)
     assert any(f.condition == "hail" for f in c.forecast)
+
+
+def test_timestamps_are_normalized_to_aware_utc():
+    p = payload()
+    p["hourly"]["time"][0] = "2026-08-28T14:00:00+02:00"
+    context = om.parse_response(p, NOW)
+    assert context is not None
+    first_ts = context.estimated_par_series[0][0]
+    assert first_ts.tzinfo is not None
+    assert first_ts == NOW
+    assert context.fetched_at.tzinfo is not None
+
+
+def test_naive_open_meteo_timestamps_are_treated_as_utc():
+    context = om.parse_response(payload(), NOW)
+    assert context is not None
+    assert all(ts.tzinfo is not None for ts, _ in context.estimated_par_series)
+    assert context.estimated_par_series[12][0] == NOW
+
+
+def test_request_policy_uses_utc_timezone():
+    source = Path(om.__file__).read_text(encoding="utf-8")
+    assert '"timezone": "UTC"' in source
+    assert '"timezone": "auto"' not in source

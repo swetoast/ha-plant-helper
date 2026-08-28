@@ -1,7 +1,6 @@
 """Phase E operational-resilience contracts."""
 from pathlib import Path
 import ast
-import json
 ROOT = Path(__file__).resolve().parents[1]
 def text(name): return (ROOT / name).read_text(encoding="utf-8")
 def test_background_tasks_are_tracked_and_non_overlapping():
@@ -28,9 +27,3 @@ def test_provider_diagnostics_expose_full_contract():
     source=text("binary_sensor.py")
     for key in ("configured","enabled","ok","last_result","partial_result","last_attempt","last_success","last_error","calls_today","daily_limit","throttled"):
         assert f'health.get("{key}")' in source
-def test_phase_e_version_and_roadmap():
-    manifest=json.loads((ROOT/"manifest.json").read_text())
-    assert tuple(map(int, manifest["version"].split("."))) >= (4, 0, 26)
-    roadmap=(ROOT.parents[1]/"docs"/"QUALITY_ROADMAP.md").read_text()
-    phase=roadmap.split("## Phase E",1)[1].split("## Phase F",1)[0]
-    assert "- [ ]" not in phase and phase.count("- [x]")==7

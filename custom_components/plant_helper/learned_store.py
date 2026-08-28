@@ -181,6 +181,31 @@ def get_dormancy(data: dict[str, Any], plant_id: str) -> dict[str, Any]:
     )
 
 
+def reset_placement(
+    data: dict[str, Any],
+    plant_id: str,
+    placement: str,
+) -> bool:
+    """Clear learning for one placement while preserving the other baseline.
+
+    Local samples and day-level continuity are cleared by the caller because
+    those buffers are not placement-keyed. Species context is stored elsewhere.
+    """
+    record = data.get("plants", {}).get(plant_id)
+    if not isinstance(record, dict):
+        return False
+    record.setdefault("baselines", {}).pop(placement, None)
+    record.setdefault("calibration", {}).pop(placement, None)
+    record["calibration"][placement] = {
+        "status": "calibrating",
+        "day_records": [],
+    }
+    record.pop("daily_history", None)
+    record.pop("last_reduced_date", None)
+    record.pop("timers", None)
+    return True
+
+
 def remove_plant(data: dict[str, Any], plant_id: str) -> None:
     data.get("plants", {}).pop(plant_id, None)
 
