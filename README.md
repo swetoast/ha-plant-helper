@@ -6,7 +6,7 @@
 
 Plant Helper is a Home Assistant custom integration that turns soil-moisture, soil-temperature, and light readings into calibrated, time-based plant-care guidance. It learns how each plant behaves in its actual location and combines that local history with optional solar-radiation data, weather forecasts, and read-only species context.
 
-> **Release status:** Automated tests cover the decision engine, calibration and adaptation behavior, persistence, placement transitions, weather-source processing, and repository-level Home Assistant contracts. Final verification in a running Home Assistant instance is still required before version 4.2.0 is described as field-verified.
+> **Release status:** Version 4.2.0 includes the new learning system, improved outdoor-weather guidance, and global radiation support. See the changelog for the complete release history.
 
 ## Highlights
 
@@ -118,7 +118,6 @@ After calibration, a validated and well-covered new moisture peak can slowly adj
 
 Drying rate, daily-light target, window transmission, thermal mean, and thermal swing remain locked until dedicated bounded adaptation policies are implemented.
 
-See [Learning lifecycle](docs/LEARNING_LIFECYCLE.md) for the complete state-ownership and verification map.
 
 ## Outdoor drying projection
 
@@ -223,26 +222,9 @@ Removing an individual plant purges its device, entities, configuration, samples
 4. If installed through HACS, uninstall Plant Helper from HACS after deleting the integration entry.
 5. Restart Home Assistant if requested.
 
-## Verification status
+## Release notes
 
-Automated verification covers the pure decision engine and repository-level Home Assistant contracts. The current suite includes 61 tests plus Python syntax, relative-import, symbol, and release-package integrity checks.
-
-The live Home Assistant lifecycle checklist remains required for:
-
-1. Initial setup and entity creation
-2. Options and placement changes
-3. Returning to a previously calibrated placement
-4. Daily-boundary adaptation and persistence
-5. Restart recovery during and after calibration
-6. Recalibration, unload, and reload behavior
-
-Project references:
-
-- [Changelog](CHANGELOG.md)
-- [Quality roadmap](docs/QUALITY_ROADMAP.md)
-- [Learning lifecycle and live-test checklist](docs/LEARNING_LIFECYCLE.md)
-- [HACS repository notes](docs/HACS.md)
-- [Build history](BUILD_PLAN.md)
+See [CHANGELOG.md](CHANGELOG.md) for release history and notable changes.
 
 ## Weather data attribution
 
