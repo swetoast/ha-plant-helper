@@ -145,12 +145,12 @@ check("M_max EWMA drifts toward observed slowly",
 print("== calibration: K_window floor + seasonality bands ==")
 
 obs = (
-    # dawn: outdoor below floor -> excluded from ratio
-    [cal.WindowSample(5.0, 50.0, 200.0)]
-    # low band, valid
-    + [cal.WindowSample(10.0, 300.0, 3000.0) for _ in range(4)]   # ratio 0.10
+    # dawn: outdoor PAR below the 10 W/m^2 floor -> excluded from ratio
+    [cal.WindowSample(5.0, 50.0, 5.0)]
+    # low band, valid (outdoor PAR 100 W/m^2)
+    + [cal.WindowSample(10.0, 10.0, 100.0) for _ in range(4)]   # ratio 0.10
     # high band, valid, different transmission
-    + [cal.WindowSample(50.0, 900.0, 3000.0) for _ in range(4)]   # ratio 0.30
+    + [cal.WindowSample(50.0, 30.0, 100.0) for _ in range(4)]   # ratio 0.30
 )
 bands = cal.window_factor_by_elevation(obs)
 check("dawn sample excluded, low band ~0.10",
@@ -168,7 +168,7 @@ def full_day(i, *, water_day=False):
     """A well-covered indoor calibration day."""
     base = T0 + timedelta(days=i)
     moisture = [Sample(base + timedelta(hours=h), 70.0 - h) for h in range(12)]
-    win = [cal.WindowSample(30.0, 600.0, 3000.0) for _ in range(6)]
+    win = [cal.WindowSample(30.0, 60.0, 100.0) for _ in range(6)]  # PAR outdoor; ratio 0.60
     return cal.DailyRecord(
         day_index=i,
         coverage=0.9,

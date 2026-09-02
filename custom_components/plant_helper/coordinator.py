@@ -561,8 +561,14 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
             dli_target=(baseline or {}).get("dli_target"),
             dli_mean_3d=dli3,
             dli_mean_7d=dli7,
-            k_by_band=(baseline or {}).get("k_window_by_band"),
-            k_scalar=(baseline or {}).get("k_window_scalar"),
+            # Only apply a learned k-window if it was calibrated against the PAR
+            # reference. A pre-PAR (lux-era) baseline would give a k off by a large
+            # constant, producing false obstruction/low-light; gate it to None so
+            # indoor light reads "calibrating" until the plant is recalibrated.
+            k_by_band=(baseline or {}).get("k_window_by_band")
+            if (baseline or {}).get("light_ref") == "par" else None,
+            k_scalar=(baseline or {}).get("k_window_scalar")
+            if (baseline or {}).get("light_ref") == "par" else None,
             thermal_mean=(baseline or {}).get("thermal_mean"),
             diurnal_swing=(baseline or {}).get("diurnal_swing"),
             moisture_raw=sstore.raw_readings(sdata, f"plant:{plant_id}:moisture"),
@@ -662,7 +668,15 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
     def _indoor_observations(self, plant_id: str):
         sdata = self._samples.data
         local_lux = validate_series(sstore.raw_readings(sdata, f"plant:{plant_id}:lux"), LUX_SPEC)
-        outdoor = [Sample(r.ts, r.value) for r in sstore.raw_readings(sdata, "global:outdoor_lux")]
+        # Pair against the reliably-populated, source-correct PAR series (W/m²),
+        # NOT the fragile global:outdoor_lux. PAR is buffered by both STRÅNG and
+        # Open-Meteo under _par_series_key; outdoor_lux was not (STRÅNG derived it
+        # from a separate irradiance param that can be empty, and Open-Meteo wrote
+        # it to a source-suffixed key the read never used), which left indoor
+        # light unable to pair -> source: none. The k-window is a ratio, so the
+        # outdoor unit only needs to be consistent between calibration and runtime
+        # (both now use PAR).
+        outdoor = [Sample(r.ts, r.value) for r in sstore.raw_readings(sdata, self._par_series_key)]
         elevation = [Sample(r.ts, r.value) for r in sstore.raw_readings(sdata, "global:elevation")]
         return rt.build_indoor_observations(local_lux, outdoor, elevation, eng.DEFAULT_MACRO_GAP)
 

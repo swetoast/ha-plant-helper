@@ -53,9 +53,12 @@ MIN_DLI_DAYS = 5
 MIN_KWINDOW_DAYS = 5
 MIN_THERMAL_DAYS = 5
 
-# Outdoor brightness below this (lux) is treated as dawn/dusk noise and excluded
-# from the window-transmission ratio to avoid divide-by-near-zero blow-ups.
-OUTDOOR_LUX_FLOOR = 1000.0
+# Outdoor PAR (W/m^2) below this is treated as dawn/dusk noise and excluded from
+# the window-transmission ratio to avoid divide-by-near-zero blow-ups. In PAR
+# units, aligned with the daylight threshold used for light-hours (10 W/m^2).
+# (Was a 1000-lux floor when the outdoor reference was lux; the indoor pairing
+# now uses the reliable PAR series, so the floor is in PAR units.)
+OUTDOOR_REF_FLOOR = 10.0
 
 # Sun-elevation bands (degrees) for K_window, so a coefficient learned at a low
 # winter sun angle is not misapplied to a high summer sun (seasonality fix).
@@ -123,7 +126,11 @@ def dli_baseline(daily_dli: Iterable[float | None]) -> float | None:
 
 @dataclass(frozen=True, slots=True)
 class WindowSample:
-    """One daylight-hour observation for window-transmission calibration."""
+    """One daylight-hour observation for window-transmission calibration.
+
+    outdoor_lux carries the outdoor radiation reference (PAR, W/m^2) — the field
+    name is retained for compatibility. Only the ratio local_lux/outdoor matters,
+    so the unit is arbitrary provided calibration and runtime agree (both PAR)."""
 
     elevation_deg: float
     local_lux: float
@@ -158,7 +165,7 @@ def resolve_k(
 def window_factor_by_elevation(
     observations: Iterable[WindowSample],
     *,
-    outdoor_floor: float = OUTDOOR_LUX_FLOOR,
+    outdoor_floor: float = OUTDOOR_REF_FLOOR,
 ) -> dict[str, float]:
     """K_window per sun-elevation band.
 
@@ -181,7 +188,7 @@ def window_factor_by_elevation(
 def window_factor_scalar(
     observations: Iterable[WindowSample],
     *,
-    outdoor_floor: float = OUTDOOR_LUX_FLOOR,
+    outdoor_floor: float = OUTDOOR_REF_FLOOR,
 ) -> float | None:
     """Single-scalar K_window fallback for early calibration / sparse bands."""
     ratios = [
@@ -197,7 +204,7 @@ def window_factor_scalar(
 def reduce_window_observations(
     observations: Iterable[WindowSample],
     *,
-    outdoor_floor: float = OUTDOOR_LUX_FLOOR,
+    outdoor_floor: float = OUTDOOR_REF_FLOOR,
 ) -> dict[str, tuple[float, int]]:
     """Reduce a day's window observations to per-band (ratio_sum, count).
 
@@ -377,6 +384,10 @@ def synthesize_calibration(
         "dli_target": dli_target,
         "k_window_by_band": k_by_band,
         "k_window_scalar": k_scalar,
+        # Reference unit for the window-transmission ratio. Baselines locked
+        # before the PAR switch have no stamp (or an older one); the runtime
+        # gates on this so a lux-era k is never applied to PAR pairing.
+        "light_ref": "par",
         "thermal_mean": t_bar,
         "diurnal_swing": t_swing,
     }
