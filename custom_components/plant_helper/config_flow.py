@@ -5,7 +5,7 @@ Design goals:
     soil moisture (required), soil temperature, light, and battery. No species
     pre-caching, no room temp/humidity (the engine never reads those).
   * Powerful: full lifecycle from Options — add, edit, remove plants, and edit
-    global settings (credentials, forecast source, ozone advisory, poll rate).
+    global settings (credentials, Open-Meteo location overrides, ozone advisory, poll rate).
   * Validated: the required soil-moisture sensor must be provided and read as a
     plausible 0-100 % value; the custom profile requires a valid multiplier.
   * Smooth in HA: device-class-filtered entity pickers, a native options menu,
@@ -15,7 +15,7 @@ Design goals:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import voluptuous as vol
 
@@ -63,10 +63,6 @@ from .plant_config import (
     unique_plant_id,
     validate_plant,
 )
-if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigFlowResult
-
-    from .storage import PlantStorage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,10 +71,13 @@ _LOGGER = logging.getLogger(__name__)
 # --- selectors ------------------------------------------------------------
 
 def _sensor(device_classes: list[str] | None = None) -> selector.EntitySelector:
-    cfg: dict[str, Any] = {"domain": "sensor"}
     if device_classes:
-        cfg["device_class"] = device_classes
-    return selector.EntitySelector(selector.EntitySelectorConfig(**cfg))
+        config = selector.EntitySelectorConfig(
+            domain="sensor", device_class=device_classes
+        )
+    else:
+        config = selector.EntitySelectorConfig(domain="sensor")
+    return selector.EntitySelector(config)
 
 
 def _select(options: list[str]) -> selector.SelectSelector:
@@ -118,11 +117,8 @@ def _plant_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             _optional(CONF_SPECIES, d.get(CONF_SPECIES)): selector.TextSelector(),
             vol.Required(CONF_PLACEMENT, default=d.get(CONF_PLACEMENT, DEFAULT_PLACEMENT)): _select(PLACEMENTS),
             vol.Required(CONF_PROFILE, default=d.get(CONF_PROFILE, DEFAULT_PROFILE)): _select(PROFILES),
-            vol.Optional(
-                CONF_CUSTOM_MULTIPLIER,
-                description={"suggested_value": d.get(CONF_CUSTOM_MULTIPLIER)},
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(min=0.05, max=1.0, step=0.05, mode="box")
+            _optional(CONF_CUSTOM_MULTIPLIER, d.get(CONF_CUSTOM_MULTIPLIER)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0.05, max=1.0, step=0.05, mode=selector.NumberSelectorMode.BOX)
             ),
             # Sensors — moisture is required; the rest are optional but enable
             # more of the model (see step description).
@@ -135,7 +131,7 @@ def _plant_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_RAIN_LIMIT_MM,
                 default=float(d.get(CONF_RAIN_LIMIT_MM, DEFAULT_RAIN_LIMIT_MM) or DEFAULT_RAIN_LIMIT_MM),
             ): selector.NumberSelector(
-                selector.NumberSelectorConfig(min=0.0, max=50.0, step=0.5, mode="box")
+                selector.NumberSelectorConfig(min=0.0, max=50.0, step=0.5, mode=selector.NumberSelectorMode.BOX)
             ),
         }
     )
@@ -145,8 +141,8 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
     o = options or {}
     return vol.Schema(
         {
-            _optional(CONF_LATITUDE, o.get(CONF_LATITUDE)): selector.NumberSelector(selector.NumberSelectorConfig(min=-90, max=90, step=0.000001, mode="box")),
-            _optional(CONF_LONGITUDE, o.get(CONF_LONGITUDE)): selector.NumberSelector(selector.NumberSelectorConfig(min=-180, max=180, step=0.000001, mode="box")),
+            _optional(CONF_LATITUDE, o.get(CONF_LATITUDE)): selector.NumberSelector(selector.NumberSelectorConfig(min=-90, max=90, step=0.000001, mode=selector.NumberSelectorMode.BOX)),
+            _optional(CONF_LONGITUDE, o.get(CONF_LONGITUDE)): selector.NumberSelector(selector.NumberSelectorConfig(min=-180, max=180, step=0.000001, mode=selector.NumberSelectorMode.BOX)),
             _optional(CONF_OZONE_ENTITY, o.get(CONF_OZONE_ENTITY)):
                 selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optional(CONF_PERENUAL_API_KEY, o.get(CONF_PERENUAL_API_KEY)):
@@ -165,12 +161,48 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_UPDATE_INTERVAL,
                 default=o.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
             ): selector.NumberSelector(
-                selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s", mode="box")
+                selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s", mode=selector.NumberSelectorMode.BOX)
             ),
         }
     )
 
 
+
+def _initial_schema() -> vol.Schema:
+    """Conservative initial form using only stable selector configurations."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_ENABLE_TREFLE_FALLBACK,
+                default=DEFAULT_ENABLE_TREFLE_FALLBACK,
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_ENABLE_INATURALIST_ENRICHMENT,
+                default=DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_UPDATE_INTERVAL,
+                default=DEFAULT_UPDATE_INTERVAL,
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=60,
+                    max=3600,
+                    step=30,
+                    unit_of_measurement="s",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Optional(CONF_OZONE_ENTITY): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(CONF_PERENUAL_API_KEY): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            ),
+            vol.Optional(CONF_TREFLE_API_KEY): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            ),
+        }
+    )
 
 
 # --- config flow (initial setup) ------------------------------------------
@@ -180,7 +212,7 @@ class PlantHelperConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
 
@@ -236,7 +268,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         await storage.async_load()
         return storage
 
-    def _finish(self, extra: dict[str, Any] | None = None) -> ConfigFlowResult:
+    def _finish(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
         """Close the options flow and trigger exactly one reload.
 
         Plant data lives in storage, so a mutation wouldn't otherwise change the
@@ -308,7 +340,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         return state.state if state is not None else None
 
     # -- menu --
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.async_show_menu(
             step_id="init",
             menu_options=[
@@ -320,7 +352,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         )
 
     # -- add --
-    async def async_step_add_plant(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_add_plant(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         errors: dict[str, str] = {}
         if user_input is not None:
             errors = validate_plant(user_input, moisture_state=self._moisture_state(user_input))
@@ -352,7 +384,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
             await storage.async_add_plant(species, {"common_name": species})
 
     # -- edit --
-    async def async_step_edit_plant_select(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_edit_plant_select(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         storage = await self._load_storage()
         plants = storage.get_all_user_plants()
         if not plants:
@@ -365,7 +397,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
             data_schema=vol.Schema({vol.Required(CONF_PLANT_ID): _select(sorted(plants))}),
         )
 
-    async def async_step_edit_plant(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_edit_plant(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         storage = await self._load_storage()
         record = storage.get_user_plant(self._edit_id) if self._edit_id else None
         if not record:
@@ -432,7 +464,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         )
 
     # -- remove --
-    async def async_step_remove_plant(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_remove_plant(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         storage = await self._load_storage()
         plants = storage.get_all_user_plants()
         if not plants:
@@ -458,7 +490,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         )
 
     # -- global settings --
-    async def async_step_global_settings(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_global_settings(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         if user_input is not None:
             return self._finish(user_input)
         return self.async_show_form(

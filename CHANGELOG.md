@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.4.8
+
+- Hardened the initial config flow and removed runtime-only result annotations.
+- Replaced all literal number-selector modes with Home Assistant selector enums.
+- Removed null suggested values and aligned setup translations with the schema.
+- Kept latitude and longitude overrides in global settings, using Home Assistant location during initial setup.
+- Removed wildcard constant imports and normalized persisted interval and coordinate values.
+- Updated stale provider wording in the config flow and coordinator.
+
+
 ## [4.4.7] - 2026-09-21
 
 ### Fixed

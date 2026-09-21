@@ -3,17 +3,14 @@
     "step": {
       "user": {
         "title": "Plant Helper",
-        "description": "{info}",
+        "description": "Set up Plant Helper. Everything here is optional and can be changed later. Add plants afterwards from the integration's Configure screen.",
         "data": {
-          "latitude": "Latitude (optional, defaults to Home Assistant location)",
-          "longitude": "Longitude (optional, defaults to Home Assistant location)",
           "ozone_entity": "Ozone sensor (optional — enables the outdoor ozone advisory)",
           "perenual_api_key": "Perenual API key (optional — species context)",
           "trefle_api_key": "Trefle API token (optional — species context fallback)",
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
-          "update_interval": "Update interval",
-          "humidity_sensor": "Air-humidity sensor (optional) — enables a dry-air advisory for humidity-loving plants; leave blank if not needed"
+          "update_interval": "Update interval"
         }
       }
     },

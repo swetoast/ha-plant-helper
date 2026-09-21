@@ -2,15 +2,29 @@
 from __future__ import annotations
 import logging
 import math
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from .const import *
+from .const import (
+    CONF_ENABLE_INATURALIST_ENRICHMENT,
+    CONF_ENABLE_TREFLE_FALLBACK,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    CONF_OZONE_ENTITY,
+    CONF_PERENUAL_API_KEY,
+    CONF_TREFLE_API_KEY,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
+    DEFAULT_ENABLE_TREFLE_FALLBACK,
+    DEFAULT_PLACEMENT,
+    DEFAULT_PROFILE,
+    DEFAULT_RAIN_LIMIT_MM,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+)
 
-if TYPE_CHECKING:
-    from .storage import PlantStorage
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "binary_sensor"]
 
@@ -24,7 +38,7 @@ def _finite_float(value: Any, default: float) -> float:
 
 
 def _coordinator_plants(
-    user_plants: dict[str, Any], storage: PlantStorage
+    user_plants: dict[str, Any], storage: Any
 ) -> dict[str, dict[str, Any]]:
     """Build coordinator plant records from persisted user configuration."""
     from .enrichment import summarize_enrichment
@@ -91,9 +105,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         value = entry.options.get(key, entry.data.get(key, default))
         return default if value in (None, "") else value
     api=PlantDataAPI(async_get_clientsession(hass), perenual_key=_opt(CONF_PERENUAL_API_KEY,"") or None, storage=storage, trefle_key=_opt(CONF_TREFLE_API_KEY,"") or None, enable_trefle_fallback=_opt(CONF_ENABLE_TREFLE_FALLBACK,DEFAULT_ENABLE_TREFLE_FALLBACK), enable_inaturalist_enrichment=_opt(CONF_ENABLE_INATURALIST_ENRICHMENT,DEFAULT_ENABLE_INATURALIST_ENRICHMENT))
-    plants=_coordinator_plants(storage.get_all_user_plants(),storage)
-    update_interval = _opt(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-    coordinator=PlantHelperCoordinator(hass, learned=learned, samples=samples, plants=plants, ozone_entity=_opt(CONF_OZONE_ENTITY,None), api=api, update_interval_seconds=update_interval, latitude=_opt(CONF_LATITUDE, hass.config.latitude), longitude=_opt(CONF_LONGITUDE, hass.config.longitude))
+    plants = _coordinator_plants(storage.get_all_user_plants(), storage)
+
+    update_interval = int(
+        _finite_float(
+            _opt(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+            DEFAULT_UPDATE_INTERVAL,
+        )
+    )
+    update_interval = max(60, min(update_interval, 3600))
+
+    latitude = _finite_float(
+        _opt(CONF_LATITUDE, hass.config.latitude), hass.config.latitude
+    )
+    if not -90.0 <= latitude <= 90.0:
+        latitude = hass.config.latitude
+
+    longitude = _finite_float(
+        _opt(CONF_LONGITUDE, hass.config.longitude), hass.config.longitude
+    )
+    if not -180.0 <= longitude <= 180.0:
+        longitude = hass.config.longitude
+
+    coordinator = PlantHelperCoordinator(
+        hass,
+        learned=learned,
+        samples=samples,
+        plants=plants,
+        ozone_entity=_opt(CONF_OZONE_ENTITY, None),
+        api=api,
+        update_interval_seconds=update_interval,
+        latitude=latitude,
+        longitude=longitude,
+    )
     runtime={"storage":storage,"learned":learned,"samples":samples,"api":api,"coordinator":coordinator,"plants":plants,"ozone_enabled":bool(_opt(CONF_OZONE_ENTITY,None)),"entry_id": entry.entry_id}
     try:
         await coordinator.async_config_entry_first_refresh()

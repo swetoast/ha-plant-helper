@@ -2,10 +2,8 @@
 
 One `DataUpdateCoordinator` drives the whole integration each interval:
 
-  1. Read the shared macro sources (STRÅNG, forecast, sun elevation) and each
-     plant's local sensors, appending them to the Tier-1 sample store. STRÅNG
-     samples are timestamped by their `selected_data_time` so DLI integrates on
-     the correct (lagged) axis.
+  1. Read the shared Open-Meteo radiation source and sun elevation and each
+     plant's local sensors, appending them to the Tier-1 sample store. Radiation samples are timestamped by their `selected_data_time` so DLI integrates on the correct axis.
   2. On a local-day rollover, reduce the completed day to a compact record,
      advance calibration (locking a baseline at day 14 when complete), append the
      Tier-2 daily aggregate, and advance dormancy from the 30-day trends.
@@ -70,7 +68,7 @@ ENRICHMENT_RETRY_INTERVAL = timedelta(minutes=15)  # retry unresolved plants soo
 SUN_ENTITY = "sun.sun"
 PROVISIONAL_LIGHT_MIN_OBS = 6  # min paired daylight observations for a live k
 
-# Neutral macro used before the first STRÅNG API fetch lands (treated as stale so
+# Neutral macro used before the first Open-Meteo API fetch lands (treated as stale so
 # the light model falls back to the learned baseline rather than inventing data).
 
 _EMPTY_MACRO = _MacroReading(
@@ -142,7 +140,7 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
             interval_seconds = 300
         # Size the per-series count cap so the 3-day time retention is never
         # undercut by the count limit at fast update intervals. Below ~130s the
-        # default 800 cap would keep less than the STRÅNG lag / a full calendar
+        # default 800 cap would keep less than the radiation history / a full calendar
         # day, silently starving indoor-light pairing and complete-day DLI. +20%
         # headroom over the theoretical count.
         self._max_samples = max(
