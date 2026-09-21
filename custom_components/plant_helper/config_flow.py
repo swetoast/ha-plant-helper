@@ -266,17 +266,24 @@ class PlantHelperOptionsFlow(OptionsFlow):
         return self.async_create_entry(title="", data=options)
 
     def _remove_device(self, plant_id: str) -> None:
-        """Delete the plant's device (and its entities) from the registry.
-
-        Storage removal alone leaves an orphaned device in HA; this removes it so
-        deleting a plant cleans up fully, as the v3 component did.
-        """
+        """Delete the plant's entities and device from Home Assistant registries."""
         from homeassistant.helpers import device_registry as dr
+        from homeassistant.helpers import entity_registry as er
 
-        registry = dr.async_get(self.hass)
-        device = registry.async_get_device(identifiers={(DOMAIN, plant_id)})
+        entity_registry = er.async_get(self.hass)
+        unique_prefix = f"{self.config_entry.entry_id}_{plant_id}_"
+        for entity in list(entity_registry.entities.values()):
+            if (
+                entity.platform == DOMAIN
+                and entity.config_entry_id == self.config_entry.entry_id
+                and entity.unique_id.startswith(unique_prefix)
+            ):
+                entity_registry.async_remove(entity.entity_id)
+
+        device_registry = dr.async_get(self.hass)
+        device = device_registry.async_get_device(identifiers={(DOMAIN, plant_id)})
         if device is not None:
-            registry.async_remove_device(device.id)
+            device_registry.async_remove_device(device.id)
 
     async def _purge_plant(self, storage: PlantStorage, plant_id: str) -> None:
         """Remove every trace of a plant: config, learned state, samples, device.

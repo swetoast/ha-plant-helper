@@ -36,13 +36,7 @@ class PlantStorage:
 
     async def async_load(self) -> None:
         """Load data from storage, recovering safely from unreadable data."""
-        try:
-            data = await self._store.async_load()
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception(
-                "Failed to load plant storage; using an empty in-memory store"
-            )
-            data = None
+        data = await self._store.async_load()
         if isinstance(data, dict):
             plants = data.get("plants")
             user_plants = data.get("user_plants")
@@ -50,12 +44,10 @@ class PlantStorage:
                 "plants": plants if isinstance(plants, dict) else {},
                 "user_plants": user_plants if isinstance(user_plants, dict) else {},
             }
-        else:
-            if data is not None:
-                _LOGGER.error(
-                    "Plant storage payload is malformed; using an empty in-memory store"
-                )
+        elif data is None:
             self._data = {"plants": {}, "user_plants": {}}
+        else:
+            raise ValueError("Plant storage payload is malformed")
         _LOGGER.debug(
             "Loaded plant storage: %s cached plants, %s configured plants",
             len(self._data["plants"]),

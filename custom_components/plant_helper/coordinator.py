@@ -31,6 +31,7 @@ from . import learned_store as ls
 from . import runtime as rt
 from . import sample_store as sstore
 from .engine import engine as eng
+from .engine.util import to_float
 from .engine.accumulator import Sample
 from .engine.validation import (
     LUX_SPEC,
@@ -72,10 +73,7 @@ def _state_float(hass: HomeAssistant, entity_id: str | None) -> float | None:
     state = hass.states.get(entity_id)
     if state is None or state.state in ("unknown", "unavailable", None):
         return None
-    try:
-        return float(state.state)
-    except (TypeError, ValueError):
-        return None
+    return to_float(state.state)
 
 
 def _state_raw(hass: HomeAssistant, entity_id: str | None) -> str | None:
@@ -92,10 +90,7 @@ def _sun_elevation(hass: HomeAssistant) -> float | None:
     state = hass.states.get(SUN_ENTITY)
     if state is None:
         return None
-    try:
-        return float(state.attributes.get("elevation"))
-    except (TypeError, ValueError):
-        return None
+    return to_float(state.attributes.get("elevation"))
 
 
 def _daylight_hours(hass: HomeAssistant) -> float | None:

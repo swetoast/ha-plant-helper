@@ -8,6 +8,7 @@ sample_store).
 from __future__ import annotations
 
 from datetime import datetime
+import math
 from typing import Any
 
 
@@ -16,9 +17,10 @@ def to_float(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)
+        numeric = float(value)
     except (TypeError, ValueError):
         return None
+    return numeric if math.isfinite(numeric) else None
 
 
 def parse_iso(value: Any) -> datetime | None:
@@ -27,7 +29,9 @@ def parse_iso(value: Any) -> datetime | None:
         return value
     if not value:
         return None
-    text = str(value).replace("Z", "+00:00")
+    text = str(value)
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
     try:
         return datetime.fromisoformat(text)
     except (TypeError, ValueError):

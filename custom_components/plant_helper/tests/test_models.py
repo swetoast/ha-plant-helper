@@ -219,3 +219,20 @@ e = mm.evaluate_moisture(
 check("no learned constants -> NORMAL, no false alarm", e.state == mm.NORMAL and e.urgency == 0)
 
 print("\nALL MODEL TESTS PASSED")
+
+
+def test_to_float_rejects_non_finite_values():
+    """NaN and infinities must never enter sensor or provider calculations."""
+    from plant_helper.engine.util import to_float
+
+    for value in ("nan", "NaN", float("nan"), "inf", "-inf", float("inf")):
+        assert to_float(value) is None
+
+
+def test_parse_iso_only_normalizes_a_trailing_z():
+    """ISO normalization must not rewrite arbitrary Z characters."""
+    from plant_helper.engine.util import parse_iso
+
+    parsed = parse_iso("2026-09-21T12:30:00Z")
+    assert parsed is not None and parsed.utcoffset() is not None
+    assert parse_iso("2026-Z9-21T12:30:00Z") is None

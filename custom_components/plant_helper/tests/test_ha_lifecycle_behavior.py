@@ -221,6 +221,7 @@ async def test_setup_loads_stores_refreshes_forwards_and_registers(monkeypatch):
     hass = FakeHass()
     entry = ConfigEntry(options={"update_interval": 420, "radiation_source": "auto"})
 
+    assert await module.async_setup(hass, {}) is True
     assert await module.async_setup_entry(hass, entry) is True
     runtime = hass.data[module.DOMAIN][entry.entry_id]
     assert all(store.loaded for store in FakeStore.instances)
@@ -245,6 +246,7 @@ async def test_unload_failure_preserves_runtime_and_services(monkeypatch):
     module = _load_module(monkeypatch)
     hass = FakeHass()
     entry = ConfigEntry()
+    await module.async_setup(hass, {})
     await module.async_setup_entry(hass, entry)
     hass.config_entries.unload_result = False
 
@@ -254,10 +256,11 @@ async def test_unload_failure_preserves_runtime_and_services(monkeypatch):
     assert FakeCoordinator.instances[-1].shutdown is False
 
 
-async def test_successful_last_unload_shutdowns_saves_and_removes_services(monkeypatch):
+async def test_successful_last_unload_shutdowns_saves_and_keeps_services_registered(monkeypatch):
     module = _load_module(monkeypatch)
     hass = FakeHass()
     entry = ConfigEntry()
+    await module.async_setup(hass, {})
     await module.async_setup_entry(hass, entry)
     runtime = hass.data[module.DOMAIN][entry.entry_id]
 
@@ -266,14 +269,15 @@ async def test_successful_last_unload_shutdowns_saves_and_removes_services(monke
     assert runtime["coordinator"].shutdown is True
     assert runtime["learned"].saved is True
     assert runtime["samples"].saved is True
-    assert not hass.services.has_service(module.DOMAIN, "recalibrate")
-    assert not hass.services.has_service(module.DOMAIN, "refresh_species")
+    assert hass.services.has_service(module.DOMAIN, "recalibrate")
+    assert hass.services.has_service(module.DOMAIN, "refresh_species")
 
 
 async def test_services_execute_against_loaded_runtime(monkeypatch):
     module = _load_module(monkeypatch)
     hass = FakeHass()
     entry = ConfigEntry()
+    await module.async_setup(hass, {})
     await module.async_setup_entry(hass, entry)
     runtime = hass.data[module.DOMAIN][entry.entry_id]
 
@@ -293,9 +297,28 @@ async def test_services_reject_unknown_plant(monkeypatch):
     module = _load_module(monkeypatch)
     hass = FakeHass()
     entry = ConfigEntry()
+    await module.async_setup(hass, {})
     await module.async_setup_entry(hass, entry)
 
     for service in ("recalibrate", "refresh_species"):
         handler = hass.services.handlers[(module.DOMAIN, service)]
         with pytest.raises(ServiceValidationError, match="Unknown Plant Helper plant_id"):
             await handler(ServiceCall({"plant_id": "missing"}))
+
+
+async def test_failed_platform_setup_removes_partial_runtime_and_shutdowns(monkeypatch):
+    """A setup failure must not leak runtime data or background tasks."""
+    module = _load_module(monkeypatch)
+    hass = FakeHass()
+    entry = ConfigEntry()
+    await module.async_setup(hass, {})
+
+    async def fail_forward(_entry, _platforms):
+        raise RuntimeError("platform setup failed")
+
+    hass.config_entries.async_forward_entry_setups = fail_forward
+    with pytest.raises(RuntimeError, match="platform setup failed"):
+        await module.async_setup_entry(hass, entry)
+
+    assert entry.entry_id not in hass.data.get(module.DOMAIN, {})
+    assert FakeCoordinator.instances[-1].shutdown is True

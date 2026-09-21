@@ -102,10 +102,11 @@ def test_service_handlers_raise_actionable_validation_errors():
     assert "Species refresh failed for plant_id" in source
 
 
-def test_main_storage_load_recovers_without_overwriting_bad_payload():
+def test_main_storage_load_does_not_hide_read_failures_or_overwrite_bad_payload():
     source = (ROOT / "storage.py").read_text(encoding="utf-8")
     load = source[source.index("async def async_load"):source.index("async def async_save")]
-    assert "except Exception" in load
+    assert "except Exception" not in load
     assert "isinstance(data, dict)" in load
-    assert 'self._data = {"plants": {}, "user_plants": {}}' in load
+    assert 'elif data is None:' in load
+    assert 'raise ValueError("Plant storage payload is malformed")' in load
     assert "async_save" not in load

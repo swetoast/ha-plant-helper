@@ -109,3 +109,12 @@ check("daily history capped at retention", len(ls.get_daily(d4, "x")) == 90)
 check("oldest days dropped first", ls.get_daily(d4, "x")[0]["date"] == "day-010")
 
 print("\nALL PERSISTENCE-LAYER TESTS PASSED")
+
+
+def test_learned_store_rejects_malformed_payload_instead_of_erasing_it():
+    """Malformed learned data must stop setup rather than become empty state."""
+    from pathlib import Path
+
+    source = (Path(__file__).parents[1] / "learned_store.py").read_text(encoding="utf-8")
+    assert 'raise ValueError("Learned store payload is malformed")' in source
+    assert 'isinstance(raw.get("plants"), dict)' in source

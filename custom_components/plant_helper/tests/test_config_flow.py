@@ -123,3 +123,15 @@ def test_options_flow_uses_home_assistant_config_entry_property():
     text = path.read_text(encoding="utf-8")
     assert "self._entry" not in text
     assert "self.config_entry" in text
+
+
+def test_remove_plant_cleans_entity_and_device_registries():
+    """Deleting a plant must not leave disabled or orphaned entity entries."""
+    from pathlib import Path
+
+    source = (Path(__file__).parents[1] / "config_flow.py").read_text(encoding="utf-8")
+    assert "entity_registry.entities.values()" in source
+    assert "entity_registry.async_remove(entity.entity_id)" in source
+    assert "entity.config_entry_id == self.config_entry.entry_id" in source
+    assert 'unique_prefix = f"{self.config_entry.entry_id}_{plant_id}_"' in source
+    assert "device_registry.async_remove_device(device.id)" in source

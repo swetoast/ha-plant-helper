@@ -103,14 +103,14 @@ class SampleStore:
         if self._loaded:
             return self._data
         self._loaded = True
-        try:
-            raw = await self._store.async_load()
-        except Exception:  # noqa: BLE001
-            import logging
-
-            logging.getLogger(__name__).exception("Failed to load sample store")
-            raw = None
-        self._data = raw if isinstance(raw, dict) and "series" in raw else empty_data()
+        raw = await self._store.async_load()
+        if raw is None:
+            self._data = empty_data()
+        elif isinstance(raw, dict) and "series" in raw:
+            self._data = raw
+        else:
+            self._loaded = False
+            raise ValueError("Sample store payload is malformed")
         return self._data
 
     @property

@@ -2,11 +2,11 @@
 
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![HACS](https://img.shields.io/badge/HACS-Custom%20Repository-41BDF5)](https://hacs.xyz/)
-[![Version](https://img.shields.io/badge/version-4.3.2-blue)](custom_components/plant_helper/manifest.json)
+[![Version](https://img.shields.io/badge/version-4.3.4-blue)](custom_components/plant_helper/manifest.json)
 
 Plant Helper is a Home Assistant custom integration that turns soil-moisture, soil-temperature, and light readings into calibrated, time-based plant-care guidance. It learns how each plant behaves in its actual location and combines that local history with optional solar-radiation data, weather forecasts, and read-only species context.
 
-> **Release status:** Version 4.3.2 repairs Home Assistant 2025.12 options-flow compatibility and cleans release packaging. Version 4.3.1 tunes the light-adequacy advisory so healthy low-light plants are not falsely flagged. Version 4.3.0 adds absolute light-adequacy and dry-air advisories and profile-weighted health — all advisory, none override calibration. Version 4.2.9 fixes Species enrichment showing another plant's data and staying blank after a failed lookup. Version 4.2.8 lets you reuse an existing solar-radiation sensor as the radiation source. Version 4.2.7 fixes the STRÅNG source failing (missing User-Agent) and retry-storming. Version 4.2.6 restores indoor light obstruction detection. Version 4.2.5 adds a diagnostic reason to the Temperature entity after auditing all sensor vectors against real hardware. Version 4.2.4 ensures an unobstructed (no-blinds) window is never falsely flagged as a light obstruction. 4.2.3 adds a diagnostic reason so a `light: none` state is explainable. 4.2.2 makes indoor light report during calibration (provisional) and fixes ET0 being silently disabled with a Home Assistant forecast. 4.2.1 fixed indoor light not producing a value; existing indoor plants should be recalibrated once for a settled light model. Version 4.2.0 introduced the learning system, improved outdoor-weather guidance, and global radiation support. See the changelog for the complete release history.
+> **Current release:** Version 4.3.4. See the changelog for release history.
 
 ## Highlights
 

@@ -5,6 +5,35 @@ All notable changes to Plant Helper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.4] - 2026-09-21
+
+### Fixed
+
+- Rejected non-finite Home Assistant entity states and sun-elevation attributes before they enter plant calculations.
+- Validated learned-store structure during loading so malformed persisted learning data cannot be silently replaced.
+- Cleaned up the coordinator and partial runtime data when first refresh or entity-platform setup fails.
+- Removed deleted plants from the entity registry before removing their device, preventing disabled or orphaned entities from surviving deletion.
+
+### Testing
+
+- Added regression coverage for partial setup cleanup, malformed learned storage, finite Home Assistant states, and complete registry cleanup.
+
+## [4.3.3] - 2026-09-21
+
+### Fixed
+
+- Registered integration services during domain setup so service definitions remain available when no config entry is loaded.
+- Kept services registered across config-entry unloads and retained actionable validation errors when the integration has no active runtime.
+- Rejected non-finite numeric values such as NaN and infinity before they can enter sensor, forecast, or provider calculations.
+- Limited ISO timestamp normalization to a trailing `Z` instead of rewriting arbitrary timestamp content.
+- Changed persisted plant, learned, and sample storage loading to expose unreadable or malformed data instead of silently replacing it with empty state that could later overwrite valid history.
+- Removed deleted plants from both the entity registry and device registry, in addition to clearing configuration, learned state, samples, and live coordinator data.
+- Simplified the README release status so release history remains in the changelog.
+
+### Testing
+
+- Added regression coverage for service lifecycle, non-finite values, ISO parsing, storage failures, and complete plant removal.
+
 ## [4.3.2] - 2026-09-21
 
 ### Fixed

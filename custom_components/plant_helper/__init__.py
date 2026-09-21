@@ -33,6 +33,12 @@ def _coordinator_plants(user_plants: dict[str, Any], storage: PlantStorage) -> d
         }
     return plants
 
+
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+    """Set up domain services before any config entry is loaded."""
+    _register_services(hass)
+    return True
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     storage=PlantStorage(hass); await storage.async_load()
     learned=LearnedStore(hass); await learned.async_load()
@@ -43,10 +49,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     radiation_source = _opt(CONF_RADIATION_SOURCE, DEFAULT_RADIATION_SOURCE)
     update_interval = _opt(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
     coordinator=PlantHelperCoordinator(hass, learned=learned, samples=samples, plants=plants, strang_entities=None, forecast_entity=_opt(CONF_FORECAST_ENTITY,None), outdoor_data_source=_opt(CONF_OUTDOOR_DATA_SOURCE, DEFAULT_OUTDOOR_DATA_SOURCE), ozone_entity=_opt(CONF_OZONE_ENTITY,None), api=api, radiation_source=radiation_source, radiation_entity=_opt(CONF_RADIATION_ENTITY, None), update_interval_seconds=update_interval, latitude=hass.config.latitude, longitude=hass.config.longitude)
-    await coordinator.async_config_entry_first_refresh()
-    hass.data.setdefault(DOMAIN,{})[entry.entry_id]={"storage":storage,"learned":learned,"samples":samples,"api":api,"coordinator":coordinator,"plants":plants,"ozone_enabled":bool(_opt(CONF_OZONE_ENTITY,None)),"entry_id": entry.entry_id}
-    await hass.config_entries.async_forward_entry_setups(entry,PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(_async_reload_entry)); _register_services(hass,entry)
+    runtime={"storage":storage,"learned":learned,"samples":samples,"api":api,"coordinator":coordinator,"plants":plants,"ozone_enabled":bool(_opt(CONF_OZONE_ENTITY,None)),"entry_id": entry.entry_id}
+    try:
+        await coordinator.async_config_entry_first_refresh()
+        hass.data.setdefault(DOMAIN,{})[entry.entry_id]=runtime
+        await hass.config_entries.async_forward_entry_setups(entry,PLATFORMS)
+    except BaseException:
+        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        await coordinator.async_shutdown()
+        raise
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 
 async def _async_reload_entry(hass,entry): await hass.config_entries.async_reload(entry.entry_id)
@@ -60,12 +72,9 @@ async def async_unload_entry(hass,entry):
         for key in ("learned", "samples"):
             store=data.get(key)
             if store is not None and hasattr(store,"async_save"): await store.async_save()
-    if not hass.data.get(DOMAIN):
-        for service in ("recalibrate", "refresh_species"):
-            if hass.services.has_service(DOMAIN, service): hass.services.async_remove(DOMAIN, service)
     return True
 
-def _register_services(hass,entry):
+def _register_services(hass):
     async def handle_recalibrate(call: ServiceCall):
         plant_id=call.data.get("plant_id"); data=_runtime(hass)
         if not data:

@@ -37,10 +37,11 @@ def test_duplicate_engine_enrichment_is_absent():
             continue
         assert "engine.enrichment" not in path.read_text(encoding="utf-8")
 
-def test_services_removed_after_last_unload_and_resolve_runtime_entry():
+def test_services_registered_at_domain_setup_and_resolve_runtime_entry():
     source = text("__init__.py")
-    assert 'if not hass.data.get(DOMAIN)' in source
-    assert 'hass.services.async_remove(DOMAIN, service)' in source
+    assert "async def async_setup(hass: HomeAssistant" in source
+    assert "_register_services(hass)" in source
+    assert "hass.services.async_remove" not in source
     assert '"entry_id": entry.entry_id' in source
     assert 'entry_id = data.get("entry_id")' in source
 
