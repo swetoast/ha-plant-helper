@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.4.7] - 2026-09-21
+
+### Fixed
+
+- Made the integration package import-light so loading `config_flow.py` no longer imports the coordinator, storage, enrichment, API, or learning runtime first.
+- Deferred runtime imports to setup and service execution, preventing unrelated runtime code from breaking the initial configuration form.
+- Added regression coverage for the package-level import boundary.
+
 ## [4.4.6] - 2026-09-21
 
 ### Fixed

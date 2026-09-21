@@ -74,3 +74,22 @@ def test_coordinator_imports_dataclass_decorator() -> None:
     coordinator = (ROOT / "coordinator.py").read_text()
     assert "from dataclasses import dataclass" in coordinator
     assert "@dataclass(" in coordinator
+
+
+def test_package_import_does_not_eagerly_load_runtime_modules() -> None:
+    import ast
+
+    package = ast.parse((ROOT / "__init__.py").read_text())
+    module_imports = {
+        node.module
+        for node in package.body
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert not {
+        "coordinator",
+        "enrichment",
+        "learned_store",
+        "plant_data_api",
+        "sample_store",
+        "storage",
+    } & module_imports

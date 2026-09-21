@@ -2,19 +2,15 @@
 from __future__ import annotations
 import logging
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import *
-from .coordinator import PlantHelperCoordinator
-from .enrichment import summarize_enrichment
-from .learned_store import LearnedStore
-from .learned_store import reset_placement as learned_reset_placement
-from .plant_data_api import PlantDataAPI
-from .sample_store import SampleStore, clear_key_prefix
-from .storage import PlantStorage
+
+if TYPE_CHECKING:
+    from .storage import PlantStorage
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "binary_sensor"]
 
@@ -31,6 +27,8 @@ def _coordinator_plants(
     user_plants: dict[str, Any], storage: PlantStorage
 ) -> dict[str, dict[str, Any]]:
     """Build coordinator plant records from persisted user configuration."""
+    from .enrichment import summarize_enrichment
+
     plants: dict[str, dict[str, Any]] = {}
     for plant_id, record in user_plants.items():
         rec = record if isinstance(record, dict) else {}
@@ -81,6 +79,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    from .coordinator import PlantHelperCoordinator
+    from .learned_store import LearnedStore
+    from .plant_data_api import PlantDataAPI
+    from .sample_store import SampleStore
+    from .storage import PlantStorage
     storage=PlantStorage(hass); await storage.async_load()
     learned=LearnedStore(hass); await learned.async_load()
     samples=SampleStore(hass); await samples.async_load()
@@ -118,6 +121,8 @@ async def async_unload_entry(hass,entry):
 
 def _register_services(hass):
     async def handle_recalibrate(call: ServiceCall):
+        from .learned_store import reset_placement as learned_reset_placement
+        from .sample_store import clear_key_prefix
         plant_id=call.data.get("plant_id"); data=_runtime(hass)
         if not data:
             raise ServiceValidationError("Plant Helper is not loaded")
