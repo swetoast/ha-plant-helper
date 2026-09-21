@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.4.9
+
+- Replaced the initial setup form with a selector-free form to remove the complete schema serialization path from integration loading.
+- Deferred single-instance checks until form submission.
+- Fixed the fallback storage loader returning `None` after a successful load.
+- Removed unresolved `PlantStorage` annotations from the options flow.
+- Corrected remaining stale global-settings provider wording.
+
+
 ## 4.4.8
 
 - Hardened the initial config flow and removed runtime-only result annotations.

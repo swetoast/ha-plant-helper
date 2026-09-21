@@ -212,25 +212,20 @@ class PlantHelperConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
-        await self.async_set_unique_id(DOMAIN)
-        self._abort_if_unique_id_configured()
-
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Create the single integration entry with no initial selectors."""
         if user_input is not None:
+            await self.async_set_unique_id(DOMAIN)
+            self._abort_if_unique_id_configured()
             return self.async_create_entry(
-                title="Plant Helper", data={}, options=user_input
+                title="Plant Helper", data={}, options={}
             )
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_global_schema(),
-            description_placeholders={
-                "info": (
-                    "Set up Plant Helper. Everything here is optional and can be "
-                    "changed later. Add your plants afterwards from the "
-                    "integration's Configure screen."
-                )
-            },
+            data_schema=vol.Schema({}),
         )
 
     @staticmethod
@@ -252,7 +247,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         """The live per-entry runtime data (storage, learned, samples, coordinator)."""
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
 
-    async def _load_storage(self) -> PlantStorage:
+    async def _load_storage(self) -> Any:
         """Return the RUNNING storage instance so mutations use one source of truth.
 
         Using a separate instance risks a stale copy being written back (e.g. on
@@ -302,7 +297,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         if device is not None:
             device_registry.async_remove_device(device.id)
 
-    async def _purge_plant(self, storage: PlantStorage, plant_id: str) -> None:
+    async def _purge_plant(self, storage: Any, plant_id: str) -> None:
         """Remove every trace of a plant: config, learned state, samples, device.
 
         Persisted immediately so the deletion survives the subsequent reload and
@@ -372,7 +367,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
             description_placeholders={"info": _ADD_INFO},
         )
 
-    async def _ensure_species_stub(self, storage: PlantStorage, species: str) -> None:
+    async def _ensure_species_stub(self, storage: Any, species: str) -> None:
         """Ensure a cache entry exists so the plant can be stored.
 
         No API call here: the coordinator performs the real provider lookup on its
@@ -517,7 +512,7 @@ _EDIT_INFO = (
 )
 _REMOVE_INFO = "Removing a plant permanently deletes its device, entities, calibration progress, learned baselines, timers, history, and stored samples."
 _SETTINGS_INFO = (
-    "Global settings shared by all plants. Forecast source enables rain "
+    "Global settings shared by all plants. Open-Meteo provides rain "
     "suppression and severe-weather alerts; the ozone sensor enables the outdoor "
     "ozone advisory. API keys are optional and only used for species context."
 )

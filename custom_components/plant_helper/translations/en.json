@@ -3,15 +3,7 @@
     "step": {
       "user": {
         "title": "Plant Helper",
-        "description": "Set up Plant Helper. Everything here is optional and can be changed later. Add plants afterwards from the integration's Configure screen.",
-        "data": {
-          "ozone_entity": "Ozone sensor (optional — enables the outdoor ozone advisory)",
-          "perenual_api_key": "Perenual API key (optional — species context)",
-          "trefle_api_key": "Trefle API token (optional — species context fallback)",
-          "enable_trefle_fallback": "Enable Trefle fallback",
-          "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
-          "update_interval": "Update interval"
-        }
+        "description": "Create Plant Helper, then add plants and adjust optional global settings from the integration's Configure screen."
       }
     },
     "abort": {
