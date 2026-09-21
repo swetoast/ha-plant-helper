@@ -15,14 +15,13 @@ Design goals:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
-    ConfigFlowResult,
     OptionsFlow,
 )
 from homeassistant.core import callback
@@ -64,11 +63,10 @@ from .plant_config import (
     unique_plant_id,
     validate_plant,
 )
-from .learned_store import remove_plant as learned_remove_plant
-from .learned_store import set_timer as learned_set_timer
-from .learned_store import swap_placement as learned_swap_placement
-from .sample_store import clear_key_prefix
-from .storage import PlantStorage
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlowResult
+
+    from .storage import PlantStorage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -232,6 +230,8 @@ class PlantHelperOptionsFlow(OptionsFlow):
         storage = self._runtime().get("storage")
         if storage is not None:
             return storage
+        from .storage import PlantStorage
+
         storage = PlantStorage(self.hass)
         await storage.async_load()
         return storage
@@ -281,11 +281,15 @@ class PlantHelperOptionsFlow(OptionsFlow):
         runtime = self._runtime()
         learned = runtime.get("learned")
         if learned is not None:
-            learned_remove_plant(learned.data, plant_id)
+            from .learned_store import remove_plant
+
+            remove_plant(learned.data, plant_id)
             await learned.async_save()
 
         samples = runtime.get("samples")
         if samples is not None:
+            from .sample_store import clear_key_prefix
+
             clear_key_prefix(samples.data, f"plant:{plant_id}:")
             await samples.async_save()
 
@@ -389,7 +393,9 @@ class PlantHelperOptionsFlow(OptionsFlow):
                     learned = runtime.get("learned")
                     samples = runtime.get("samples")
                     if learned is not None:
-                        needs_calibration = learned_swap_placement(
+                        from .learned_store import set_timer, swap_placement
+
+                        needs_calibration = swap_placement(
                             learned.data, self._edit_id, new_placement
                         )
                         if needs_calibration:
@@ -404,9 +410,11 @@ class PlantHelperOptionsFlow(OptionsFlow):
                                 self._edit_id, new_placement,
                             )
                         for timer in ("dry", "wet", "cold", "warm"):
-                            learned_set_timer(learned.data, self._edit_id, timer, None)
+                            set_timer(learned.data, self._edit_id, timer, None)
                         await learned.async_save()
                     if samples is not None:
+                        from .sample_store import clear_key_prefix
+
                         clear_key_prefix(samples.data, f"plant:{self._edit_id}:")
                         await samples.async_save()
                 return self._finish()
@@ -465,7 +473,7 @@ _ADD_INFO = (
     "temperature-compensated moisture and thermal alerts. A light sensor enables "
     "indoor light adequacy and obstruction detection — an indoor plant with no "
     "light sensor will report light as 'no_light_sensor', while outdoor plants use "
-    "SMHI radiation instead and need no light sensor. You can reuse one light "
+    "Open-Meteo radiation instead and need no light sensor. You can reuse one light "
     "sensor across nearby plants that share a location (for example a windowsill). "
     "Battery (percentage or high/middle/low) pauses care when critical. Species is "
     "optional — it only fetches display context."

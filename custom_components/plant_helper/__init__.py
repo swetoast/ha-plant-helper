@@ -84,7 +84,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     storage=PlantStorage(hass); await storage.async_load()
     learned=LearnedStore(hass); await learned.async_load()
     samples=SampleStore(hass); await samples.async_load()
-    def _opt(key, default): return entry.options.get(key, entry.data.get(key, default))
+    def _opt(key, default):
+        value = entry.options.get(key, entry.data.get(key, default))
+        return default if value in (None, "") else value
     api=PlantDataAPI(async_get_clientsession(hass), perenual_key=_opt(CONF_PERENUAL_API_KEY,"") or None, storage=storage, trefle_key=_opt(CONF_TREFLE_API_KEY,"") or None, enable_trefle_fallback=_opt(CONF_ENABLE_TREFLE_FALLBACK,DEFAULT_ENABLE_TREFLE_FALLBACK), enable_inaturalist_enrichment=_opt(CONF_ENABLE_INATURALIST_ENRICHMENT,DEFAULT_ENABLE_INATURALIST_ENRICHMENT))
     plants=_coordinator_plants(storage.get_all_user_plants(),storage)
     update_interval = _opt(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)

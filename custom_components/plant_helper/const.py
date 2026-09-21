@@ -64,11 +64,3 @@ CONF_OZONE_ENTITY = "ozone_entity"
 
 # Integration author (shown as the device "manufacturer" / "by ..." in HA).
 AUTHOR = "Plant Helper"
-
-# STRÅNG radiation source: 'auto' (API in Nordic coverage, else sensors),
-# 'api' (always fetch from SMHI), or 'sensors' (read HA STRÅNG sensors).
-
-# Optional: an existing Home Assistant shortwave/global-radiation sensor (W/m²),
-# e.g. the Open-Meteo Weather integration's "Solar Radiation" entity. When set it
-# is the radiation source (highest priority) — reused each cycle to build the PAR
-# series, avoiding both the STRÅNG API and Plant Helper's own Open-Meteo fetch.

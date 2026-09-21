@@ -51,7 +51,8 @@ def test_remove_flow_purges_all_runtime_layers() -> None:
     text = source("config_flow.py")
     purge = text[text.index("async def _purge_plant"):text.index("def _moisture_state")]
     assert "async_remove_user_plant" in purge
-    assert "learned_remove_plant" in purge
+    assert "from .learned_store import remove_plant" in purge
+    assert "remove_plant(learned.data, plant_id)" in purge
     assert "clear_key_prefix" in purge
     assert "self._remove_device(plant_id)" in purge
     assert "registry.async_remove_device(device.id)" in text

@@ -79,7 +79,8 @@ def test_swap_to_complete_baseline_reuses_without_resetting_progress():
 
 def test_options_flow_consumes_placement_transition_decision():
     source = (Path(__file__).resolve().parents[1] / "config_flow.py").read_text()
-    assert "needs_calibration = learned_swap_placement(" in source
+    assert "from .learned_store import set_timer, swap_placement" in source
+    assert "needs_calibration = swap_placement(" in source
     assert "if needs_calibration:" in source
     assert "reused its complete baseline" in source
 

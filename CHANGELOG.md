@@ -1,3 +1,12 @@
+# Changelog
+
+## [4.4.5] - 2026-09-21
+
+- Deferred storage, learned-state, and sample-store imports until the options actions that use them so the initial config-flow handler stays import-light.
+- Removed the runtime dependency on `ConfigFlowResult`; it is imported only for static type checking.
+- Made cleared latitude and longitude options fall back to Home Assistant location defaults.
+- Removed obsolete STRÅNG and SMHI configuration text from the active implementation.
+
 ## [4.4.4] - 2026-09-21
 
 ### Fixed
