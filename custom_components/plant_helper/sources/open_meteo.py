@@ -173,7 +173,6 @@ async def fetch_context(session: Any, latitude: float, longitude: float, now: da
         "hourly": ",".join(HOURLY_VARIABLES),
         "current": ",".join(CURRENT_RADIATION_VARIABLES),
         "forecast_hours": 72,
-        "models": "auto",
         "timezone": "UTC", "wind_speed_unit": "kmh", "precipitation_unit": "mm",
     }
     headers = {"User-Agent": "home-assistant-plant-helper", "Accept": "application/json"}
