@@ -45,3 +45,18 @@ r=eng.compute(eng.EngineInputs(now=NOW,placement="indoor",calibrating=True,moist
 check("calibrating -> care none", r.precedence.care_action=="none")
 
 print("\nALL SENSOR-VECTOR TESTS PASSED")
+
+
+def test_real_moisture_vectors_do_not_regress():
+    wet = eng.compute(eng.EngineInputs(now=NOW, placement="indoor", calibrating=False, moisture_raw=s(96.0), **LOCK))
+    normal = eng.compute(eng.EngineInputs(now=NOW, placement="indoor", calibrating=False, moisture_raw=s(46.0), **LOCK))
+    assert wet.moisture.state == "normal"
+    assert normal.moisture.state == "drying_normally"
+
+
+def test_real_thermal_vectors_do_not_regress():
+    for temperature in (23.7, 22.4):
+        result = eng.compute(eng.EngineInputs(now=NOW, placement="indoor", calibrating=False, moisture_raw=s(50.0), soil_temp_raw=s(temperature), **LOCK))
+        assert result.thermal.state == "stable"
+        assert result.thermal.hazard is False
+        assert result.thermal.reason == "ok"

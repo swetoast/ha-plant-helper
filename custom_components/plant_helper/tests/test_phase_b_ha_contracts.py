@@ -122,3 +122,23 @@ def test_manifest_and_translation_contract() -> None:
     assert "forecast_entity" not in serialized
     assert "outdoor_data_source" not in serialized
     assert "radiation_entity" not in serialized
+
+
+def test_global_schema_has_no_removed_outdoor_source_selector() -> None:
+    """The Open-Meteo-only global flow must not reference removed selector names."""
+    text = (ROOT / "config_flow.py").read_text(encoding="utf-8")
+    schema = text[text.index("def _global_schema"):text.index("# --- config flow")]
+    assert "CONF_OUTDOOR_DATA_SOURCE" not in schema
+    assert "DEFAULT_OUTDOOR_DATA_SOURCE" not in schema
+    assert "OUTDOOR_DATA_SOURCES" not in schema
+
+
+def test_location_fields_have_translations() -> None:
+    """Every coordinate field exposed by the global schema needs a UI label."""
+    strings = json.loads((ROOT / "strings.json").read_text(encoding="utf-8"))
+    translation = json.loads((ROOT / "translations" / "en.json").read_text(encoding="utf-8"))
+    for document in (strings, translation):
+        for flow, step in (("config", "user"), ("options", "global_settings")):
+            fields = document[flow]["step"][step]["data"]
+            assert fields["latitude"]
+            assert fields["longitude"]

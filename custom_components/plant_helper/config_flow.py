@@ -169,10 +169,6 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s", mode="box")
             ),
-            vol.Optional(
-                CONF_OUTDOOR_DATA_SOURCE,
-                default=o.get(CONF_OUTDOOR_DATA_SOURCE, DEFAULT_OUTDOOR_DATA_SOURCE),
-            ): _select(OUTDOOR_DATA_SOURCES),
         }
     )
 

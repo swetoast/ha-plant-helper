@@ -5,6 +5,8 @@
         "title": "Plant Helper",
         "description": "{info}",
         "data": {
+          "latitude": "Latitude (optional, defaults to Home Assistant location)",
+          "longitude": "Longitude (optional, defaults to Home Assistant location)",
           "ozone_entity": "Ozone sensor (optional — enables the outdoor ozone advisory)",
           "perenual_api_key": "Perenual API key (optional — species context)",
           "trefle_api_key": "Trefle API token (optional — species context fallback)",
@@ -81,6 +83,8 @@
         "title": "Global settings",
         "description": "{info}",
         "data": {
+          "latitude": "Latitude (optional, defaults to Home Assistant location)",
+          "longitude": "Longitude (optional, defaults to Home Assistant location)",
           "ozone_entity": "Ozone sensor (optional — outdoor ozone advisory)",
           "perenual_api_key": "Perenual API key (optional)",
           "trefle_api_key": "Trefle API token (optional)",

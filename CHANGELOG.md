@@ -1,3 +1,12 @@
+## [4.4.3] - 2026-09-21
+
+### Fixed
+
+- Fixed the global configuration schema after removal of the legacy outdoor data-source selector.
+- Added user-facing latitude and longitude labels to setup and options flows.
+- Added regression coverage for configuration schema contracts and indoor/outdoor computation parity.
+- Added outdoor vectors for rain suppression, forecast clearing, severe weather, ET0, and ozone behavior.
+
 ## [4.4.2] - 2026-09-21
 
 ### Changed
