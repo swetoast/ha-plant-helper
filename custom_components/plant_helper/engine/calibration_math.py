@@ -17,6 +17,8 @@ Shortcomings from the design review addressed here:
 
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, field
 from datetime import timedelta
 from statistics import mean
@@ -176,7 +178,9 @@ def window_factor_by_elevation(
     """
     buckets: dict[str, list[float]] = {name: [] for name, _, _ in ELEVATION_BANDS}
     for obs in observations:
-        if obs.outdoor_lux < outdoor_floor:
+        if not all(math.isfinite(value) for value in (obs.local_lux, obs.outdoor_lux, obs.elevation_deg)):
+            continue
+        if obs.outdoor_lux < outdoor_floor or obs.outdoor_lux <= 0.0 or obs.local_lux < 0.0:
             continue
         band = _band_for_elevation(obs.elevation_deg)
         if band is None:
@@ -194,7 +198,10 @@ def window_factor_scalar(
     ratios = [
         obs.local_lux / obs.outdoor_lux
         for obs in observations
-        if obs.outdoor_lux >= outdoor_floor
+        if all(math.isfinite(value) for value in (obs.local_lux, obs.outdoor_lux, obs.elevation_deg))
+        and obs.outdoor_lux >= outdoor_floor
+        and obs.outdoor_lux > 0.0
+        and obs.local_lux >= 0.0
     ]
     if not ratios:
         return None
@@ -214,7 +221,9 @@ def reduce_window_observations(
     """
     buckets: dict[str, tuple[float, int]] = {}
     for obs in observations:
-        if obs.outdoor_lux < outdoor_floor:
+        if not all(math.isfinite(value) for value in (obs.local_lux, obs.outdoor_lux, obs.elevation_deg)):
+            continue
+        if obs.outdoor_lux < outdoor_floor or obs.outdoor_lux <= 0.0 or obs.local_lux < 0.0:
             continue
         band = _band_for_elevation(obs.elevation_deg)
         if band is None:
@@ -228,13 +237,21 @@ def reduce_window_observations(
 
 def thermal_mean(daily_means: Iterable[float | None]) -> float | None:
     """Expected daily-mean temperature over calibration days."""
-    vals = [v for v in daily_means if v is not None]
+    vals = [float(v) for v in daily_means if v is not None and math.isfinite(float(v))]
     return mean(vals) if vals else None
 
 
 def diurnal_swing(daily_min_max: Iterable[tuple[float, float]]) -> float | None:
     """Average normal day-night temperature swing (max - min per day)."""
-    swings = [hi - lo for lo, hi in daily_min_max if lo is not None and hi is not None]
+    swings = [
+        float(hi) - float(lo)
+        for lo, hi in daily_min_max
+        if lo is not None
+        and hi is not None
+        and math.isfinite(float(lo))
+        and math.isfinite(float(hi))
+        and float(hi) >= float(lo)
+    ]
     return mean(swings) if swings else None
 
 

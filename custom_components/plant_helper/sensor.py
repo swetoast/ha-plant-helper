@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .entity import PlantEntity
@@ -234,8 +235,9 @@ class PlantSpeciesInfoSensor(_PlantSensorBase):
 
     @property
     def available(self) -> bool:
-        # Independent of the engine result; available once enrichment exists.
-        return bool(self._info())
+        # Independent of the engine result, but still unavailable when the
+        # coordinator itself has failed its latest update.
+        return CoordinatorEntity.available.fget(self) and bool(self._info())
 
     @property
     def native_value(self) -> str | None:

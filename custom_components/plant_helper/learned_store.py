@@ -283,7 +283,14 @@ class LearnedStore:
         raw = await self._store.async_load()
         if raw is None:
             self._data = empty_data()
-        elif isinstance(raw, dict) and isinstance(raw.get("plants"), dict):
+        elif (
+            isinstance(raw, dict)
+            and isinstance(raw.get("plants"), dict)
+            and all(
+                isinstance(plant_id, str) and isinstance(record, dict)
+                for plant_id, record in raw["plants"].items()
+            )
+        ):
             self._data = migrate(raw)
         else:
             self._loaded = False

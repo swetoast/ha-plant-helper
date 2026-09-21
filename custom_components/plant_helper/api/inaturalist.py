@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import datetime
@@ -33,6 +34,7 @@ class INaturalistProvider:
         self.limiter = RateLimiter(daily_limit=daily_limit, min_interval_seconds=min_interval_seconds)
         self.last_error: str | None = None
         self.last_success: str | None = None
+        self._request_lock = asyncio.Lock()
 
     async def resolve(self, query: str) -> ProviderResult:
         """Resolve a plant's identity via the taxa endpoint (keyless).
@@ -110,8 +112,8 @@ class INaturalistProvider:
             self.last_success = datetime.now().isoformat()
             return ProviderResult(True, "inaturalist", data=data, api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message=f"Resolved to {taxon.get('name')}")
         except Exception as err:  # noqa: BLE001
-            _LOGGER.exception("iNaturalist taxa resolve failed for %s", query)
-            self.last_error = str(err)
+            _LOGGER.warning("iNaturalist taxa resolve failed for %s (%s)", query, type(err).__name__)
+            self.last_error = f"iNaturalist request error: {type(err).__name__}"
             return ProviderResult(False, "inaturalist", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message="iNaturalist request failed")
 
     async def _observation_photo(self, taxon_id: Any) -> str | None:
@@ -182,23 +184,27 @@ class INaturalistProvider:
             return ProviderResult(bool(results), "inaturalist", data=enrichment, api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message=f"iNaturalist returned {len(results)} observations")
 
         except Exception as err:
-            _LOGGER.exception("iNaturalist enrichment failed for %s", query)
-            self.last_error = str(err)
+            _LOGGER.warning("iNaturalist enrichment failed for %s (%s)", query, type(err).__name__)
+            self.last_error = f"iNaturalist request error: {type(err).__name__}"
             return ProviderResult(False, "inaturalist", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message="iNaturalist request failed")
 
     async def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
-        """GET JSON from iNaturalist."""
-        if not await self.limiter.async_wait_for_slot():
-            self.last_error = "iNaturalist daily limit reached"
-            return None
-        self.limiter.mark_call()
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with self.session.get(url, params=params, timeout=timeout) as response:
-            if response.status != 200:
-                self.last_error = f"iNaturalist HTTP {response.status}"
+        """GET JSON from iNaturalist without overlapping provider requests."""
+        async with self._request_lock:
+            if not await self.limiter.async_wait_for_slot():
+                self.last_error = "iNaturalist daily limit reached"
                 return None
-            return await response.json(content_type=None)
-
+            self.limiter.mark_call()
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with self.session.get(url, params=params, timeout=timeout) as response:
+                if response.status != 200:
+                    self.last_error = f"iNaturalist HTTP {response.status}"
+                    return None
+                payload = await response.json(content_type=None)
+                if not isinstance(payload, dict):
+                    self.last_error = "iNaturalist returned a non-object JSON payload"
+                    return None
+                return payload
     def _clean_query(self, query: str) -> str:
         """Clean scientific/common name for iNaturalist search.
         

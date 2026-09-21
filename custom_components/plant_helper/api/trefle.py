@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -34,6 +35,7 @@ class TrefleProvider:
         self.limiter = RateLimiter(daily_limit=daily_limit, min_interval_seconds=min_interval_seconds)
         self.last_error: str | None = None
         self.last_success: str | None = None
+        self._request_lock = asyncio.Lock()
 
     async def fetch(self, search_name: str) -> ProviderResult:
         """Fetch plant from Trefle."""
@@ -85,28 +87,29 @@ class TrefleProvider:
             return ProviderResult(True, "trefle", data=data, api_checked=True, api_called=True, calls_made=_calls(), message="Trefle match found")
 
         except Exception as err:
-            _LOGGER.exception("Trefle lookup failed for %s", search_name)
-            self.last_error = str(err)
+            _LOGGER.warning("Trefle lookup failed for %s (%s)", search_name, type(err).__name__)
+            self.last_error = f"Trefle request error: {type(err).__name__}"
             return ProviderResult(False, "trefle", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message="Trefle request failed")
 
     async def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
-        """GET JSON from Trefle."""
-        if not await self.limiter.async_wait_for_slot():
-            self.last_error = "Trefle daily limit reached"
-            return None
-        self.limiter.mark_call()
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with self.session.get(url, params=params, timeout=timeout) as response:
-            if response.status == 401:
-                self.last_error = "Trefle invalid token"
+        """GET JSON from Trefle without overlapping provider requests."""
+        async with self._request_lock:
+            if not await self.limiter.async_wait_for_slot():
+                self.last_error = "Trefle daily limit reached"
                 return None
-            if response.status != 200:
-                self.last_error = f"Trefle HTTP {response.status}"
-                return None
-            return await response.json(content_type=None)
-
+            self.limiter.mark_call()
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with self.session.get(url, params=params, timeout=timeout) as response:
+                if response.status != 200:
+                    self.last_error = f"Trefle HTTP {response.status}"
+                    return None
+                payload = await response.json(content_type=None)
+                if not isinstance(payload, dict):
+                    self.last_error = "Trefle returned a non-object JSON payload"
+                    return None
+                return payload
     async def _get_path(self, path: str) -> dict[str, Any] | None:
-        """GET Trefle path returned by links."""
+        """GET a path returned by Trefle links."""
         url = path if path.startswith("http") else f"https://trefle.io{path}"
         return await self._get_json(url, {"token": self.api_key})
 

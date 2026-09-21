@@ -322,3 +322,24 @@ async def test_failed_platform_setup_removes_partial_runtime_and_shutdowns(monke
 
     assert entry.entry_id not in hass.data.get(module.DOMAIN, {})
     assert FakeCoordinator.instances[-1].shutdown is True
+
+
+def test_coordinator_plants_tolerates_malformed_nested_storage(monkeypatch):
+    module = _load_module(monkeypatch)
+
+    class Storage:
+        def get_plant(self, species):
+            return None
+
+    plants = module._coordinator_plants(
+        {
+            "fern": {"custom_name": "Fern", "species": 123, "entities": "broken"},
+            "palm": {"entities": {"rain_limit_mm": "not-a-number", "custom_multiplier": float("nan")}},
+        },
+        Storage(),
+    )
+
+    assert plants["fern"]["species"] is None
+    assert plants["fern"]["placement"] == module.DEFAULT_PLACEMENT
+    assert plants["palm"]["rain_limit_mm"] == module.DEFAULT_RAIN_LIMIT_MM
+    assert plants["palm"]["custom_multiplier"] is None

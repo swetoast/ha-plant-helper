@@ -1,9 +1,42 @@
 # Changelog
 
+## [4.3.8] - 2026-09-21
+
+- Prevented malformed or legacy nested plant configuration from crashing integration setup.
+- Rejected non-finite, invalid, and out-of-range persisted numeric values before they reach the runtime engine.
+- Added lifecycle regression coverage for malformed persisted plant records.
+
+
 All notable changes to Plant Helper will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [4.3.7] - 2026-09-21
+
+### Fixed
+
+- Validated nested runtime-sample records before accepting persisted data, preventing delayed crashes from malformed series or reading entries.
+- Validated every learned plant record before accepting the learned store, preserving the existing fail-safe behavior instead of allowing malformed records into runtime logic.
+- Stopped silently replacing malformed cached-plant or configured-plant mappings with empty dictionaries, which could otherwise erase recoverable stored data on the next save.
+
+### Testing
+
+- Added persistence regression checks covering malformed nested containers across all three storage layers.
+
+## [4.3.6] - 2026-09-21
+
+### Fixed
+
+- Serialized HTTP requests per enrichment provider so simultaneous refreshes cannot bypass minimum-call intervals or race daily-limit counters.
+- Rejected JSON arrays and scalar payloads before provider code attempts mapping operations.
+- Sanitized provider exception diagnostics so exception text cannot expose API keys or other sensitive request details.
+- Rejected non-finite and physically invalid light and thermal calibration inputs before they can poison learned baselines.
+- Made plant and species entities unavailable when the coordinator's latest update fails instead of exposing stale values as current.
+
+### Testing
+
+- Added regression coverage for provider payload shape, exception sanitization, finite calibration input, and coordinator-aware entity availability.
 
 ## [4.3.5] - 2026-09-21
 

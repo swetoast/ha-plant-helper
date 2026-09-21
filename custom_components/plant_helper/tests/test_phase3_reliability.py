@@ -110,3 +110,35 @@ def test_main_storage_load_does_not_hide_read_failures_or_overwrite_bad_payload(
     assert 'elif data is None:' in load
     assert 'raise ValueError("Plant storage payload is malformed")' in load
     assert "async_save" not in load
+
+
+def test_provider_exception_details_are_not_exposed():
+    """Provider diagnostics must not expose exception text containing credentials."""
+    async def run():
+        secret = "api-key-super-secret"
+        providers = [
+            (INaturalistProvider(session=Session([RuntimeError(secret)]), min_interval_seconds=0), "resolve"),
+            (PerenualProvider(session=Session([RuntimeError(secret)]), api_key=secret), "fetch"),
+            (TrefleProvider(session=Session([RuntimeError(secret)]), api_key=secret, min_interval_seconds=0), "fetch"),
+        ]
+        for provider, method in providers:
+            result = await getattr(provider, method)("fern")
+            assert secret not in (provider.last_error or "")
+            assert secret not in result.message
+            assert "RuntimeError" in (provider.last_error or "")
+    asyncio.run(run())
+
+
+def test_provider_http_helpers_reject_non_object_json():
+    """Provider callers rely on mapping payloads and must reject arrays/scalars."""
+    async def run():
+        providers = [
+            (INaturalistProvider(session=Session([Response(payload=[1])]), min_interval_seconds=0), "resolve"),
+            (PerenualProvider(session=Session([Response(payload=[1])]), api_key="x"), "fetch"),
+            (TrefleProvider(session=Session([Response(payload=[1])]), api_key="x", min_interval_seconds=0), "fetch"),
+        ]
+        for provider, method in providers:
+            result = await getattr(provider, method)("fern")
+            assert result.found is False
+            assert "non-object JSON payload" in (provider.last_error or "")
+    asyncio.run(run())

@@ -50,3 +50,11 @@ def test_public_metadata_is_privacy_safe():
     assert "Peter Skopa" not in text("const.py")
     manifest = json.loads(text("manifest.json"))
     assert tuple(map(int, manifest["version"].split("."))) >= (4, 0, 24)
+
+
+def test_entity_availability_respects_coordinator_failures():
+    """Entities must not expose stale values after a coordinator update failure."""
+    entity_source = text("entity.py")
+    sensor_source = text("sensor.py")
+    assert "return super().available and self._result is not None" in entity_source
+    assert "CoordinatorEntity.available.fget(self) and bool(self._info())" in sensor_source

@@ -62,4 +62,5 @@ class PlantEntity(CoordinatorEntity):
 
     @property
     def available(self) -> bool:
-        return self._result is not None
+        """Require both a healthy coordinator update and a computed plant result."""
+        return super().available and self._result is not None

@@ -243,3 +243,20 @@ def test_sample_usability_rejects_non_finite_values():
     assert Sample(T0, float("nan"), True).usable is False
     assert Sample(T0, float("inf"), True).usable is False
     assert Sample(T0, 0.0, True).usable is True
+
+
+def test_calibration_rejects_non_finite_observations():
+    """Invalid calibration values must not poison learned baselines."""
+    from plant_helper.engine import calibration_math as cal
+
+    observations = [
+        cal.WindowSample(local_lux=1000.0, outdoor_lux=5000.0, elevation_deg=25.0),
+        cal.WindowSample(local_lux=float("nan"), outdoor_lux=5000.0, elevation_deg=25.0),
+        cal.WindowSample(local_lux=1000.0, outdoor_lux=float("inf"), elevation_deg=25.0),
+        cal.WindowSample(local_lux=-1.0, outdoor_lux=5000.0, elevation_deg=25.0),
+    ]
+    assert cal.window_factor_scalar(observations) == 0.2
+    assert cal.window_factor_by_elevation(observations) == {"mid": 0.2}
+    assert cal.reduce_window_observations(observations) == {"mid": (0.2, 1)}
+    assert cal.thermal_mean([20.0, float("nan"), float("inf")]) == 20.0
+    assert cal.diurnal_swing([(18.0, 24.0), (float("nan"), 25.0), (25.0, 20.0)]) == 6.0

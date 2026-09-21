@@ -1,6 +1,7 @@
 """Plant Helper integration setup."""
 from __future__ import annotations
 import logging
+import math
 from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -17,21 +18,61 @@ from .storage import PlantStorage
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "binary_sensor"]
 
-def _coordinator_plants(user_plants: dict[str, Any], storage: PlantStorage) -> dict[str, dict[str, Any]]:
-    plants = {}
-    for plant_id, rec in user_plants.items():
-        ents = rec.get("entities", {}) or {}
+def _finite_float(value: Any, default: float) -> float:
+    """Return a finite float or a safe default."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if math.isfinite(number) else default
+
+
+def _coordinator_plants(
+    user_plants: dict[str, Any], storage: PlantStorage
+) -> dict[str, dict[str, Any]]:
+    """Build coordinator plant records from persisted user configuration."""
+    plants: dict[str, dict[str, Any]] = {}
+    for plant_id, record in user_plants.items():
+        rec = record if isinstance(record, dict) else {}
+        raw_entities = rec.get("entities", {})
+        entities = raw_entities if isinstance(raw_entities, dict) else {}
         species = rec.get("species")
+        if not isinstance(species, str) or not species.strip():
+            species = None
+
+        rain_limit = _finite_float(
+            entities.get("rain_limit_mm", DEFAULT_RAIN_LIMIT_MM),
+            DEFAULT_RAIN_LIMIT_MM,
+        )
+        if rain_limit < 0:
+            rain_limit = DEFAULT_RAIN_LIMIT_MM
+
+        custom_multiplier = entities.get("custom_multiplier")
+        if custom_multiplier is not None:
+            custom_multiplier = _finite_float(custom_multiplier, 0.0)
+            if not 0.0 < custom_multiplier <= 1.0:
+                custom_multiplier = None
+
         plants[plant_id] = {
-            "name": rec.get("custom_name") or plant_id, "species": species,
-            "enrichment": summarize_enrichment(storage.get_plant(species) if species else None),
-            "placement": ents.get("placement", DEFAULT_PLACEMENT),
-            "profile": ents.get("profile", DEFAULT_PROFILE),
-            "rain_limit_mm": float(ents.get("rain_limit_mm", DEFAULT_RAIN_LIMIT_MM) or DEFAULT_RAIN_LIMIT_MM),
-            "custom_multiplier": ents.get("custom_multiplier"),
-            "sensors": {"moisture": ents.get("soil_moisture"), "soil_temp": ents.get("soil_temperature"), "lux": ents.get("lux") or ents.get("room_lux"), "battery": ents.get("battery"), "humidity": ents.get("humidity_sensor")},
+            "name": rec.get("custom_name") or plant_id,
+            "species": species,
+            "enrichment": summarize_enrichment(
+                storage.get_plant(species) if species else None
+            ),
+            "placement": entities.get("placement", DEFAULT_PLACEMENT),
+            "profile": entities.get("profile", DEFAULT_PROFILE),
+            "rain_limit_mm": rain_limit,
+            "custom_multiplier": custom_multiplier,
+            "sensors": {
+                "moisture": entities.get("soil_moisture"),
+                "soil_temp": entities.get("soil_temperature"),
+                "lux": entities.get("lux") or entities.get("room_lux"),
+                "battery": entities.get("battery"),
+                "humidity": entities.get("humidity_sensor"),
+            },
         }
     return plants
+
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:

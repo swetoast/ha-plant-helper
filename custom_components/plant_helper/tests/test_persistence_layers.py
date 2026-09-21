@@ -118,3 +118,19 @@ def test_learned_store_rejects_malformed_payload_instead_of_erasing_it():
     source = (Path(__file__).parents[1] / "learned_store.py").read_text(encoding="utf-8")
     assert 'raise ValueError("Learned store payload is malformed")' in source
     assert 'isinstance(raw.get("plants"), dict)' in source
+
+
+def test_all_persistent_stores_validate_nested_container_shapes():
+    """Malformed nested values must fail load rather than crash later or erase data."""
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    learned = (root / "learned_store.py").read_text(encoding="utf-8")
+    samples = (root / "sample_store.py").read_text(encoding="utf-8")
+    storage = (root / "storage.py").read_text(encoding="utf-8")
+
+    assert "isinstance(plant_id, str) and isinstance(record, dict)" in learned
+    assert 'isinstance(raw.get("series"), dict)' in samples
+    assert "isinstance(reading, list)" in samples
+    assert 'raise ValueError("Plant storage payload is malformed")' in storage
+    assert "isinstance(key, str) and isinstance(value, dict)" in storage

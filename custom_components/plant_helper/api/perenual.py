@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -31,6 +32,7 @@ class PerenualProvider:
         self.limiter = RateLimiter(daily_limit=daily_limit)
         self.last_error: str | None = None
         self.last_success: str | None = None
+        self._request_lock = asyncio.Lock()
 
     async def fetch(
         self,
@@ -101,28 +103,30 @@ class PerenualProvider:
             return ProviderResult(True, "perenual", data=data, api_checked=True, api_called=True, calls_made=_calls(), message="Perenual match found")
 
         except Exception as err:
-            _LOGGER.exception("Perenual lookup failed for %s", search_name)
-            self.last_error = str(err)
+            _LOGGER.warning("Perenual lookup failed for %s (%s)", search_name, type(err).__name__)
+            self.last_error = f"Perenual request error: {type(err).__name__}"
             return ProviderResult(False, "perenual", api_checked=True, api_called=bool(_calls()), calls_made=_calls(), message="Perenual request failed")
 
     async def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
-        """GET JSON and track limits."""
-        if not self.limiter.can_call():
-            self.last_error = "Perenual limit reached"
-            return None
-
-        self.limiter.mark_call()
-
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with self.session.get(url, params=params, timeout=timeout) as response:
-            if response.status == 429:
-                self.last_error = "Perenual rate limit reached"
+        """GET JSON and track limits without overlapping provider requests."""
+        async with self._request_lock:
+            if not self.limiter.can_call():
+                self.last_error = "Perenual limit reached"
                 return None
-            if response.status != 200:
-                self.last_error = f"Perenual HTTP {response.status}"
-                return None
-            return await response.json(content_type=None)
-
+            self.limiter.mark_call()
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with self.session.get(url, params=params, timeout=timeout) as response:
+                if response.status == 429:
+                    self.last_error = "Perenual rate limit reached"
+                    return None
+                if response.status != 200:
+                    self.last_error = f"Perenual HTTP {response.status}"
+                    return None
+                payload = await response.json(content_type=None)
+                if not isinstance(payload, dict):
+                    self.last_error = "Perenual returned a non-object JSON payload"
+                    return None
+                return payload
     def _select_best(self, search_name: str, results: list[dict[str, Any]]) -> dict[str, Any] | None:
         """Select best Perenual result."""
         search = normalize_text(search_name)

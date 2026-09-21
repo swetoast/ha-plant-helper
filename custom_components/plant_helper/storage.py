@@ -38,12 +38,19 @@ class PlantStorage:
         """Load data from storage, recovering safely from unreadable data."""
         data = await self._store.async_load()
         if isinstance(data, dict):
-            plants = data.get("plants")
-            user_plants = data.get("user_plants")
-            self._data = {
-                "plants": plants if isinstance(plants, dict) else {},
-                "user_plants": user_plants if isinstance(user_plants, dict) else {},
-            }
+            plants = data.get("plants", {})
+            user_plants = data.get("user_plants", {})
+            if not isinstance(plants, dict) or not isinstance(user_plants, dict):
+                raise ValueError("Plant storage payload is malformed")
+            if not all(
+                isinstance(key, str) and isinstance(value, dict)
+                for key, value in plants.items()
+            ) or not all(
+                isinstance(key, str) and isinstance(value, dict)
+                for key, value in user_plants.items()
+            ):
+                raise ValueError("Plant storage payload is malformed")
+            self._data = {"plants": plants, "user_plants": user_plants}
         elif data is None:
             self._data = {"plants": {}, "user_plants": {}}
         else:

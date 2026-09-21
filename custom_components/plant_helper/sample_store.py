@@ -106,7 +106,21 @@ class SampleStore:
         raw = await self._store.async_load()
         if raw is None:
             self._data = empty_data()
-        elif isinstance(raw, dict) and "series" in raw:
+        elif (
+            isinstance(raw, dict)
+            and isinstance(raw.get("series"), dict)
+            and all(
+                isinstance(key, str)
+                and isinstance(readings, list)
+                and all(
+                    isinstance(reading, list)
+                    and len(reading) == 2
+                    and isinstance(reading[0], str)
+                    for reading in readings
+                )
+                for key, readings in raw["series"].items()
+            )
+        ):
             self._data = raw
         else:
             self._loaded = False
