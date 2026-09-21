@@ -68,7 +68,8 @@ async def check_providers():
 asyncio.run(check_providers())
 
 init_text = (ROOT / "__init__.py").read_text()
-assert "radiation_source = _opt(CONF_RADIATION_SOURCE" in init_text
+assert "radiation_source = _opt(CONF_RADIATION_SOURCE" not in init_text
+assert "radiation_entity" not in init_text
 assert "update_interval_seconds=update_interval" in init_text
 flow_text = (ROOT / "config_flow.py").read_text()
 assert "permanently deletes its device" in flow_text

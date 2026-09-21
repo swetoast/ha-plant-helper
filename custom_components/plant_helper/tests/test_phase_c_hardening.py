@@ -7,13 +7,13 @@ ROOT = Path(__file__).resolve().parents[1]
 def text(name):
     return (ROOT / name).read_text(encoding="utf-8")
 
-def test_retryable_strang_source_policy():
+def test_open_meteo_only_radiation_policy():
     source = text("coordinator.py")
-    assert 'self._radiation_source = radiation_source' in source
-    assert 'self._strang_failures >= 3' in source
-    assert 'self._radiation_source == "auto"' in source
-    assert 'API mode retained for retry' in source
-    assert 'self._use_strang_api = False' in source
+    assert '"configured_source": "open_meteo"' in source
+    assert '"active_source": "open_meteo"' in source
+    assert "_radiation_source" not in source
+    assert "_use_strang_api" not in source
+    assert "_refresh_strang" not in source
 
 def test_radiation_diagnostics_exposed():
     coordinator = text("coordinator.py")

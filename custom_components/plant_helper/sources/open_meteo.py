@@ -12,12 +12,15 @@ from ..engine.thermal_model import ForecastHour
 from ..engine.util import parse_iso, to_float
 
 BASE_URL = "https://api.open-meteo.com/v1/forecast"
+CURRENT_RADIATION_VARIABLES = (
+    "shortwave_radiation_instant",
+    "diffuse_radiation_instant",
+)
 HOURLY_VARIABLES = (
     "temperature_2m", "relative_humidity_2m", "precipitation_probability",
     "precipitation", "weather_code", "cloud_cover", "wind_gusts_10m",
     "et0_fao_evapotranspiration", "vapour_pressure_deficit",
-    "shortwave_radiation", "diffuse_radiation", "soil_temperature_6cm",
-    "soil_moisture_3_to_9cm",
+    "shortwave_radiation", "diffuse_radiation"
 )
 WMO_CONDITIONS = {
     0: "sunny", 1: "partlycloudy", 2: "partlycloudy", 3: "cloudy",
@@ -114,7 +117,8 @@ def parse_response(payload: Any, now: datetime) -> OutdoorContext | None:
     if not isinstance(payload, Mapping) or payload.get("error"):
         return None
     hourly = payload.get("hourly")
-    if not isinstance(hourly, Mapping):
+    current = payload.get("current", {})
+    if not isinstance(hourly, Mapping) or not isinstance(current, Mapping):
         return None
     times = _series(hourly, "time")
     parsed = [_parse_utc(value) for value in times]
@@ -153,10 +157,10 @@ def parse_response(payload: Any, now: datetime) -> OutdoorContext | None:
         temperature_2m=_at(_series(hourly, "temperature_2m"), current_index),
         relative_humidity_2m=_at(_series(hourly, "relative_humidity_2m"), current_index),
         cloud_cover=_at(_series(hourly, "cloud_cover"), current_index),
-        shortwave_radiation=_at(_series(hourly, "shortwave_radiation"), current_index),
-        diffuse_radiation=_at(_series(hourly, "diffuse_radiation"), current_index),
-        soil_temperature_6cm=_at(_series(hourly, "soil_temperature_6cm"), current_index),
-        regional_soil_moisture_3_to_9cm=_at(_series(hourly, "soil_moisture_3_to_9cm"), current_index),
+        shortwave_radiation=to_float(current.get("shortwave_radiation_instant")),
+        diffuse_radiation=to_float(current.get("diffuse_radiation_instant")),
+        soil_temperature_6cm=None,
+        regional_soil_moisture_3_to_9cm=None,
         estimated_par_series=estimated_par_series,
         outdoor_lux_series=outdoor_lux_series,
     )
@@ -166,7 +170,10 @@ async def fetch_context(session: Any, latitude: float, longitude: float, now: da
     """Fetch one shared location context. Returns None on transport/API failure."""
     params = {
         "latitude": latitude, "longitude": longitude,
-        "hourly": ",".join(HOURLY_VARIABLES), "forecast_days": 3,
+        "hourly": ",".join(HOURLY_VARIABLES),
+        "current": ",".join(CURRENT_RADIATION_VARIABLES),
+        "forecast_hours": 72,
+        "models": "auto",
         "timezone": "UTC", "wind_speed_unit": "kmh", "precipitation_unit": "mm",
     }
     headers = {"User-Agent": "home-assistant-plant-helper", "Accept": "application/json"}

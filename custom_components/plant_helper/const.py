@@ -42,8 +42,10 @@ CONF_PLACEMENT = "placement"
 CONF_PROFILE = "profile"
 CONF_BATTERY_ENTITY = "battery_entity"
 CONF_RAIN_LIMIT_MM = "rain_limit_mm"
-CONF_FORECAST_ENTITY = "forecast_entity"
-CONF_OUTDOOR_DATA_SOURCE = "outdoor_data_source"
+CONF_LATITUDE = "latitude"
+CONF_LONGITUDE = "longitude"
+CONF_FORECAST_ENTITY = "forecast_entity"  # legacy, ignored
+CONF_OUTDOOR_DATA_SOURCE = "outdoor_data_source"  # legacy, ignored
 DEFAULT_OUTDOOR_DATA_SOURCE = "auto"
 OUTDOOR_DATA_SOURCES = ["auto", "home_assistant", "open_meteo", "disabled"]
 
@@ -69,12 +71,8 @@ AUTHOR = "Plant Helper"
 
 # STRÅNG radiation source: 'auto' (API in Nordic coverage, else sensors),
 # 'api' (always fetch from SMHI), or 'sensors' (read HA STRÅNG sensors).
-CONF_RADIATION_SOURCE = "radiation_source"
-DEFAULT_RADIATION_SOURCE = "auto"
-RADIATION_SOURCES = ["auto", "api", "sensors"]
 
 # Optional: an existing Home Assistant shortwave/global-radiation sensor (W/m²),
 # e.g. the Open-Meteo Weather integration's "Solar Radiation" entity. When set it
 # is the radiation source (highest priority) — reused each cycle to build the PAR
 # series, avoiding both the STRÅNG API and Plant Helper's own Open-Meteo fetch.
-CONF_RADIATION_ENTITY = "radiation_entity"

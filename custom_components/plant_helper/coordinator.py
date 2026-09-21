@@ -43,21 +43,34 @@ from .engine.validation import (
 )
 from .sources import forecast as forecast_src
 from .sources import open_meteo as open_meteo_src
-from .sources import smhi as smhi_src
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _MacroReading:
+    """Radiation values normalized for the plant engine."""
+
+    par: float | None
+    global_irradiance: float | None
+    diffuse_irradiance: float | None
+    direct_horizontal: float | None
+    direct_normal: float | None
+    outdoor_lux: float | None
+    data_stale: bool
+    api_issue: bool
+    age_hours: float | None
+    selected_data_time: datetime | None
+    stale: bool
 
 UPDATE_INTERVAL = timedelta(minutes=10)
 ENRICHMENT_INTERVAL = timedelta(hours=24)
 ENRICHMENT_RETRY_INTERVAL = timedelta(minutes=15)  # retry unresolved plants soon, not daily
-STRANG_INTERVAL = timedelta(minutes=60)      # STRÅNG publishes hourly
-STRANG_RETRY_INTERVAL = timedelta(minutes=10) # shorter backoff after a failure
 SUN_ENTITY = "sun.sun"
 PROVISIONAL_LIGHT_MIN_OBS = 6  # min paired daylight observations for a live k
 
 # Neutral macro used before the first STRÅNG API fetch lands (treated as stale so
 # the light model falls back to the learned baseline rather than inventing data).
-from .sources.smhi import MacroReading as _MacroReading  # noqa: E402
 
 _EMPTY_MACRO = _MacroReading(
     par=None, global_irradiance=None, diffuse_irradiance=None,
@@ -116,13 +129,10 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         learned: Any,
         samples: Any,
         plants: dict[str, dict[str, Any]],
-        strang_entities: dict[str, str] | None,
         forecast_entity: str | None,
         outdoor_data_source: str = "auto",
         ozone_entity: str | None = None,
         api: Any = None,
-        radiation_source: str = "auto",
-        radiation_entity: str | None = None,
         update_interval_seconds: int = 300,
         latitude: float | None = None,
         longitude: float | None = None,
@@ -147,9 +157,6 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         self._learned = learned
         self._samples = samples
         self._plants = plants
-        self._strang_entities = strang_entities
-        self._forecast_entity = forecast_entity
-        self._outdoor_data_source = outdoor_data_source
         self._open_meteo_context = None
         self._last_open_meteo = None
         self._ozone_entity = ozone_entity
@@ -162,26 +169,15 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         self._api_health: dict[str, dict[str, Any]] = {}
         self._last_enrichment = None
         self._last_enrichment_retry = None
-        self._strang_task = None
         self._enrichment_task = None
 
-        # STRÅNG radiation source: 'sensors' (read HA sensors), 'api' (fetch from
-        # SMHI), or 'auto' (API when the home location is inside Nordic coverage).
-        from .sources import strang_api as _sa
         self._latitude = latitude
         self._longitude = longitude
-        self._radiation_source = radiation_source
-        self._radiation_entity = radiation_entity
-        self._in_strang_coverage = _sa.in_nordic_coverage(latitude, longitude)
-        self._use_strang_api = _sa.use_strang_api(radiation_source, latitude, longitude)
-        self._par_series_key = "global:par"
-        self._strang_macro = None  # cached MacroReading from the API
-        self._last_strang = None
-        self._strang_failures = 0
+        self._par_series_key = "global:par:open_meteo"
         self._radiation_status: dict[str, Any] = {
-            "configured_source": radiation_source,
-            "active_source": "api" if self._use_strang_api else "sensors",
-            "available": True,
+            "configured_source": "open_meteo",
+            "active_source": "open_meteo",
+            "available": False,
             "last_attempt": None,
             "last_success": None,
             "last_error": None,
@@ -190,6 +186,8 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
             "sample_counts": {},
             "consecutive_failures": 0,
             "fallback": False,
+            "estimated": True,
+            "day_source_lock": self._par_series_key,
         }
 
     @property
@@ -218,146 +216,101 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         now = dt_util.now()
         sdata = self._samples.data
 
-        # --- shared macro sources -----------------------------------------
-        used_radiation_entity = False
-        if self._radiation_entity:
-            # A user-provided shortwave/global-radiation sensor (W/m²), e.g. the
-            # Open-Meteo Weather integration's "Solar Radiation". Highest priority:
-            # reuse it each cycle to build the PAR series, so no STRÅNG API call
-            # and no separate Open-Meteo radiation fetch are needed.
-            value = _state_float(self.hass, self._radiation_entity)
-            if value is not None and value >= 0:
-                par = value * open_meteo_src.SHORTWAVE_TO_PAR
-                self._par_series_key = "global:par"
-                sstore.append_reading(sdata, "global:par", now, par, now,
-                                      dedupe=True, max_per_series=self._max_samples)
-                macro = _MacroReading(
-                    par=par, global_irradiance=value, diffuse_irradiance=None,
-                    direct_horizontal=None, direct_normal=None,
-                    outdoor_lux=value * open_meteo_src.SHORTWAVE_TO_LUX,
-                    data_stale=False, api_issue=False, age_hours=0.0,
-                    selected_data_time=now, stale=False,
-                )
-                self._radiation_status.update({
-                    "active_source": "radiation_entity", "available": True,
-                    "last_success": now.isoformat(), "last_error": None,
-                    "estimated": True, "fallback": False,
-                    "day_source_lock": self._par_series_key,
-                    "entity": self._radiation_entity,
-                })
-                used_radiation_entity = True
-            else:
-                macro = _EMPTY_MACRO
-                self._radiation_status.update({
-                    "active_source": "radiation_entity", "available": False,
-                    "last_error": "entity_unavailable", "entity": self._radiation_entity,
-                })
-                used_radiation_entity = True
-        elif self._use_strang_api:
-            # Cached STRÅNG API reading (refreshed hourly in the background); the
-            # full PAR/lux series is buffered by that refresh, so no per-cycle
-            # append here. Empty until the first fetch completes.
-            macro = self._strang_macro or _EMPTY_MACRO
-            if self._strang_task is None or self._strang_task.done():
-                self._strang_task = self.hass.async_create_task(
-                    self._refresh_strang(now), "plant_helper_strang_refresh"
-                )
-        else:
-            macro = await smhi_src.read_macro(self.hass, self._strang_entities)
-            par_sample = smhi_src.macro_par_sample(macro, now)
-            if par_sample.usable:
-                sstore.append_reading(
-                    sdata, "global:par", par_sample.ts, par_sample.value, now,
-                    dedupe=True,
-                )
+        # --- Open-Meteo radiation and outdoor context --------------------
+        macro = _EMPTY_MACRO
+        forecast: list[Any] = []
+        self._radiation_status["last_attempt"] = now.isoformat()
 
-        # Open-Meteo context (ET0, VPD, estimated radiation) is fetched whenever
-        # anything could use it, INDEPENDENTLY of the precip-forecast source. In
-        # auto mode this means having a Home Assistant forecast entity no longer
-        # silently disables ET0; the context is also fetched when radiation needs
-        # the estimated fallback (outside STRÅNG coverage), so a forced api source
-        # outside coverage still gets radiation.
-        want_context = (
-            self._latitude is not None
-            and self._longitude is not None
-            and (
-                self._outdoor_data_source in {"auto", "open_meteo"}
-                or (
-                    self._radiation_source in {"auto", "api"}
-                    and not self._in_strang_coverage
-                )
-            )
-        )
-        if want_context:
+        if self._latitude is None or self._longitude is None:
+            self._radiation_status.update({
+                "available": False,
+                "last_error": "location_unavailable",
+                "consecutive_failures": self._radiation_status.get("consecutive_failures", 0) + 1,
+            })
+        else:
             refresh_due = (
                 self._last_open_meteo is None
                 or now - self._last_open_meteo >= timedelta(minutes=30)
             )
             if refresh_due:
                 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
                 context = await open_meteo_src.fetch_context(
-                    async_get_clientsession(self.hass), self._latitude, self._longitude, now
+                    async_get_clientsession(self.hass),
+                    self._latitude,
+                    self._longitude,
+                    now,
                 )
                 if context is not None:
                     self._open_meteo_context = context
                     self._last_open_meteo = now
+                    self._radiation_status.update({
+                        "available": True,
+                        "last_success": now.isoformat(),
+                        "last_error": None,
+                        "consecutive_failures": 0,
+                    })
+                else:
+                    self._radiation_status.update({
+                        "last_error": "request_failed",
+                        "consecutive_failures": self._radiation_status.get("consecutive_failures", 0) + 1,
+                    })
 
-        # Precip-forecast source is chosen separately from the context fetch above:
-        # a Home Assistant forecast entity wins when present; otherwise Open-Meteo's
-        # forecast; otherwise none.
-        use_ha_forecast = self._outdoor_data_source == "home_assistant" or (
-            self._outdoor_data_source == "auto" and bool(self._forecast_entity)
-        )
-        if use_ha_forecast and self._forecast_entity:
-            try:
-                forecast = await forecast_src.async_fetch_forecast(self.hass, self._forecast_entity, now)
-            except Exception:  # noqa: BLE001 - a forecast hiccup must not sink the cycle
-                _LOGGER.debug("Forecast fetch failed; continuing without it", exc_info=True)
-                forecast = []
-        elif self._outdoor_data_source in {"auto", "open_meteo"}:
-            forecast = self._open_meteo_context.forecast if self._open_meteo_context else []
-        else:
-            forecast = []
-
-        # Estimated Open-Meteo radiation serves any location STRÅNG cannot: outside
-        # Nordic coverage under auto, or a forced api source with no coverage
-        # (STRÅNG cannot satisfy it either). A dedicated series key keeps one
-        # provider from completing another's calendar day.
-        use_open_meteo_radiation = (
-            not used_radiation_entity
-            and self._radiation_source in {"auto", "api"}
-            and not self._in_strang_coverage
-            and self._open_meteo_context is not None
-            and now - self._open_meteo_context.fetched_at <= timedelta(hours=2)
-            and bool(self._open_meteo_context.estimated_par_series)
-        )
-        if use_open_meteo_radiation:
-            self._par_series_key = "global:par:open_meteo"
-            ctx = self._open_meteo_context
-            for ts, value in ctx.estimated_par_series:
-                sstore.append_reading(sdata, self._par_series_key, ts, value, now, dedupe=True)
-            latest_ts, latest_par = ctx.estimated_par_series[-1]
-            age_hours = max(0.0, (now.replace(tzinfo=None) - latest_ts.replace(tzinfo=None)).total_seconds() / 3600.0)
-            macro = _MacroReading(
-                par=latest_par, global_irradiance=ctx.shortwave_radiation,
-                diffuse_irradiance=ctx.diffuse_radiation,
-                direct_horizontal=None, direct_normal=None,
-                outdoor_lux=(ctx.shortwave_radiation * open_meteo_src.SHORTWAVE_TO_LUX if ctx.shortwave_radiation is not None else None),
-                data_stale=False, api_issue=False, age_hours=age_hours,
-                selected_data_time=latest_ts, stale=False,
+            context = self._open_meteo_context
+            context_fresh = (
+                context is not None
+                and now - context.fetched_at <= timedelta(hours=2)
             )
-            self._radiation_status.update({
-                "active_source": "open_meteo", "available": True,
-                "last_success": ctx.fetched_at.isoformat(), "last_error": None,
-                "latest_data_time": latest_ts.isoformat(), "data_age_hours": age_hours,
-                "sample_counts": {"estimated_par": len(ctx.estimated_par_series)},
-                "fallback": True, "estimated": True,
-                "day_source_lock": self._par_series_key,
-            })
-        elif not used_radiation_entity:
-            self._par_series_key = "global:par"
-            self._radiation_status["estimated"] = False
-            self._radiation_status["day_source_lock"] = self._par_series_key
+            if context_fresh and context.estimated_par_series:
+                self._par_series_key = "global:par:open_meteo"
+                for ts, value in context.estimated_par_series:
+                    sstore.append_reading(
+                        sdata, self._par_series_key, ts, value, now, dedupe=True
+                    )
+                latest_ts, historical_par = context.estimated_par_series[-1]
+                current_shortwave = context.shortwave_radiation
+                current_par = (
+                    current_shortwave * open_meteo_src.SHORTWAVE_TO_PAR
+                    if current_shortwave is not None
+                    else historical_par
+                )
+                age_hours = max(
+                    0.0,
+                    (now.replace(tzinfo=None) - latest_ts.replace(tzinfo=None)).total_seconds()
+                    / 3600.0,
+                )
+                macro = _MacroReading(
+                    par=current_par,
+                    global_irradiance=current_shortwave,
+                    diffuse_irradiance=context.diffuse_radiation,
+                    direct_horizontal=None,
+                    direct_normal=None,
+                    outdoor_lux=(
+                        current_shortwave * open_meteo_src.SHORTWAVE_TO_LUX
+                        if current_shortwave is not None
+                        else None
+                    ),
+                    data_stale=False,
+                    api_issue=False,
+                    age_hours=age_hours,
+                    selected_data_time=now,
+                    stale=False,
+                )
+                self._radiation_status.update({
+                    "available": True,
+                    "latest_data_time": latest_ts.isoformat(),
+                    "data_age_hours": age_hours,
+                    "sample_counts": {"estimated_par": len(context.estimated_par_series)},
+                    "shortwave_radiation": context.shortwave_radiation,
+                    "diffuse_radiation": context.diffuse_radiation,
+                    "day_source_lock": self._par_series_key,
+                })
+            else:
+                self._radiation_status["available"] = False
+                if not self._radiation_status.get("last_error"):
+                    self._radiation_status["last_error"] = "no_usable_data"
+        if self._open_meteo_context is not None:
+            forecast = self._open_meteo_context.forecast
 
         elevation = _sun_elevation(self.hass)
 
@@ -390,14 +343,13 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         """Cancel and drain background work before the config entry unloads."""
         tasks = [
             task
-            for task in (self._strang_task, self._enrichment_task)
+            for task in (self._enrichment_task,)
             if task is not None and not task.done()
         ]
         for task in tasks:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-        self._strang_task = None
         self._enrichment_task = None
 
     async def _enrich_and_notify(self, now) -> None:
@@ -405,79 +357,6 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         if did_refresh:
             self.async_update_listeners()
 
-    async def _refresh_strang(self, now) -> None:
-        """Refresh direct STRANG data with retryable failure handling.
-
-        Temporary network and empty-response failures keep API mode active. In
-        auto mode, three consecutive successful-but-unusable responses select
-        the HA sensor fallback for this runtime. Explicit API mode never silently
-        changes source.
-        """
-        # Throttle by ATTEMPT, not just success, so a failing STRÅNG backs off
-        # instead of retrying every coordinator cycle (hammering the endpoint is
-        # itself a cause of HTTP 403 rate-limiting). After a failure it retries on
-        # a shorter interval than the normal hourly refresh, so a transient outage
-        # recovers quickly without a per-cycle storm.
-        interval = STRANG_RETRY_INTERVAL if self._strang_failures else STRANG_INTERVAL
-        if self._last_strang is not None and (now - self._last_strang) < interval:
-            return
-        self._last_strang = now
-        self._radiation_status["last_attempt"] = now.isoformat()
-
-        from homeassistant.helpers.aiohttp_client import async_get_clientsession
-        from .sources import strang_api as sa
-
-        try:
-            session = async_get_clientsession(self.hass)
-            macro, series = await sa.fetch_macro(
-                session, self._latitude, self._longitude, now
-            )
-        except Exception as err:  # noqa: BLE001 - network best-effort
-            self._strang_failures += 1
-            self._radiation_status.update({
-                "available": self._strang_macro is not None,
-                "last_error": str(err) or type(err).__name__,
-                "consecutive_failures": self._strang_failures,
-            })
-            _LOGGER.debug("STRANG API fetch failed; API mode retained for retry", exc_info=True)
-            return
-
-        counts = {name: len(values) for name, values in series.items()}
-        self._radiation_status["sample_counts"] = counts
-        if not sa.has_usable_data(series):
-            self._strang_failures += 1
-            self._radiation_status.update({
-                "available": self._strang_macro is not None,
-                "last_error": "no_usable_data",
-                "consecutive_failures": self._strang_failures,
-            })
-            if self._radiation_source == "auto" and self._strang_failures >= 3:
-                _LOGGER.info("STRANG API repeatedly returned no usable data; using sensors")
-                self._use_strang_api = False
-                self._radiation_status.update({
-                    "active_source": "sensors",
-                    "fallback": True,
-                })
-            return
-
-        self._strang_failures = 0
-        self._strang_macro = macro
-        latest = macro.selected_data_time
-        self._radiation_status.update({
-            "active_source": "api",
-            "available": True,
-            "last_success": now.isoformat(),
-            "last_error": None,
-            "latest_data_time": latest.isoformat() if latest else None,
-            "data_age_hours": macro.age_hours,
-            "consecutive_failures": 0,
-            "fallback": False,
-        })
-        sdata = self._samples.data
-        for ts, value in series.get("par", []):
-            sstore.append_reading(sdata, "global:par", ts, value, now, dedupe=True)
-        self._samples.schedule_save()
-        self.async_update_listeners()
 
     async def _maybe_refresh_enrichment(self, now) -> bool:
         """Fetch species context once a day; keep per-provider API health fresh.
@@ -588,7 +467,7 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         plant_id: str,
         cfg: dict[str, Any],
         now,
-        macro: smhi_src.MacroReading,
+        macro: _MacroReading,
         forecast: list[Any],
     ) -> eng.EngineResult:
         ldata = self._learned.data
@@ -810,10 +689,10 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         sdata = self._samples.data
         local_lux = validate_series(sstore.raw_readings(sdata, f"plant:{plant_id}:lux"), LUX_SPEC)
         # Pair against the reliably-populated, source-correct PAR series (W/m²),
-        # NOT the fragile global:outdoor_lux. PAR is buffered by both STRÅNG and
-        # Open-Meteo under _par_series_key; outdoor_lux was not (STRÅNG derived it
-        # from a separate irradiance param that can be empty, and Open-Meteo wrote
-        # it to a source-suffixed key the read never used), which left indoor
+        # NOT the fragile global:outdoor_lux. PAR is buffered from Open-Meteo under _par_series_key. The local indoor
+        # lux reading is paired with the same outdoor PAR baseline, avoiding a
+        # separate outdoor-lux stream that could leave indoor observations empty.
+        # This previously left indoor
         # light unable to pair -> source: none. The k-window is a ratio, so the
         # outdoor unit only needs to be consistent between calibration and runtime
         # (both now use PAR).

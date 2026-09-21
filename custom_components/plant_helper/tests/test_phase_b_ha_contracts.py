@@ -89,11 +89,11 @@ def test_coordinator_covers_failure_isolation_and_persistence() -> None:
 def test_runtime_settings_reach_coordinator() -> None:
     init_text = source("__init__.py")
     coordinator = source("coordinator.py")
-    assert "radiation_source = _opt(CONF_RADIATION_SOURCE" in init_text
+    assert "CONF_RADIATION_SOURCE" not in init_text
+    assert "CONF_RADIATION_ENTITY" not in init_text
     assert "update_interval = _opt(CONF_UPDATE_INTERVAL" in init_text
     assert "update_interval_seconds=update_interval" in init_text
     assert "update_interval=timedelta(seconds=interval_seconds)" in coordinator
-
 
 def test_local_sensor_freshness_uses_source_timestamp() -> None:
     text = source("coordinator.py")
@@ -104,9 +104,9 @@ def test_local_sensor_freshness_uses_source_timestamp() -> None:
 
 def test_background_jobs_are_off_update_critical_path() -> None:
     text = source("coordinator.py")
-    assert "self._refresh_strang(now)" in text and "self._strang_task" in text
-    assert "self._enrich_and_notify(now)" in text and "self._enrichment_task" in text
-
+    assert "self._enrich_and_notify(now)" in text
+    assert "self._enrichment_task" in text
+    assert "_refresh_strang" not in text
 
 def test_manifest_and_translation_contract() -> None:
     manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
@@ -117,7 +117,8 @@ def test_manifest_and_translation_contract() -> None:
     assert manifest["integration_type"] == "hub"
     assert manifest["iot_class"] == "cloud_polling"
     assert strings == translation
-    radiation_label = strings["config"]["step"]["user"]["data"]["radiation_source"]
-    assert "STRÅNG in Nordic coverage" in radiation_label
-    assert "Open-Meteo radiation elsewhere" in radiation_label
-    assert "else your sensors" not in radiation_label
+    serialized = json.dumps(strings)
+    assert "radiation_source" not in serialized
+    assert "forecast_entity" not in serialized
+    assert "outdoor_data_source" not in serialized
+    assert "radiation_entity" not in serialized

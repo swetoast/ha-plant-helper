@@ -22,7 +22,9 @@ def test_normalizes_forecast_and_context():
     assert abs(c.et0_next_24h_mm - 2.4) < 1e-9
     assert c.vpd_next_24h_mean_kpa == 1.2
     assert c.precipitation_probability_max_24h == 80
-    assert c.regional_soil_moisture_3_to_9cm == 0.24
+    assert c.regional_soil_moisture_3_to_9cm is None
+    assert "soil_temperature_6cm" not in om.HOURLY_VARIABLES
+    assert "soil_moisture_3_to_9cm" not in om.HOURLY_VARIABLES
 
 def test_rejects_error_and_malformed_payloads():
     assert om.parse_response({"error": True}, NOW) is None

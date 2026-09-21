@@ -87,9 +87,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def _opt(key, default): return entry.options.get(key, entry.data.get(key, default))
     api=PlantDataAPI(async_get_clientsession(hass), perenual_key=_opt(CONF_PERENUAL_API_KEY,"") or None, storage=storage, trefle_key=_opt(CONF_TREFLE_API_KEY,"") or None, enable_trefle_fallback=_opt(CONF_ENABLE_TREFLE_FALLBACK,DEFAULT_ENABLE_TREFLE_FALLBACK), enable_inaturalist_enrichment=_opt(CONF_ENABLE_INATURALIST_ENRICHMENT,DEFAULT_ENABLE_INATURALIST_ENRICHMENT))
     plants=_coordinator_plants(storage.get_all_user_plants(),storage)
-    radiation_source = _opt(CONF_RADIATION_SOURCE, DEFAULT_RADIATION_SOURCE)
     update_interval = _opt(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-    coordinator=PlantHelperCoordinator(hass, learned=learned, samples=samples, plants=plants, strang_entities=None, forecast_entity=_opt(CONF_FORECAST_ENTITY,None), outdoor_data_source=_opt(CONF_OUTDOOR_DATA_SOURCE, DEFAULT_OUTDOOR_DATA_SOURCE), ozone_entity=_opt(CONF_OZONE_ENTITY,None), api=api, radiation_source=radiation_source, radiation_entity=_opt(CONF_RADIATION_ENTITY, None), update_interval_seconds=update_interval, latitude=hass.config.latitude, longitude=hass.config.longitude)
+    coordinator=PlantHelperCoordinator(hass, learned=learned, samples=samples, plants=plants, ozone_entity=_opt(CONF_OZONE_ENTITY,None), api=api, update_interval_seconds=update_interval, latitude=_opt(CONF_LATITUDE, hass.config.latitude), longitude=_opt(CONF_LONGITUDE, hass.config.longitude))
     runtime={"storage":storage,"learned":learned,"samples":samples,"api":api,"coordinator":coordinator,"plants":plants,"ozone_enabled":bool(_opt(CONF_OZONE_ENTITY,None)),"entry_id": entry.entry_id}
     try:
         await coordinator.async_config_entry_first_refresh()

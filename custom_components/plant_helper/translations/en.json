@@ -5,15 +5,12 @@
         "title": "Plant Helper",
         "description": "{info}",
         "data": {
-          "forecast_entity": "Forecast source (weather entity or a sensor with a forecast attribute)",
           "ozone_entity": "Ozone sensor (optional — enables the outdoor ozone advisory)",
           "perenual_api_key": "Perenual API key (optional — species context)",
           "trefle_api_key": "Trefle API token (optional — species context fallback)",
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
           "update_interval": "Update interval",
-          "radiation_source": "Radiation source (automatic = STRÅNG in Nordic coverage, estimated Open-Meteo radiation elsewhere)",
-          "outdoor_data_source": "Outdoor weather source",
           "humidity_sensor": "Air-humidity sensor (optional) — enables a dry-air advisory for humidity-loving plants; leave blank if not needed"
         }
       }
@@ -47,15 +44,13 @@
           "lux": "Light (lux) sensor",
           "battery": "Battery sensor (percentage or high/middle/low)",
           "rain_limit_mm": "Rain suppression threshold (mm, outdoor)",
-          "outdoor_data_source": "Outdoor weather source",
           "humidity_sensor": "Air-humidity sensor (optional) — enables a dry-air advisory for humidity-loving plants; leave blank if not needed"
         }
       },
       "edit_plant_select": {
         "title": "Edit a plant",
         "data": {
-          "plant_id": "Plant to edit",
-          "outdoor_data_source": "Outdoor weather source"
+          "plant_id": "Plant to edit"
         }
       },
       "edit_plant": {
@@ -72,7 +67,6 @@
           "lux": "Light (lux) sensor",
           "battery": "Battery sensor (percentage or high/middle/low)",
           "rain_limit_mm": "Rain suppression threshold (mm, outdoor)",
-          "outdoor_data_source": "Outdoor weather source",
           "humidity_sensor": "Air-humidity sensor (optional) — enables a dry-air advisory for humidity-loving plants; leave blank if not needed"
         }
       },
@@ -80,24 +74,19 @@
         "title": "Remove a plant",
         "description": "{info}",
         "data": {
-          "plant_id": "Plant to remove",
-          "outdoor_data_source": "Outdoor weather source"
+          "plant_id": "Plant to remove"
         }
       },
       "global_settings": {
         "title": "Global settings",
         "description": "{info}",
         "data": {
-          "forecast_entity": "Forecast source (weather entity or a sensor with a forecast attribute)",
           "ozone_entity": "Ozone sensor (optional — outdoor ozone advisory)",
           "perenual_api_key": "Perenual API key (optional)",
           "trefle_api_key": "Trefle API token (optional)",
           "enable_trefle_fallback": "Enable Trefle fallback",
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
-          "update_interval": "Update interval",
-          "radiation_source": "Radiation source (automatic = STRÅNG in Nordic coverage, estimated Open-Meteo radiation elsewhere)",
-          "outdoor_data_source": "Outdoor weather source",
-          "radiation_entity": "Radiation sensor (optional) — reuse an existing shortwave/solar radiation sensor in W/m² (e.g. Open-Meteo Weather's Solar Radiation) instead of the STRÅNG or built-in Open-Meteo fetch"
+          "update_interval": "Update interval"
         }
       }
     },

@@ -343,3 +343,14 @@ def test_coordinator_plants_tolerates_malformed_nested_storage(monkeypatch):
     assert plants["fern"]["placement"] == module.DEFAULT_PLACEMENT
     assert plants["palm"]["rain_limit_mm"] == module.DEFAULT_RAIN_LIMIT_MM
     assert plants["palm"]["custom_multiplier"] is None
+
+
+async def test_legacy_radiation_options_are_ignored(monkeypatch):
+    module = _load_module(monkeypatch)
+    hass = FakeHass()
+    entry = ConfigEntry(options={"radiation_source": "api", "radiation_entity": "sensor.old"})
+    await module.async_setup_entry(hass, entry)
+    coordinator = hass.data[module.DOMAIN][entry.entry_id]["coordinator"]
+    assert "radiation_source" not in coordinator.kwargs
+    assert "radiation_entity" not in coordinator.kwargs
+

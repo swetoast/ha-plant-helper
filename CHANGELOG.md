@@ -1,4 +1,42 @@
+## [4.4.2] - 2026-09-21
+
+### Changed
+
+- Open-Meteo is now the always-on shared radiation and forecast provider.
+- Uses Home Assistant coordinates by default with optional latitude and longitude overrides.
+- Requests 72 forecast hours with models=auto.
+- Legacy provider selectors are removed and stored legacy options are ignored.
+- Model-grid soil values are no longer requested.
+
 # Changelog
+
+## [4.4.1] - 2026-09-21
+
+### Changed
+
+- Limited Open-Meteo radiation requests to the values Plant Helper uses: hourly GHI for historical PAR and DLI, instantaneous GHI for current outdoor PAR and lux, and instantaneous DHI for diffuse-light and drying context.
+- Kept indoor light assessment based on each plant's local lux sensor paired with the shared outdoor PAR baseline.
+- Kept outdoor light assessment based on current horizontal GHI and the historical GHI-derived PAR series.
+- Removed unused DNI, direct, GTI, terrestrial-radiation, STRÅNG, and SMHI radiation code instead of exposing unused diagnostics or inventing window orientation.
+
+
+## [4.4.0] - 2026-09-21
+
+### Changed
+
+- Replaced the selectable radiation-source system with Open-Meteo as the sole radiation provider.
+- Current plant calculations now use instantaneous shortwave, direct, diffuse, direct-normal, tilted, and terrestrial radiation values.
+- Hourly averaged shortwave radiation remains the historical source for PAR-series and DLI integration.
+- Removed radiation source and radiation entity options while preserving the existing radiation issue entity ID.
+
+
+## [4.3.9] - 2026-09-21
+
+### Fixed
+
+- Separated the radiation-source selector from the optional radiation-entity picker in the configuration schema.
+- Ignored the legacy invalid `radiation_entity: api` value so automatic Nordic operation uses the STRÅNG API instead of looking for an entity named `api`.
+- Added regression tests for the corrected schema and legacy stored option.
 
 ## [4.3.8] - 2026-09-21
 

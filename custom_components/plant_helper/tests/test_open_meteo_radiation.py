@@ -7,7 +7,7 @@ from plant_helper.sources import open_meteo as om
 NOW=datetime(2026,8,28,12,tzinfo=timezone.utc)
 def payload():
     n=48; times=[f"2026-08-{27+i//24:02d}T{i%24:02d}:00" for i in range(n)]
-    return {"hourly":{"time":times,"shortwave_radiation":[400.0]*n,"diffuse_radiation":[100.0]*n,"weather_code":[0]*n,"precipitation":[0]*n,"precipitation_probability":[0]*n}}
+    return {"current":{"shortwave_radiation_instant":410.0,"diffuse_radiation_instant":110.0},"hourly":{"time":times,"shortwave_radiation":[400.0]*n,"diffuse_radiation":[100.0]*n,"weather_code":[0]*n,"precipitation":[0]*n,"precipitation_probability":[0]*n}}
 def test_shortwave_converts_to_estimated_par_and_lux():
     ctx=om.parse_response(payload(),NOW)
     assert ctx and len(ctx.estimated_par_series)==48
@@ -38,7 +38,8 @@ def test_radiation_histories_cannot_complete_each_other():
 
     source=(Path(__file__).resolve().parents[1]/"coordinator.py").read_text()
     assert 'self._par_series_key = "global:par:open_meteo"' in source
-    assert 'self._par_series_key = "global:par"' in source
-def test_explicit_modes_cannot_silently_select_open_meteo():
-    source=(Path(__file__).resolve().parents[1]/'coordinator.py').read_text()
-    assert 'self._radiation_source == "auto"' in source
+    assert 'self._par_series_key = "global:par"' not in source
+def test_instant_values_are_used_for_current_radiation():
+    ctx = om.parse_response(payload(), NOW)
+    assert ctx.shortwave_radiation == 410.0
+    assert ctx.diffuse_radiation == 110.0

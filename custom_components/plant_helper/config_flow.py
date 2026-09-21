@@ -31,26 +31,20 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_ENABLE_INATURALIST_ENRICHMENT,
     CONF_ENABLE_TREFLE_FALLBACK,
-    CONF_FORECAST_ENTITY,
-    CONF_OUTDOOR_DATA_SOURCE,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
     CONF_OZONE_ENTITY,
     CONF_PERENUAL_API_KEY,
-    CONF_RADIATION_ENTITY,
-    CONF_RADIATION_SOURCE,
     CONF_TREFLE_API_KEY,
     CONF_UPDATE_INTERVAL,
     DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
     DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_PLACEMENT,
-    DEFAULT_RADIATION_SOURCE,
-    DEFAULT_OUTDOOR_DATA_SOURCE,
     DEFAULT_PROFILE,
     DEFAULT_RAIN_LIMIT_MM,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     PLACEMENTS,
-    RADIATION_SOURCES,
-    OUTDOOR_DATA_SOURCES,
     PROFILES,
 )
 from .plant_config import (
@@ -153,8 +147,8 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
     o = options or {}
     return vol.Schema(
         {
-            _optional(CONF_FORECAST_ENTITY, o.get(CONF_FORECAST_ENTITY)):
-                selector.EntitySelector(selector.EntitySelectorConfig(domain=["weather", "sensor"])),
+            _optional(CONF_LATITUDE, o.get(CONF_LATITUDE)): selector.NumberSelector(selector.NumberSelectorConfig(min=-90, max=90, step=0.000001, mode="box")),
+            _optional(CONF_LONGITUDE, o.get(CONF_LONGITUDE)): selector.NumberSelector(selector.NumberSelectorConfig(min=-180, max=180, step=0.000001, mode="box")),
             _optional(CONF_OZONE_ENTITY, o.get(CONF_OZONE_ENTITY)):
                 selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optional(CONF_PERENUAL_API_KEY, o.get(CONF_PERENUAL_API_KEY)):
@@ -175,11 +169,6 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s", mode="box")
             ),
-            vol.Required(
-                CONF_RADIATION_ENTITY,
-    CONF_RADIATION_SOURCE,
-                default=o.get(CONF_RADIATION_SOURCE, DEFAULT_RADIATION_SOURCE),
-            ): _select(RADIATION_SOURCES),
             vol.Optional(
                 CONF_OUTDOOR_DATA_SOURCE,
                 default=o.get(CONF_OUTDOOR_DATA_SOURCE, DEFAULT_OUTDOOR_DATA_SOURCE),
