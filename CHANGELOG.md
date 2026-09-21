@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.6] - 2026-09-21
+
+### Fixed
+
+- Restored integration package and config-flow imports by importing `dataclass` before the coordinator's `_MacroReading` declaration.
+- Added regression coverage requiring the coordinator's dataclass decorator import.
+
 ## [4.4.5] - 2026-09-21
 
 - Deferred storage, learned-state, and sample-store imports until the options actions that use them so the initial config-flow handler stays import-light.

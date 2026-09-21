@@ -68,3 +68,9 @@ def test_readme_is_end_user_focused() -> None:
     for text in forbidden:
         assert text not in README
     assert README.count("[CHANGELOG.md](CHANGELOG.md)") == 1
+
+
+def test_coordinator_imports_dataclass_decorator() -> None:
+    coordinator = (ROOT / "coordinator.py").read_text()
+    assert "from dataclasses import dataclass" in coordinator
+    assert "@dataclass(" in coordinator
