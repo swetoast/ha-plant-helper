@@ -18,6 +18,7 @@ from . import thermal_model as th
 from . import dormancy as dorm
 from . import air_quality as aq
 from . import health as hp
+from . import humidity as hum
 from . import precedence as prec
 from .light_model import IndoorLightObservation
 from .thermal_model import ForecastHour
@@ -47,6 +48,9 @@ class EngineInputs:
     now: datetime
     placement: str = "indoor"
     profile: str = "balanced"
+    humidity_pct: float | None = None
+    prefers_humidity: bool = False
+    light_preference: str | None = None
     calibrating: bool = False
 
     # Learned constants (absent while calibrating).
@@ -72,6 +76,8 @@ class EngineInputs:
     # Macro / external.
     par_raw: list[RawReading] = field(default_factory=list)
     indoor_light_obs: list[IndoorLightObservation] = field(default_factory=list)
+    light_provisional: bool = False
+    light_reason: str | None = None
     diffuse_irradiance: float | None = None
     global_irradiance: float | None = None
     forecast: list[ForecastHour] = field(default_factory=list)
@@ -123,6 +129,10 @@ class EngineResult:
     learned_drying_rate: float | None = None
     forecast_precip_48h_mm: float | None = None
     forecast_precip_probability_max_48h: float | None = None
+    light_provisional: bool = False
+    light_reason: str | None = None
+    humidity: hum.HumidityAssessment | None = None
+    light_adequacy: lm.LightAdequacyAssessment | None = None
 
     def summary(self) -> dict[str, object]:
         """Flat dict for entity attributes / debugging."""
@@ -305,6 +315,7 @@ def compute(inp: EngineInputs) -> EngineResult:
             observations=inp.indoor_light_obs, k_by_band=inp.k_by_band,
             k_scalar=inp.k_scalar, max_gap=inp.macro_gap,
             adequacy_3d=inp.indoor_adequacy_3d, adequacy_7d=inp.indoor_adequacy_7d,
+            settled=not inp.light_provisional,
         )
 
     # --- Health + precedence ----------------------------------------------
@@ -313,7 +324,19 @@ def compute(inp: EngineInputs) -> EngineResult:
     health = hp.evaluate_health(
         moisture_score=moisture_score, light_score=light.score,
         thermal_score=thermal_score, calibrating=inp.calibrating,
-        dormant=dorm_res.dormant,
+        dormant=dorm_res.dormant, profile=inp.profile,
+    )
+
+    # Advisories (context only — never change health or the care action):
+    #  - ambient humidity vs a humidity-loving plant's need
+    #  - absolute light adequacy: is this indoor spot bright enough for the species
+    humidity_adv = hum.assess_humidity(
+        inp.humidity_pct, prefers_humidity=inp.prefers_humidity, placement=inp.placement,
+    )
+    light_adequacy = (
+        lm.species_light_adequacy(inp.indoor_light_obs, inp.light_preference)
+        if inp.placement != "outdoor"
+        else lm.LightAdequacyAssessment("no_reference", None, None, None)
     )
     precedence = prec.resolve_precedence(
         care_ok=True, care_reason="ok",
@@ -343,6 +366,10 @@ def compute(inp: EngineInputs) -> EngineResult:
         air_quality=air_quality,
         light_hours_today=light_hours_today,
         daylight_hours=inp.daylight_hours,
+        light_provisional=inp.light_provisional and inp.placement != "outdoor",
+        light_reason=inp.light_reason,
+        humidity=humidity_adv,
+        light_adequacy=light_adequacy,
         learned_watering_interval_days=learned_watering_interval_days,
         et0_next_24h_mm=inp.et0_next_24h_mm if inp.placement == "outdoor" else None,
         et0_drying_modifier=et0_modifier,

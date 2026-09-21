@@ -28,6 +28,9 @@ STRANG_BASE = (
     "https://opendata-download-metanalys.smhi.se/api/category/strang1g/version/1"
 )
 
+# SMHI open-data endpoints reject requests without a User-Agent (HTTP 403).
+USER_AGENT = "home-assistant-plant-helper (+https://github.com/swetoast/ha-plant-helper)"
+
 # Logical name -> STRÅNG parameter id (PAR is W/m^2 since 2017-03-29, matching
 # the engine's PAR_WH_TO_DLI conversion).
 PARAMETERS = {
@@ -179,9 +182,10 @@ async def fetch_series(
         params["from"] = from_
     if to:
         params["to"] = to
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     try:
         timeout = aiohttp.ClientTimeout(total=timeout_s)
-        async with session.get(url, params=params, timeout=timeout) as resp:
+        async with session.get(url, params=params, timeout=timeout, headers=headers) as resp:
             if resp.status != 200:
                 return []
             payload = await resp.json(content_type=None)

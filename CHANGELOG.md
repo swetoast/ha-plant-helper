@@ -5,6 +5,145 @@ All notable changes to Plant Helper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.1] - 2026-09-21
+
+### Fixed
+
+- Fixed the light-adequacy advisory (added in 4.3.0) being too aggressive, so it flagged healthy low-light plants such as snake plants as under-lit in a normal window. The species light floors were lowered to reflect real plant tolerance (a low-light plant genuinely survives well below a bright window), and the advisory now requires a real sample of bright-time observations before judging, so a single overcast reading or a thin buffer cannot trigger a false "under-lit". Validated against real side-by-side snake-plant sensors at 168 lx, which now correctly read as adequately lit while a genuinely dark spot or a light-hungry species is still flagged.
+
+## [4.3.0] - 2026-09-05
+
+### Added
+
+- Added absolute light-adequacy advisory. The indoor light model measured window transmission and obstruction (whether light is blocked) but could not tell whether a location is bright enough for the species at all, so an unobstructed but fundamentally dark spot read as normal. It now compares the plant's own median bright-time indoor illuminance against a species light floor (derived from the light preference) and advises when the spot is too dim — catching the common "wrong location entirely" cause of slow decline. Advisory only; it never changes the health score or the care action. Surfaced on the Light entity as `species_light_adequacy` and on the Care action entity as `light_location_advisory`.
+- Added an ambient-humidity advisory for humidity-loving indoor plants, using an optional air-humidity sensor (many soil probes already report one). It advises when the air is dry for a plant that prefers humidity, and stays silent for plants that do not (a succulent is never nagged) and for outdoor plants. Advisory only. Configured with a new optional humidity sensor and surfaced on the Care action entity as `humidity_advisory`.
+- Added profile-weighted health. The health score now weights its moisture, light, and thermal pillars by the plant profile — a dry-tolerant plant weights light higher and is less penalised by dry soil, a moisture-loving plant weights moisture higher — so the score reflects what actually matters for that plant. The balanced profile keeps the previous weighting.
+
+### Notes
+
+- All three additions follow the "a say, not the wheel" principle: they are advisory context derived from species data and an existing sensor, and none of them override the plant's calibrated measured behaviour or alter a care action.
+
+## [4.2.9] - 2026-09-05
+
+### Fixed
+
+- Fixed the Species enrichment showing another plant's data. The cache lookup used before an API call matched by substring, so a lookup for one plant returned a different cached plant whose species or common name merely contained the search text (for example "snake plant" matching "snake plant zeylanica", or "aloe" matching "aloe vera"). It now matches only an exact species or common name, so a plant can never display another plant's enrichment.
+- Fixed enrichment staying blank after a failed lookup. A transient provider or network failure on the first attempt left the plant with no enrichment, and the daily refresh throttle meant it was not retried for up to a day. Plants that are not yet resolved are now retried on a short interval (fifteen minutes) with a forced provider lookup, while already-resolved plants continue to refresh once a day.
+
+## [4.2.8] - 2026-09-05
+
+### Added
+
+- Added an optional radiation-sensor setting: point Plant Helper at an existing Home Assistant shortwave or global solar-radiation sensor in W/m² (for example the Open-Meteo Weather integration's "Solar Radiation" entity) and it becomes the radiation source. It is read each cycle, converted to photosynthetically active radiation, and used to build the light series — with the highest priority, so neither the STRÅNG API nor Plant Helper's own Open-Meteo fetch runs. This lets an installation that already pulls solar radiation reuse that data, avoids a second network dependency, and sidesteps STRÅNG entirely for users who prefer it. The active source reports as `radiation_entity`, and an unavailable sensor is reported rather than silently failing.
+
+## [4.2.7] - 2026-09-05
+
+### Fixed
+
+- Fixed the STRÅNG radiation source repeatedly reporting a problem and the diagnostic entities flapping between "problem" and "unavailable". Three causes:
+  - STRÅNG (and Open-Meteo) requests sent no `User-Agent` header. SMHI's open-data endpoints reject such requests with HTTP 403, so every fetch failed and the radiation source read as unusable. A descriptive User-Agent is now sent.
+  - A failing STRÅNG fetch did not update its throttle timestamp, so it retried on every coordinator cycle instead of backing off. That per-cycle hammering can itself trigger HTTP 403 rate-limiting. The attempt is now throttled up front, with a shorter retry interval after a failure (ten minutes) than the normal hourly refresh, so a transient outage still recovers quickly without a request storm.
+  - A Home Assistant forecast fetch that raised could fail the whole coordinator update and briefly mark every entity unavailable. The forecast fetch is now guarded so a hiccup degrades to no forecast instead of sinking the cycle.
+
+### Testing
+
+- Updated the STRÅNG resilience test to assert the failure backoff (shorter retry interval, throttled up front) rather than the previous per-cycle retry.
+
+## [4.2.6] - 2026-09-05
+
+### Fixed
+
+- Fixed indoor light obstruction detection, which had been silently disabled since 4.2.1. When indoor pairing moved to the photosynthetically active radiation (PAR) reference, the calibration floor was converted to PAR units but the separate obstruction bright-light threshold was left as a lux value (1000). PAR values (roughly 0–400 W/m²) never reach it, so the "bright outside" test never became true and obstruction could never fire. The threshold is now in PAR units. Obstruction again flags a genuine disproportionate drop (bright outdoors, dark indoors) against the settled window baseline, while continuing to stay silent for an unobstructed window, an overcast day, and the provisional calibration period.
+
+### Notes
+
+- Churn audit of the 4.2.x line: verified no unused imports, no half-threaded engine fields, and no other lux-versus-PAR unit mismatches introduced by the PAR pairing change. The obstruction threshold above was the only such regression.
+
+## [4.2.5] - 2026-09-05
+
+### Added
+
+- Added a diagnostic `reason` on the Temperature entity, mirroring the Light entity, so a thermal `unknown` state is explainable: `no_temp_data` when no soil-temperature sensor is linked (or its readings are invalid), `calibrating` while the normal temperature has not been learned yet, and `ok` when reporting a settled state.
+
+### Notes
+
+- Audited the temperature, moisture, battery, care-action, and health vectors against real Zigbee2MQTT soil-sensor values (moisture 96% and 46%, temperature 23.7°C and 22.4°C, battery `middle` and `100`). All behaved correctly: near-saturation moisture is not mistaken for overwatering, normal temperatures raise no false hazard (thermal hazard is weather-only by design), a categorical or percentage battery is read correctly while a critical battery pauses care, optional sensors absent degrade gracefully with health renormalising over the remaining pillars, and a calibrating plant raises no care nag.
+
+## [4.2.4] - 2026-09-05
+
+### Fixed
+
+- Fixed the light obstruction check so it never complains about a plant that simply has an unobstructed window. Obstruction is a relative shortfall against the learned window baseline, so it is now only evaluated once that baseline is settled; while the window coefficient is still provisional during calibration, the light level is reported but no obstruction problem is raised. An overcast day (dim outdoors) already could not read as obstruction, and a stable no-blinds window continues to read as normal. Blinds remain entirely optional and inferred from light; there is no blinds entity to configure and none is required.
+
+### Testing
+
+- Added obstruction tests: a no-blinds normal day, an overcast day, and a provisional (calibrating) baseline all correctly report no obstruction, and the engine suppresses obstruction while light is provisional.
+
+## [4.2.3] - 2026-09-05
+
+### Added
+
+- Added a diagnostic `reason` on the Light entity so a `none` state is explainable instead of silent. The reason distinguishes a missing light sensor (`no_light_sensor`), a missing radiation reference (`no_radiation_reference`), non-overlapping timestamps between the light and radiation series (`no_daylight_overlap`), a plant still gathering data (`calibrating`), and a working reading (`ok`). This resolves the ambiguity where a plant with no linked illuminance sensor looked identical to one that was merely still calibrating.
+
+### Changed
+
+- Changed the add-plant and edit-plant guidance to state that a light sensor is optional but that an indoor plant configured without one reports light as `no_light_sensor`, that outdoor plants need no light sensor because they use SMHI radiation, and that a single light sensor may be shared across nearby plants that occupy the same location.
+
+### Notes
+
+- Audited against real Zigbee2MQTT soil-sensor hardware. Confirmed: a categorical battery state such as `middle`, moisture near saturation, a dim indoor illuminance reading (around 500 lx), and device soil-sampling intervals of 30 and 600 seconds are all handled correctly. The two-hour sensor staleness window comfortably covers those sampling intervals, so readings are not treated as stale between device updates.
+- A dim indoor illuminance reading produces a valid window-transmission reading; the indoor light score reflects transmission and obstruction relative to the window, not absolute species light requirements, so an unobstructed dim location can still read as adequate.
+
+## [4.2.2] - 2026-09-02
+
+### Added
+
+- Added provisional indoor light during calibration. Once enough paired daylight observations exist, a live window-transmission coefficient is derived so the Light entity reports within a day instead of only after the full 14-day calibration completes. The reading is flagged with a `provisional` attribute so it is not mistaken for the settled value. Plants that were calibrated before the PAR change also report provisionally until they are recalibrated.
+
+### Fixed
+
+- Fixed reference evapotranspiration (ET0) drying being silently disabled whenever a Home Assistant forecast entity was configured in automatic mode. The Open-Meteo context that carries ET0, vapour-pressure deficit, and estimated radiation is now fetched independently of the precipitation-forecast source, so choosing a Home Assistant forecast no longer turns ET0 off.
+- Fixed estimated radiation fallback being unavailable when the radiation source was forced to the STRÅNG API outside Nordic coverage. Estimated Open-Meteo radiation now also serves a forced API source that has no coverage, so light and the daily light integral no longer dead-end for that configuration.
+- Fixed the per-series sample count cap silently undercutting the three-day time retention at fast update intervals. The cap is now sized from the retention window and the configured update interval, so a shorter interval no longer shrinks the buffer below the radiation lag and starves indoor-light pairing and complete-day light integrals.
+
+### Changed
+
+- Changed the outdoor-illuminance buffering to be removed entirely. It was written every cycle but read by nothing after indoor light moved to PAR pairing in 4.2.1.
+
+### Testing
+
+- Added provisional-light tests confirming that a calibrating indoor plant reports light, that a plant with too few observations does not fabricate a reading, and that outdoor plants are never flagged provisional.
+- Expanded the automated suite accordingly.
+
+## [4.2.1] - 2026-09-02
+
+### Fixed
+
+- Fixed indoor light never producing a value, with `light_score` and `source` remaining null even after a plant finished calibrating.
+  - Root cause: the indoor window-transmission pairing read an outdoor-illuminance series that was populated separately from, and less reliably than, the photosynthetically active radiation (PAR) series.
+  - Open-Meteo wrote outdoor illuminance under a source-suffixed key the reader never used, and STRÅNG derived it from a global-irradiance parameter that can be empty even when PAR is present.
+  - PAR, the daily light integral, and daily light-hours continued to work, so the failure was silent: indoor light produced no observations and reported no state.
+
+### Changed
+
+- Changed indoor window-transmission pairing to use the reliable, source-correct PAR series populated by both STRÅNG and Open-Meteo. The window coefficient is a ratio, so only consistency of the outdoor reference between calibration and runtime is required; both now use PAR.
+- Changed the dawn and dusk exclusion floor for window transmission from an illuminance value to a PAR value, aligned with the daylight threshold already used for light-hours.
+- Changed locked baselines to record the light reference unit. A baseline calibrated before this change withholds its window coefficient instead of applying an illuminance-era coefficient to PAR pairing, so indoor light reports calibrating rather than a false obstruction or low-light state.
+
+### Migration
+
+- Existing indoor plants should be recalibrated once to establish a PAR-based window coefficient. Newly added plants calibrate correctly without any action.
+
+### Testing
+
+- Added indoor PAR-pairing tests confirming that indoor illuminance now pairs against the PAR series and produces window-transmission observations.
+- Added light-reference migration-gate tests confirming that a pre-change baseline withholds its window coefficient while a new baseline applies it.
+- Updated the window-transmission floor tests to PAR units.
+
+### Known limitations
+
+- The former outdoor-illuminance buffering is retained but no longer read by any consumer, pending removal in a later release.
+
 ## [4.2.0] - 2026-08-28
 
 ### Added

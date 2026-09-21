@@ -169,9 +169,10 @@ async def fetch_context(session: Any, latitude: float, longitude: float, now: da
         "hourly": ",".join(HOURLY_VARIABLES), "forecast_days": 3,
         "timezone": "UTC", "wind_speed_unit": "kmh", "precipitation_unit": "mm",
     }
+    headers = {"User-Agent": "home-assistant-plant-helper", "Accept": "application/json"}
     try:
         import aiohttp
-        async with session.get(BASE_URL, params=params, timeout=aiohttp.ClientTimeout(total=15)) as response:
+        async with session.get(BASE_URL, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as response:
             if response.status != 200:
                 return None
             return parse_response(await response.json(content_type=None), now)

@@ -97,6 +97,10 @@ class PlantCareActionSensor(_PlantSensorBase):
             "primary_issue": r.precedence.primary_issue,
             "reason": r.precedence.reason,
             "severity": r.precedence.severity,
+            # Advisories — extra context that never changes the care action above.
+            "humidity_advisory": r.humidity.state if r.humidity else None,
+            "humidity_message": r.humidity.message if r.humidity else None,
+            "light_location_advisory": r.light_adequacy.state if r.light_adequacy else None,
         }
 
 
@@ -154,6 +158,10 @@ class PlantLightStateSensor(_PlantSensorBase):
         return {
             "light_score": r.light.score,
             "adequacy_ratio": r.light.adequacy_ratio,
+            "provisional": r.light_provisional,
+            "reason": r.light_reason or (r.light.reason if r.light else None),
+            "species_light_adequacy": r.light_adequacy.state if r.light_adequacy else None,
+            "species_light_message": r.light_adequacy.message if r.light_adequacy else None,
             "obstruction": r.light.obstruction,
             "source": r.light.source,
             "radiation_source": self.coordinator.radiation_status.get("active_source"),
@@ -183,6 +191,7 @@ class PlantThermalStateSensor(_PlantSensorBase):
         run = r.run_minutes or {}
         return {
             "drying_modifier": r.thermal.drying_modifier,
+            "reason": r.thermal.reason,
             "hazard": r.thermal.hazard,
             "hazard_type": r.thermal.hazard_type,
             "days_cold": round(run["cold"] / 1440.0, 2) if run.get("cold") else 0,

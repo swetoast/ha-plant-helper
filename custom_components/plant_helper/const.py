@@ -72,3 +72,9 @@ AUTHOR = "Plant Helper"
 CONF_RADIATION_SOURCE = "radiation_source"
 DEFAULT_RADIATION_SOURCE = "auto"
 RADIATION_SOURCES = ["auto", "api", "sensors"]
+
+# Optional: an existing Home Assistant shortwave/global-radiation sensor (W/m²),
+# e.g. the Open-Meteo Weather integration's "Solar Radiation" entity. When set it
+# is the radiation source (highest priority) — reused each cycle to build the PAR
+# series, avoiding both the STRÅNG API and Plant Helper's own Open-Meteo fetch.
+CONF_RADIATION_ENTITY = "radiation_entity"

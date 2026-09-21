@@ -118,33 +118,27 @@ class PlantStorage:
         return self._data["plants"].get(species)
 
     def get_plant_by_name(self, search_name: str) -> dict[str, Any] | None:
-        """Get plant data by common name or species.
+        """Get cached plant data by an EXACT species or common-name match.
 
-        This is used by the API wrapper before making API calls.
+        This is a cache key lookup used before making API calls, so it must be
+        exact. Substring matching here caused cross-contamination — a lookup for
+        "snake plant" would return a different cached plant whose species merely
+        contained that text (e.g. "snake plant zeylanica", or "aloe" matching
+        "aloe vera"), so one plant showed another plant's enrichment.
         """
         self._data.setdefault("plants", {})
 
         search_lower = search_name.lower().strip()
-
-        exact_name_match = None
-        partial_match = None
+        if not search_lower:
+            return None
 
         for species, plant_data in self._data["plants"].items():
-            common_name = str(plant_data.get("common_name", "")).lower()
-
-            if species.lower() == search_lower:
+            if species.lower().strip() == search_lower:
                 return plant_data
-
+            common_name = str(plant_data.get("common_name", "")).strip().lower()
             if common_name and common_name == search_lower:
-                exact_name_match = plant_data
-
-            if not partial_match and (
-                search_lower in species.lower()
-                or (common_name and search_lower in common_name)
-            ):
-                partial_match = plant_data
-
-        return exact_name_match or partial_match
+                return plant_data
+        return None
 
     def get_all_plants(self) -> dict[str, dict[str, Any]]:
         """Get all cached plants in the database."""

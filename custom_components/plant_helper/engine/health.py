@@ -24,6 +24,19 @@ WEIGHT_MOISTURE = 0.45
 WEIGHT_LIGHT = 0.30
 WEIGHT_THERMAL = 0.25
 
+# Per-profile weights: a succulent's health is dominated by not-overwatering and
+# by getting enough light; a moisture-loving plant's by moisture. The default
+# balanced profile keeps the original split. Each row sums to 1.0.
+PROFILE_WEIGHTS = {
+    "balanced": (WEIGHT_MOISTURE, WEIGHT_LIGHT, WEIGHT_THERMAL),
+    "dry_tolerant": (0.35, 0.40, 0.25),      # light-hungry, dryness less critical
+    "moisture_loving": (0.55, 0.25, 0.20),   # moisture is king
+}
+
+
+def _weights_for(profile: str | None) -> tuple[float, float, float]:
+    return PROFILE_WEIGHTS.get(profile or "balanced", PROFILE_WEIGHTS["balanced"])
+
 # Health state bands.
 EXCELLENT, GOOD, FAIR, POOR, CRITICAL = "excellent", "good", "fair", "poor", "critical"
 CALIBRATING = "calibrating"
@@ -60,6 +73,7 @@ def evaluate_health(
     thermal_score: float | None,
     calibrating: bool = False,
     dormant: bool = False,
+    profile: str | None = None,
 ) -> HealthResult:
     """Weighted health from available pillar scores.
 
@@ -70,10 +84,11 @@ def evaluate_health(
     if calibrating:
         return HealthResult(None, CALIBRATING, {})
 
+    w_moist, w_light, w_thermal = _weights_for(profile)
     pillars = (
-        ("moisture", moisture_score, WEIGHT_MOISTURE),
-        ("light", light_score, WEIGHT_LIGHT),
-        ("thermal", thermal_score, WEIGHT_THERMAL),
+        ("moisture", moisture_score, w_moist),
+        ("light", light_score, w_light),
+        ("thermal", thermal_score, w_thermal),
     )
     used = {name: max(0.0, min(100.0, s)) for name, s, _ in pillars if s is not None}
     total_weight = sum(w for name, s, w in pillars if s is not None)

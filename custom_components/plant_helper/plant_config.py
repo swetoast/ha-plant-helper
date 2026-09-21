@@ -14,6 +14,7 @@ from typing import Any
 CONF_NAME = "name"
 CONF_SPECIES = "species"
 CONF_MOISTURE = "soil_moisture"
+CONF_HUMIDITY = "humidity_sensor"  # distinct AIR-humidity sensor (advisory)
 CONF_SOIL_TEMP = "soil_temperature"
 CONF_LUX = "lux"
 CONF_BATTERY = "battery"

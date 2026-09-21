@@ -174,6 +174,16 @@ def summarize_enrichment(data: dict[str, Any] | None) -> dict[str, Any]:
     # Trefle botanical preferences (reference only).
     put("light_requirement_0_10", data.get("light"))
     put("soil_moisture_pref_0_10", data.get("soil_moisture"))
+    # Whether the species prefers humid air (Trefle atmospheric_humidity is 0-10;
+    # >= 6 indicates a humidity-loving plant). Feeds the humidity advisory.
+    atmos = data.get("atmospheric_humidity")
+    if atmos is None:
+        atmos = data.get("soil_moisture")  # some Trefle rows only carry this
+    try:
+        if atmos is not None and float(atmos) >= 6.0:
+            out["prefers_humidity"] = True
+    except (TypeError, ValueError):
+        pass
     put("min_temperature_c", data.get("minimum_temperature_c") or data.get("min_temperature_c"))
     put("max_temperature_c", data.get("maximum_temperature_c") or data.get("max_temperature_c"))
 

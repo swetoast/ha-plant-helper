@@ -13,7 +13,8 @@
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
           "update_interval": "Update interval",
           "radiation_source": "Radiation source (automatic = STRÅNG in Nordic coverage, estimated Open-Meteo radiation elsewhere)",
-          "outdoor_data_source": "Outdoor weather source"
+          "outdoor_data_source": "Outdoor weather source",
+          "humidity_sensor": "Air-humidity sensor (optional) — enables a dry-air advisory for humidity-loving plants; leave blank if not needed"
         }
       }
     },
@@ -46,7 +47,8 @@
           "lux": "Light (lux) sensor",
           "battery": "Battery sensor (percentage or high/middle/low)",
           "rain_limit_mm": "Rain suppression threshold (mm, outdoor)",
-          "outdoor_data_source": "Outdoor weather source"
+          "outdoor_data_source": "Outdoor weather source",
+          "humidity_sensor": "Air-humidity sensor (optional) — enables a dry-air advisory for humidity-loving plants; leave blank if not needed"
         }
       },
       "edit_plant_select": {
@@ -70,7 +72,8 @@
           "lux": "Light (lux) sensor",
           "battery": "Battery sensor (percentage or high/middle/low)",
           "rain_limit_mm": "Rain suppression threshold (mm, outdoor)",
-          "outdoor_data_source": "Outdoor weather source"
+          "outdoor_data_source": "Outdoor weather source",
+          "humidity_sensor": "Air-humidity sensor (optional) — enables a dry-air advisory for humidity-loving plants; leave blank if not needed"
         }
       },
       "remove_plant": {
@@ -93,7 +96,8 @@
           "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
           "update_interval": "Update interval",
           "radiation_source": "Radiation source (automatic = STRÅNG in Nordic coverage, estimated Open-Meteo radiation elsewhere)",
-          "outdoor_data_source": "Outdoor weather source"
+          "outdoor_data_source": "Outdoor weather source",
+          "radiation_entity": "Radiation sensor (optional) — reuse an existing shortwave/solar radiation sensor in W/m² (e.g. Open-Meteo Weather's Solar Radiation) instead of the STRÅNG or built-in Open-Meteo fetch"
         }
       }
     },

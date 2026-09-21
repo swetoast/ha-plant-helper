@@ -184,6 +184,7 @@ class ThermalAssessment:
     hazard_type: str | None
     below_band: bool = False       # instantaneous: ref < mean - deviation
     above_band: bool = False       # instantaneous: ref > mean + deviation
+    reason: str = "ok"             # diagnostic: why the state is what it is
 
 
 def evaluate_thermal(
@@ -212,8 +213,13 @@ def evaluate_thermal(
         )
 
     ref = mean_24h if mean_24h is not None else current_temp
-    if ref is None or thermal_mean is None:
-        return ThermalAssessment(UNKNOWN, None, modifier, False, None)
+    if ref is None:
+        # No usable temperature reading — no soil-temperature sensor is linked (or
+        # its readings aren't valid). Thermal is simply excluded from health.
+        return ThermalAssessment(UNKNOWN, None, modifier, False, None, reason="no_temp_data")
+    if thermal_mean is None:
+        # Have readings but no learned normal yet (still calibrating).
+        return ThermalAssessment(UNKNOWN, None, modifier, False, None, reason="calibrating")
 
     deviation = ref - thermal_mean
     score = max(0.0, 100.0 - abs(deviation) * 8.0)

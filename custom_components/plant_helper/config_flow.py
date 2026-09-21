@@ -35,6 +35,7 @@ from .const import (
     CONF_OUTDOOR_DATA_SOURCE,
     CONF_OZONE_ENTITY,
     CONF_PERENUAL_API_KEY,
+    CONF_RADIATION_ENTITY,
     CONF_RADIATION_SOURCE,
     CONF_TREFLE_API_KEY,
     CONF_UPDATE_INTERVAL,
@@ -56,6 +57,7 @@ from .plant_config import (
     CONF_BATTERY,
     CONF_CUSTOM_MULTIPLIER,
     CONF_LUX,
+    CONF_HUMIDITY,
     CONF_MOISTURE,
     CONF_NAME,
     CONF_PLANT_ID,
@@ -134,6 +136,7 @@ def _plant_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             # more of the model (see step description).
             moisture_field: _sensor(["moisture", "humidity"]),
             _optional(CONF_SOIL_TEMP, d.get(CONF_SOIL_TEMP)): _sensor(["temperature"]),
+            _optional(CONF_HUMIDITY, d.get(CONF_HUMIDITY)): _sensor(["humidity"]),
             _optional(CONF_LUX, d.get(CONF_LUX)): _sensor(["illuminance"]),
             _optional(CONF_BATTERY, d.get(CONF_BATTERY)): _sensor(),  # categorical ok
             vol.Optional(
@@ -173,7 +176,8 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
                 selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s", mode="box")
             ),
             vol.Required(
-                CONF_RADIATION_SOURCE,
+                CONF_RADIATION_ENTITY,
+    CONF_RADIATION_SOURCE,
                 default=o.get(CONF_RADIATION_SOURCE, DEFAULT_RADIATION_SOURCE),
             ): _select(RADIATION_SOURCES),
             vol.Optional(
@@ -467,12 +471,19 @@ class PlantHelperOptionsFlow(OptionsFlow):
 
 _ADD_INFO = (
     "Only the soil-moisture sensor is required. Adding soil temperature enables "
-    "temperature-compensated moisture and thermal alerts; a light sensor enables "
-    "indoor light adequacy and obstruction detection (outdoor plants use SMHI "
-    "instead); battery (percentage or high/middle/low) pauses care when critical. "
-    "Species is optional — it only fetches display context."
+    "temperature-compensated moisture and thermal alerts. A light sensor enables "
+    "indoor light adequacy and obstruction detection — an indoor plant with no "
+    "light sensor will report light as 'no_light_sensor', while outdoor plants use "
+    "SMHI radiation instead and need no light sensor. You can reuse one light "
+    "sensor across nearby plants that share a location (for example a windowsill). "
+    "Battery (percentage or high/middle/low) pauses care when critical. Species is "
+    "optional — it only fetches display context."
 )
-_EDIT_INFO = "Change this plant's sensors and settings. The form is pre-filled with its current configuration."
+_EDIT_INFO = (
+    "Change this plant's sensors and settings. The form is pre-filled with its "
+    "current configuration. An indoor plant needs a light sensor for light "
+    "monitoring; a single light sensor may be shared by nearby plants."
+)
 _REMOVE_INFO = "Removing a plant permanently deletes its device, entities, calibration progress, learned baselines, timers, history, and stored samples."
 _SETTINGS_INFO = (
     "Global settings shared by all plants. Forecast source enables rain "

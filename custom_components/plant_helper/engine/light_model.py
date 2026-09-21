@@ -37,7 +37,12 @@ HIGHER_RATIO = 1.10
 ADEQUATE_RATIO = 0.85
 # Below this, during bright outdoor conditions, a shortfall reads as obstruction.
 OBSTRUCTION_RATIO = 0.60
-OUTDOOR_BRIGHT_FLOOR = 1000.0
+# Outdoor PAR (W/m^2) above which we consider it solidly daytime — bright enough
+# outside that a dark room implies obstruction. In PAR units to match the PAR
+# reference the indoor pairing uses (was a 1000-lux value before the PAR switch,
+# which PAR never reaches, silently disabling obstruction). Set well above the
+# 10 W/m^2 dawn/dusk floor so overcast dawn/dusk never counts as "bright".
+OUTDOOR_BRIGHT_FLOOR = 40.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +52,7 @@ class LightAssessment:
     adequacy_ratio: float | None
     obstruction: bool
     source: str                    # "dli" | "window" | "none"
+    reason: str = "ok"             # diagnostic: why the state is what it is
 
 
 def _score_from_ratio(ratio: float) -> float:
@@ -63,7 +69,8 @@ def evaluate_light_outdoor(
 ) -> LightAssessment:
     """Outdoor light state from DLI vs the learned baseline."""
     if today_dli is None or dli_target is None or dli_target <= 0:
-        return LightAssessment(UNKNOWN, None, None, False, "none")
+        reason = "no_radiation" if today_dli is None else "calibrating"
+        return LightAssessment(UNKNOWN, None, None, False, "none", reason)
 
     ratio = today_dli / dli_target
     score = _score_from_ratio(ratio)
@@ -143,20 +150,40 @@ def evaluate_light_indoor(
     daily_target_hours: float | None = None,
     adequacy_3d: float | None = None,
     adequacy_7d: float | None = None,
+    settled: bool = True,
 ) -> LightAssessment:
-    """Indoor light state via the window-efficiency ratio + obstruction check."""
-    if not observations or (k_by_band is None and k_scalar is None):
-        return LightAssessment(UNKNOWN, None, None, False, "none")
+    """Indoor light state via the window-efficiency ratio + obstruction check.
+
+    Obstruction is a *relative* drop against the learned window baseline, so it is
+    only reported when that baseline is settled (`settled=True`). While the window
+    coefficient is still provisional (calibration), the level is reported but no
+    obstruction 'problem' is raised — an unsettled baseline cannot reliably tell an
+    obstruction from a plain dim day, and a plant with no blinds must never be
+    complained about.
+    """
+    if not observations:
+        # No paired daylight observations at all: either no light (lux) sensor is
+        # linked, no outdoor radiation reference is available yet, or their
+        # timestamps do not overlap. The coordinator adds which of these applies.
+        return LightAssessment(UNKNOWN, None, None, False, "none", "no_observations")
+    if k_by_band is None and k_scalar is None:
+        # Observations exist but no window coefficient yet (still gathering data /
+        # too few daylight hours for even a provisional value).
+        return LightAssessment(UNKNOWN, None, None, False, "none", "calibrating")
 
     observed, expected, bright_obs, bright_exp = indoor_light_hours(
         observations, k_by_band, k_scalar, max_gap
     )
     if expected <= 0:
-        return LightAssessment(UNKNOWN, None, None, False, "window")
+        return LightAssessment(UNKNOWN, None, None, False, "window", "no_daylight_yet")
 
     # Obstruction: during bright outdoor conditions the room got far less than
     # the window should pass -> something is blocking it (disproportionate drop).
-    obstruction = bright_exp > 0 and (bright_obs / bright_exp) < OBSTRUCTION_RATIO
+    # Only trustworthy against a settled baseline; suppressed while provisional so
+    # a no-blinds window is never falsely flagged during calibration.
+    obstruction = (
+        settled and bright_exp > 0 and (bright_obs / bright_exp) < OBSTRUCTION_RATIO
+    )
 
     # Adequacy against the learned indoor daily light target if available,
     # otherwise against the K-expected total (i.e. "did the room get what this
@@ -185,3 +212,72 @@ def evaluate_light_indoor(
     else:
         state = LOWER_DAILY_LIGHT
     return LightAssessment(state, score, ratio, False, "window")
+
+
+# --- absolute light adequacy from species preference (advisory only) ------
+#
+# The window-transmission model above answers "is the plant getting all the light
+# this window offers?" (obstruction). It cannot answer "is this location bright
+# enough for this species at all?" — an unobstructed but fundamentally dark corner
+# reads normal. This advisory closes that gap using the species light preference,
+# staying "a say, not the wheel": it never changes health or a care action, it
+# only surfaces that the spot itself may be wrong.
+
+# Approximate minimum sustained bright-time indoor illuminance (lux) below which a
+# plant of each preference will genuinely decline (not merely "less than ideal").
+# Deliberately conservative — low-light plants (snake, ZZ, pothos) tolerate very
+# dim spots, so this must not nag a healthy plant in a normal Nordic window. The
+# advisory is for "this spot is too dark for this plant to survive here", not for
+# "brighter would be nicer".
+LIGHT_FLOOR_LUX = {
+    "low_light": 100.0,        # snake/ZZ/pothos survive well below a bright window
+    "bright_indirect": 500.0,  # most tropicals struggle when persistently dimmer
+    "full_sun": 1500.0,        # succulents/cacti etiolate below this
+}
+
+# Require a real sample of bright-time observations before advising, so a single
+# overcast reading (or a thin buffer) never triggers a false "under_lit".
+MIN_BRIGHT_OBS_FOR_ADEQUACY = 6
+
+
+@dataclass(frozen=True, slots=True)
+class LightAdequacyAssessment:
+    state: str                       # ok | under_lit | no_reference
+    daytime_lux: float | None
+    required_lux: float | None
+    message: str | None
+
+    @property
+    def active(self) -> bool:
+        return self.state == "under_lit"
+
+
+def species_light_adequacy(
+    observations: Sequence[IndoorLightObservation],
+    light_preference: str | None,
+    *,
+    bright_floor: float = OUTDOOR_BRIGHT_FLOOR,
+) -> LightAdequacyAssessment:
+    """Advisory: is this indoor spot bright enough for the species at all?
+
+    Uses the plant's own median indoor illuminance during bright outdoor
+    conditions versus a species light floor. `no_reference` when there is no
+    species light preference or not enough bright-time data yet.
+    """
+    if not light_preference or light_preference not in LIGHT_FLOOR_LUX:
+        return LightAdequacyAssessment("no_reference", None, None, None)
+    bright = sorted(o.indoor_lux for o in observations if o.outdoor_lux >= bright_floor)
+    if len(bright) < MIN_BRIGHT_OBS_FOR_ADEQUACY:
+        # Not enough bright-time data to judge the location fairly yet.
+        return LightAdequacyAssessment("no_reference", None, None, None)
+    daytime_lux = bright[len(bright) // 2]  # median bright-time indoor lux
+    required = LIGHT_FLOOR_LUX[light_preference]
+    if daytime_lux < required:
+        pref = light_preference.replace("_", " ")
+        return LightAdequacyAssessment(
+            "under_lit", daytime_lux, required,
+            f"This spot gives about {daytime_lux:.0f} lx in bright conditions, "
+            f"but a {pref} plant wants roughly {required:.0f} lx — a brighter "
+            "location or a grow light would help.",
+        )
+    return LightAdequacyAssessment("ok", daytime_lux, required, None)
