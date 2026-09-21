@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .util import to_float
+
 # Advisory levels
 NONE = "none"
 ELEVATED = "elevated"
@@ -53,16 +55,17 @@ def assess_air_quality(
     """
     if placement != "outdoor":
         return AirQualityAssessment(NOT_APPLICABLE, ozone_ugm3, None)
-    if ozone_ugm3 is None:
+    ozone = to_float(ozone_ugm3)
+    if ozone is None or ozone < 0.0:
         return AirQualityAssessment(NONE, None, None)
-    if ozone_ugm3 >= high_ugm3:
+    if ozone >= high_ugm3:
         return AirQualityAssessment(
-            HIGH, ozone_ugm3,
+            HIGH, ozone,
             "High ground-level ozone — foliar damage likely for sensitive plants.",
         )
-    if ozone_ugm3 >= elevated_ugm3:
+    if ozone >= elevated_ugm3:
         return AirQualityAssessment(
-            ELEVATED, ozone_ugm3,
+            ELEVATED, ozone,
             "Elevated ground-level ozone — sensitive foliage may show stress.",
         )
-    return AirQualityAssessment(NONE, ozone_ugm3, None)
+    return AirQualityAssessment(NONE, ozone, None)

@@ -236,3 +236,10 @@ def test_parse_iso_only_normalizes_a_trailing_z():
     parsed = parse_iso("2026-09-21T12:30:00Z")
     assert parsed is not None and parsed.utcoffset() is not None
     assert parse_iso("2026-Z9-21T12:30:00Z") is None
+
+
+def test_sample_usability_rejects_non_finite_values():
+    """All time-series models share one finite-value usability boundary."""
+    assert Sample(T0, float("nan"), True).usable is False
+    assert Sample(T0, float("inf"), True).usable is False
+    assert Sample(T0, 0.0, True).usable is True

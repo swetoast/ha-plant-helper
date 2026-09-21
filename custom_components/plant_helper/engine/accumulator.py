@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import math
 from statistics import median
 from typing import Callable, Iterable, Iterator, Sequence
 
@@ -43,7 +44,12 @@ class Sample:
 
     @property
     def usable(self) -> bool:
-        return self.valid and self.value is not None
+        if not self.valid or self.value is None:
+            return False
+        try:
+            return math.isfinite(float(self.value))
+        except (TypeError, ValueError):
+            return False
 
 
 @dataclass(frozen=True, slots=True)

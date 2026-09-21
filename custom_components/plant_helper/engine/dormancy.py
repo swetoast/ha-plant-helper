@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .util import to_float
+
 # Enter when both 30-day slopes are below these (units per day). PAR in W/m^2,
 # soil temp in deg C. Declines are negative slopes.
 ENTER_PAR_SLOPE = -2.0
@@ -56,7 +58,9 @@ def evaluate_dormancy(
     Missing macro or micro data holds the current state (we never flip on a
     half-signal). Returns whether the state changed this evaluation.
     """
-    if par_slope_30d is None or soil_temp_slope_30d is None:
+    par_slope = to_float(par_slope_30d)
+    temp_slope = to_float(soil_temp_slope_30d)
+    if par_slope is None or temp_slope is None:
         return DormancyResult(currently_dormant, False, "insufficient_data")
 
     # Dwell guard: hold a recently-changed state regardless of trend.
@@ -64,11 +68,11 @@ def evaluate_dormancy(
         return DormancyResult(currently_dormant, False, "dwell_hold")
 
     if not currently_dormant:
-        if par_slope_30d <= enter_par and soil_temp_slope_30d <= enter_temp:
+        if par_slope <= enter_par and temp_slope <= enter_temp:
             return DormancyResult(True, True, "entered_declining_light_and_cooling")
         return DormancyResult(False, False, "active")
 
     # currently dormant -> only exit on clear recovery in BOTH signals.
-    if par_slope_30d >= exit_par and soil_temp_slope_30d >= exit_temp:
+    if par_slope >= exit_par and temp_slope >= exit_temp:
         return DormancyResult(False, True, "exited_recovering_light_and_warming")
     return DormancyResult(True, False, "dormant")

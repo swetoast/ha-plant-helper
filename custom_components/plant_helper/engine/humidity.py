@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .util import to_float
+
 OK = "ok"
 LOW = "low"
 VERY_LOW = "very_low"
@@ -52,9 +54,8 @@ def assess_humidity(
     """
     if placement != "indoor" or humidity_pct is None:
         return HumidityAssessment(NOT_APPLICABLE, humidity_pct, None)
-    try:
-        h = float(humidity_pct)
-    except (TypeError, ValueError):
+    h = to_float(humidity_pct)
+    if h is None:
         return HumidityAssessment(NOT_APPLICABLE, None, None)
     if not (0.0 <= h <= 100.0):
         return HumidityAssessment(NOT_APPLICABLE, None, None)

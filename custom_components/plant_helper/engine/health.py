@@ -18,6 +18,7 @@ Design rules honoured:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 # Pillar weights (moisture is the primary care engine, design.md section 7).
 WEIGHT_MOISTURE = 0.45
@@ -90,15 +91,23 @@ def evaluate_health(
         ("light", light_score, w_light),
         ("thermal", thermal_score, w_thermal),
     )
-    used = {name: max(0.0, min(100.0, s)) for name, s, _ in pillars if s is not None}
-    total_weight = sum(w for name, s, w in pillars if s is not None)
+    finite_pillars = [
+        (name, float(score), weight)
+        for name, score, weight in pillars
+        if score is not None and math.isfinite(float(score))
+    ]
+    used = {
+        name: max(0.0, min(100.0, score))
+        for name, score, _ in finite_pillars
+    }
+    total_weight = sum(weight for _, _, weight in finite_pillars)
 
     if not used or total_weight <= 0:
         # No measurable pillar at all -> neutral, not a penalty.
         return HealthResult(None, CALIBRATING, {})
 
     weighted = sum(
-        used[name] * w for name, s, w in pillars if s is not None
+        used[name] * weight for name, _, weight in finite_pillars
     ) / total_weight
     score = weighted
 

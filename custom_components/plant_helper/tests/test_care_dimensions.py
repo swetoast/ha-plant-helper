@@ -43,3 +43,39 @@ bright=[lm.IndoorLightObservation(t,40.0,3000.0,200.0) for _ in range(8)]
 check("3000 lx OK for full_sun", lm.species_light_adequacy(bright,"full_sun").state=="ok")
 
 print("\nALL CARE-DIMENSION TESTS PASSED")
+
+
+def test_care_dimensions_reject_non_finite_inputs():
+    """NaN must never become a healthy score or a silent actionable reading."""
+    from plant_helper.engine import air_quality as aq
+    from plant_helper.engine import dormancy as dorm
+    from plant_helper.engine import health
+    from plant_helper.engine import humidity
+
+    result = health.evaluate_health(
+        moisture_score=float("nan"),
+        light_score=50.0,
+        thermal_score=None,
+    )
+    assert result.score == 50.0
+    assert result.components == {"light": 50.0}
+
+    humidity_result = humidity.assess_humidity(
+        float("nan"), prefers_humidity=True, placement="indoor"
+    )
+    assert humidity_result.state == humidity.NOT_APPLICABLE
+    assert humidity_result.humidity_pct is None
+
+    ozone_result = aq.assess_air_quality(
+        ozone_ugm3=float("nan"), placement="outdoor"
+    )
+    assert ozone_result.advisory == aq.NONE
+    assert ozone_result.ozone_ugm3 is None
+
+    dormancy_result = dorm.evaluate_dormancy(
+        par_slope_30d=float("nan"),
+        soil_temp_slope_30d=-0.2,
+        currently_dormant=False,
+        days_in_state=30,
+    )
+    assert dormancy_result.reason == "insufficient_data"

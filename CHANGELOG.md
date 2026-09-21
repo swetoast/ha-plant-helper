@@ -5,6 +5,19 @@ All notable changes to Plant Helper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.5] - 2026-09-21
+
+### Fixed
+
+- Made the shared time-series sample boundary reject NaN and infinite values even when a caller incorrectly marks the sample valid.
+- Excluded non-finite health pillars instead of allowing NaN to clamp into a false perfect score.
+- Rejected non-finite ambient-humidity, ozone, and dormancy-trend inputs in their individual care models.
+- Rejected negative ozone values as invalid source data.
+
+### Testing
+
+- Added regression coverage for non-finite values across time-series, health, humidity, air-quality, and dormancy models.
+
 ## [4.3.4] - 2026-09-21
 
 ### Fixed
