@@ -221,7 +221,7 @@ class PlantHelperConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> "PlantHelperOptionsFlow":
-        return PlantHelperOptionsFlow(config_entry)
+        return PlantHelperOptionsFlow()
 
 
 # --- options flow (lifecycle management) ----------------------------------
@@ -229,14 +229,13 @@ class PlantHelperConfigFlow(ConfigFlow, domain=DOMAIN):
 class PlantHelperOptionsFlow(OptionsFlow):
     """Add / edit / remove plants and edit global settings."""
 
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        self._entry = config_entry
+    def __init__(self) -> None:
         self._edit_id: str | None = None
 
     # -- helpers --
     def _runtime(self) -> dict[str, Any]:
         """The live per-entry runtime data (storage, learned, samples, coordinator)."""
-        return self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {})
+        return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
 
     async def _load_storage(self) -> PlantStorage:
         """Return the RUNNING storage instance so mutations use one source of truth.
@@ -260,10 +259,10 @@ class PlantHelperOptionsFlow(OptionsFlow):
         options-update listener fires once — deterministically, and without the
         double reload a manual reload-plus-changed-options would cause.
         """
-        options = {**self._entry.options}
+        options = {**self.config_entry.options}
         if extra:
             options.update(extra)
-        options["_rev"] = int(self._entry.options.get("_rev", 0)) + 1
+        options["_rev"] = int(self.config_entry.options.get("_rev", 0)) + 1
         return self.async_create_entry(title="", data=options)
 
     def _remove_device(self, plant_id: str) -> None:
@@ -464,7 +463,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
             return self._finish(user_input)
         return self.async_show_form(
             step_id="global_settings",
-            data_schema=_global_schema(self._entry.options),
+            data_schema=_global_schema(self.config_entry.options),
             description_placeholders={"info": _SETTINGS_INFO},
         )
 

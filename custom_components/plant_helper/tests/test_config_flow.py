@@ -102,3 +102,24 @@ check("empty name -> plant", pc.unique_plant_id(set(), "") == "plant")
 check("punctuation stripped", pc.unique_plant_id(set(), "Fern (kitchen)!") == "fern_kitchen")
 
 print("\nALL CONFIG-FLOW LOGIC TESTS PASSED")
+
+
+def test_options_flow_uses_home_assistant_config_entry_property():
+    """OptionsFlow must use the HA-provided config_entry property on 2025.12+."""
+    import ast
+    from pathlib import Path
+
+    path = Path(__file__).parents[1] / "config_flow.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    options = next(
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "PlantHelperOptionsFlow"
+    )
+    init = next(
+        node for node in options.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "__init__"
+    )
+    assert [arg.arg for arg in init.args.args] == ["self"]
+    text = path.read_text(encoding="utf-8")
+    assert "self._entry" not in text
+    assert "self.config_entry" in text
