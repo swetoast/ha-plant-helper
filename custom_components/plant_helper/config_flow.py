@@ -22,10 +22,10 @@ import voluptuous as vol
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
+    ConfigFlowResult,
     OptionsFlow,
 )
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 
 from .const import (
@@ -182,7 +182,7 @@ class PlantHelperConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
 
@@ -236,7 +236,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         await storage.async_load()
         return storage
 
-    def _finish(self, extra: dict[str, Any] | None = None) -> FlowResult:
+    def _finish(self, extra: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Close the options flow and trigger exactly one reload.
 
         Plant data lives in storage, so a mutation wouldn't otherwise change the
@@ -304,7 +304,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         return state.state if state is not None else None
 
     # -- menu --
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
             menu_options=[
@@ -316,7 +316,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         )
 
     # -- add --
-    async def async_step_add_plant(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_add_plant(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             errors = validate_plant(user_input, moisture_state=self._moisture_state(user_input))
@@ -348,7 +348,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
             await storage.async_add_plant(species, {"common_name": species})
 
     # -- edit --
-    async def async_step_edit_plant_select(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_edit_plant_select(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         storage = await self._load_storage()
         plants = storage.get_all_user_plants()
         if not plants:
@@ -361,7 +361,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
             data_schema=vol.Schema({vol.Required(CONF_PLANT_ID): _select(sorted(plants))}),
         )
 
-    async def async_step_edit_plant(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_edit_plant(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         storage = await self._load_storage()
         record = storage.get_user_plant(self._edit_id) if self._edit_id else None
         if not record:
@@ -424,7 +424,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         )
 
     # -- remove --
-    async def async_step_remove_plant(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_remove_plant(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         storage = await self._load_storage()
         plants = storage.get_all_user_plants()
         if not plants:
@@ -450,7 +450,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
         )
 
     # -- global settings --
-    async def async_step_global_settings(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_global_settings(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             return self._finish(user_input)
         return self.async_show_form(

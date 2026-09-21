@@ -129,8 +129,6 @@ class PlantHelperCoordinator(DataUpdateCoordinator):
         learned: Any,
         samples: Any,
         plants: dict[str, dict[str, Any]],
-        forecast_entity: str | None,
-        outdoor_data_source: str = "auto",
         ozone_entity: str | None = None,
         api: Any = None,
         update_interval_seconds: int = 300,

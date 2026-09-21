@@ -142,3 +142,35 @@ def test_location_fields_have_translations() -> None:
             fields = document[flow]["step"][step]["data"]
             assert fields["latitude"]
             assert fields["longitude"]
+
+
+def test_config_flow_uses_current_home_assistant_result_type() -> None:
+    """Prevent an import-time invalid-handler failure on Home Assistant 2025.12."""
+    text = (ROOT / "config_flow.py").read_text(encoding="utf-8")
+    assert "ConfigFlowResult" in text
+    assert "from homeassistant.data_entry_flow import FlowResult" not in text
+    assert "-> FlowResult" not in text
+
+
+def test_options_flow_is_defined_once_and_uses_managed_config_entry() -> None:
+    """Options remain in config_flow.py and use HA's managed config_entry property."""
+    text = (ROOT / "config_flow.py").read_text(encoding="utf-8")
+    assert text.count("class PlantHelperOptionsFlow(OptionsFlow):") == 1
+    assert "return PlantHelperOptionsFlow()" in text
+    assert "self.config_entry =" not in text
+    assert not (ROOT / "options.py").exists()
+
+
+def test_removed_provider_contract_is_absent_from_runtime_modules() -> None:
+    """Legacy provider selection must not leak through const or coordinator."""
+    const_text = (ROOT / "const.py").read_text(encoding="utf-8")
+    coordinator_text = (ROOT / "coordinator.py").read_text(encoding="utf-8")
+    for name in (
+        "CONF_FORECAST_ENTITY",
+        "CONF_OUTDOOR_DATA_SOURCE",
+        "DEFAULT_OUTDOOR_DATA_SOURCE",
+        "OUTDOOR_DATA_SOURCES",
+    ):
+        assert name not in const_text
+    assert "forecast_entity:" not in coordinator_text
+    assert "outdoor_data_source:" not in coordinator_text

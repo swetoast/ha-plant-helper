@@ -44,10 +44,6 @@ CONF_BATTERY_ENTITY = "battery_entity"
 CONF_RAIN_LIMIT_MM = "rain_limit_mm"
 CONF_LATITUDE = "latitude"
 CONF_LONGITUDE = "longitude"
-CONF_FORECAST_ENTITY = "forecast_entity"  # legacy, ignored
-CONF_OUTDOOR_DATA_SOURCE = "outdoor_data_source"  # legacy, ignored
-DEFAULT_OUTDOOR_DATA_SOURCE = "auto"
-OUTDOOR_DATA_SOURCES = ["auto", "home_assistant", "open_meteo", "disabled"]
 
 PLACEMENTS = ["indoor", "outdoor"]
 PROFILES = ["dry_tolerant", "balanced", "moisture_loving", "custom"]

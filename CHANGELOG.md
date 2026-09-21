@@ -1,3 +1,11 @@
+## [4.4.4] - 2026-09-21
+
+### Fixed
+
+- Restored config-flow loading on Home Assistant 2025.12 by using `ConfigFlowResult` from `homeassistant.config_entries` instead of the removed `FlowResult` import.
+- Removed obsolete outdoor-source constants and unused coordinator constructor arguments.
+- Added regression checks for config-flow imports, options-flow ownership, and coordinator/constant consistency.
+
 ## [4.4.3] - 2026-09-21
 
 ### Fixed
