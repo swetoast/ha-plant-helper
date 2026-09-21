@@ -23,7 +23,7 @@
       },
       "add_plant": {
         "title": "Add a plant",
-        "description": "{info}",
+        "description": "Only the soil-moisture sensor is required. Adding soil temperature enables temperature-compensated moisture and thermal alerts. A light sensor enables indoor light adequacy and obstruction detection. An indoor plant with no light sensor reports light as 'no_light_sensor', while outdoor plants use Open-Meteo radiation instead and need no light sensor. You can reuse one light sensor across nearby plants that share a location. Battery percentage or high/middle/low pauses care when critical. Species is optional and only fetches display context.",
         "data": {
           "name": "Plant name",
           "species": "Species (optional)",
@@ -46,7 +46,7 @@
       },
       "edit_plant": {
         "title": "Edit plant",
-        "description": "{info}",
+        "description": "Change this plant's sensors and settings. The form is pre-filled with its current configuration. An indoor plant needs a light sensor for light monitoring. A single light sensor may be shared by nearby plants.",
         "data": {
           "name": "Plant name",
           "species": "Species (optional)",
@@ -63,14 +63,14 @@
       },
       "remove_plant": {
         "title": "Remove a plant",
-        "description": "{info}",
+        "description": "Removing a plant permanently deletes its device, entities, calibration progress, learned baselines, timers, history, and stored samples.",
         "data": {
           "plant_id": "Plant to remove"
         }
       },
       "global_settings": {
         "title": "Global settings",
-        "description": "{info}",
+        "description": "Global settings shared by all plants. Open-Meteo provides rain suppression and severe-weather alerts. The ozone sensor enables the outdoor ozone advisory. API keys are optional and only used for species context.",
         "data": {
           "latitude": "Latitude (optional, defaults to Home Assistant location)",
           "longitude": "Longitude (optional, defaults to Home Assistant location)",

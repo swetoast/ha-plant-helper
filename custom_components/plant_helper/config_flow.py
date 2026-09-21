@@ -364,7 +364,6 @@ class PlantHelperOptionsFlow(OptionsFlow):
             step_id="add_plant",
             data_schema=_plant_schema(user_input),
             errors=errors,
-            description_placeholders={"info": _ADD_INFO},
         )
 
     async def _ensure_species_stub(self, storage: Any, species: str) -> None:
@@ -455,7 +454,6 @@ class PlantHelperOptionsFlow(OptionsFlow):
             step_id="edit_plant",
             data_schema=_plant_schema(user_input or defaults),
             errors=errors,
-            description_placeholders={"info": _EDIT_INFO},
         )
 
     # -- remove --
@@ -481,7 +479,6 @@ class PlantHelperOptionsFlow(OptionsFlow):
                     )
                 )}
             ),
-            description_placeholders={"info": _REMOVE_INFO},
         )
 
     # -- global settings --
@@ -491,28 +488,6 @@ class PlantHelperOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="global_settings",
             data_schema=_global_schema(self.config_entry.options),
-            description_placeholders={"info": _SETTINGS_INFO},
         )
 
 
-_ADD_INFO = (
-    "Only the soil-moisture sensor is required. Adding soil temperature enables "
-    "temperature-compensated moisture and thermal alerts. A light sensor enables "
-    "indoor light adequacy and obstruction detection — an indoor plant with no "
-    "light sensor will report light as 'no_light_sensor', while outdoor plants use "
-    "Open-Meteo radiation instead and need no light sensor. You can reuse one light "
-    "sensor across nearby plants that share a location (for example a windowsill). "
-    "Battery (percentage or high/middle/low) pauses care when critical. Species is "
-    "optional — it only fetches display context."
-)
-_EDIT_INFO = (
-    "Change this plant's sensors and settings. The form is pre-filled with its "
-    "current configuration. An indoor plant needs a light sensor for light "
-    "monitoring; a single light sensor may be shared by nearby plants."
-)
-_REMOVE_INFO = "Removing a plant permanently deletes its device, entities, calibration progress, learned baselines, timers, history, and stored samples."
-_SETTINGS_INFO = (
-    "Global settings shared by all plants. Open-Meteo provides rain "
-    "suppression and severe-weather alerts; the ozone sensor enables the outdoor "
-    "ozone advisory. API keys are optional and only used for species context."
-)
