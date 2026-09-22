@@ -234,8 +234,18 @@ class PlantHelperRuntime:
             return
         registry = dr.async_get(self.hass)
         device = registry.async_get_device(identifiers={(DOMAIN, plant_uuid)})
-        if device is not None:
-            registry.async_remove_device(device.id)
+        if device is None:
+            return
+        entity_registry = er.async_get(self.hass)
+        if any(
+            entity.device_id == device.id
+            for entity in entity_registry.entities.values()
+        ):
+            # Keep the device while any entity, including a foreign template
+            # entity, still references it. Deleting it would leave an invalid
+            # device_id in that entity's registry record.
+            return
+        registry.async_remove_device(device.id)
 
     async def remove_owned_state(self, plant_uuid: str) -> None:
         self.entities.pop(plant_uuid, None)

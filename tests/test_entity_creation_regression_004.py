@@ -29,5 +29,5 @@ def test_entity_creation_is_idempotent():
 
 def test_release_version_is_current():
     manifest = json.loads((INTEGRATION / "manifest.json").read_text())
-    assert manifest["version"] == "0.0.10"
-    assert "## 0.0.10 - 2026-09-22" in (ROOT / "CHANGELOG.md").read_text()
+    assert manifest["version"] == "0.0.11"
+    assert "## 0.0.11 - 2026-09-22" in (ROOT / "CHANGELOG.md").read_text()

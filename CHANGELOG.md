@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.11 - 2026-09-22
+
+- Fixed Home Assistant entity setup crashes caused by assigning Plant Helper's internal `EntityContract` as `entity_description`.
+- Kept the internal contract separate while continuing to apply names, icons, units, device classes, and state classes directly to entities.
+- Prevented plant-device deletion while any entity-registry record, including a template entity, still references the device.
+- Restricted categorical battery states to the verified `high`, `middle`, and `low` values while retaining numeric values from 0 through 100.
+- Added regressions for Home Assistant entity-description compatibility, referenced-device retention, and the exact battery state contract.
+
 ## 0.0.10 - 2026-09-22
 
 - Fixed the battery-source regression introduced by restricting the selector to numeric battery device-class sensors.

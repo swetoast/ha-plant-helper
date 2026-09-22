@@ -8,7 +8,7 @@ class PlantHelperEntity(Entity):
     _attr_has_entity_name=True
     _attr_should_poll=False
     def __init__(self,entry_id:str,plant:RuntimePlant,description:EntityContract)->None:
-        self.plant_uuid=plant.plant_uuid;self.entity_description=description;self.key=description.key;self._plant=plant
+        self.plant_uuid=plant.plant_uuid;self._contract=description;self.key=description.key;self._plant=plant
         display_name=str(plant.config.get('display_name',plant.plant_uuid))
         key=description.key
         self._attr_unique_id=f"{entry_id}_{plant.plant_uuid}_{key}"
@@ -19,4 +19,4 @@ class PlantHelperEntity(Entity):
     @property
     def available(self)->bool:return available(self._plant.removing,self._plant.state,self.key)
     @property
-    def extra_state_attributes(self):return attributes_for(self.entity_description,self._plant.state)
+    def extra_state_attributes(self):return attributes_for(self._contract,self._plant.state)

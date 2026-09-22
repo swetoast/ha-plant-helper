@@ -9,7 +9,7 @@ DEBOUNCE_SECONDS=0.350
 TOLERANCES={"soil_moisture":0.1,"soil_temperature":0.1,"humidity_sensor":0.1,"lux":1.0,"battery":1.0}
 RANGES={"soil_moisture":(0,100),"soil_temperature":(-100,200),"humidity_sensor":(0,100),"lux":(0,1000000),"battery":(0,100)}
 STATE_KEYS={"soil_moisture":"moisture","soil_temperature":"temperature","humidity_sensor":"humidity","lux":"light","battery":"battery"}
-BATTERY_STATES=frozenset({"empty","low","middle","high","full"})
+BATTERY_STATES=frozenset({"low","middle","high"})
 
 def normalize_battery_state(raw:Any)->float|str|None:
  if isinstance(raw,str):

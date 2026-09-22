@@ -41,5 +41,5 @@ def test_public_entity_contract_is_unchanged():
 
 def test_patch_release_metadata_is_aligned():
     manifest = json.loads((INTEGRATION / "manifest.json").read_text())
-    assert manifest["version"] == "0.0.10"
-    assert "## 0.0.10 - 2026-09-22" in (ROOT / "CHANGELOG.md").read_text()
+    assert manifest["version"] == "0.0.11"
+    assert "## 0.0.11 - 2026-09-22" in (ROOT / "CHANGELOG.md").read_text()

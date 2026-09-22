@@ -41,3 +41,9 @@ No entity names, entity keys, unique-ID format, units, device classes, state cla
 ## Verification coverage
 
 Regression coverage includes durable add and edit commits, post-commit activation failures, entity attachment races, durable removal, partial cleanup, startup retry, confirmation enforcement, exact cleanup ownership, fixture-backed physical sensor data, Open-Meteo forecast data, Perenual responses, and Trefle responses.
+
+## 0.0.11 compatibility follow-up
+
+Home Assistant treats an entity's `entity_description` attribute as a framework `SensorEntityDescription` or `BinarySensorEntityDescription`. Plant Helper incorrectly assigned its smaller domain-only `EntityContract` to that reserved attribute. Home Assistant then accessed framework fields that the internal contract intentionally did not provide. Version 0.0.11 stores the internal contract separately and continues assigning supported entity properties directly.
+
+Plant device removal also now checks every entity-registry reference before deleting a device. A device remains while any Plant Helper or foreign entity, including a template entity, references it. This prevents dangling device IDs.
