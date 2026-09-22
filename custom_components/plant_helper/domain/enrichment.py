@@ -120,7 +120,7 @@ def _identity_match(aliases:tuple[str,...],candidate:Mapping[str,Any])->bool:
 
 def select_exact_common_name_candidate(query:str,candidates:list[dict[str,Any]])->dict[str,Any]|None:
  normalized=normalize_species_key(query)
- exact=[candidate for candidate in candidates if normalized in {normalize_species_key(str(candidate.get('common_name',''))),normalize_species_key(str(candidate.get('matched_term','')))}]
+ exact=[candidate for candidate in candidates if normalized in {normalize_species_key(str(candidate.get('scientific_name',''))),normalize_species_key(str(candidate.get('common_name',''))),normalize_species_key(str(candidate.get('matched_term','')))}]
  return exact[0] if len(exact)==1 else None
 
 class SpeciesEnrichment:

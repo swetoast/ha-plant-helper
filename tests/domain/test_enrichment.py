@@ -94,3 +94,9 @@ def test_exact_common_name_selection_requires_one_candidate():
  assert select_exact_common_name_candidate('Snake Plant',candidates)['scientific_name']=='Sansevieria trifasciata'
  assert select_exact_common_name_candidate('Plant',candidates) is None
  assert select_exact_common_name_candidate('Snake Plant',[candidates[0],dict(candidates[0])]) is None
+
+
+def test_exact_candidate_selection_accepts_scientific_name_query():
+ from domain.enrichment import select_exact_common_name_candidate
+ candidates=[{'scientific_name':'Sansevieria trifasciata','common_name':'Snake Plant','matched_term':'Sansevieria trifasciata'}]
+ assert select_exact_common_name_candidate('Sansevieria trifasciata',candidates)==candidates[0]

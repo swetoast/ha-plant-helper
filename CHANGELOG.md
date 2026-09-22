@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.16 - 2026-09-22
+
+- Removed the separate species input from plant setup.
+- Use the plant name as the common-name lookup sent to iNaturalist.
+- Show candidate selection when several species match and store the selected scientific identity internally.
+- Accept exact scientific-name matches during later provider enrichment.
+
 ## 0.0.15 - 2026-09-22
 
 - Removed the obsolete Home Assistant ozone sensor selector from setup and options.

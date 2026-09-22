@@ -31,3 +31,11 @@ def test_common_name_candidate_selection_flow_is_wired():
  assert "async_step_select_species" in source
  assert 'self._pending_form_input["species"]' in source
  assert "scientific_name" in source and "matched_term" in source
+
+
+def test_add_plant_uses_display_name_for_species_discovery_without_species_field():
+ source=(Path(__file__).parents[2]/"custom_components/plant_helper/options.py").read_text()
+ assert 'vol.Optional("species")' not in source
+ assert 'common_name=str(user_input.get("display_name","")).strip()' in source
+ assert 'self._pending_form_input["species"]=common_name or None' in source
+ assert 'await self._async_resolve_species(common_name,"add")' in source

@@ -20,7 +20,6 @@ def plant_schema(placement: str) -> vol.Schema:
     schema={
         vol.Required("display_name"): selector.TextSelector(),
         vol.Required("soil_moisture"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="moisture")),
-        vol.Optional("species"): selector.TextSelector(),
         vol.Optional("soil_temperature"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="temperature")),
         vol.Optional("humidity_sensor"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="humidity")),
         vol.Optional("lux"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="illuminance")),
@@ -54,9 +53,10 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
         errors={}
         if user_input is not None:
             self._pending_form_input=dict(user_input)
-            species=str(user_input.get("species","")).strip()
-            if species:
-                result=await self._async_resolve_species(species,"add")
+            common_name=str(user_input.get("display_name","")).strip()
+            self._pending_form_input["species"]=common_name or None
+            if common_name:
+                result=await self._async_resolve_species(common_name,"add")
                 if result is not None:return result
             return await self._async_finish_add()
         schema=self.add_suggested_values_to_schema(plant_schema(self._placement or "indoor"),self._pending_form_input)
