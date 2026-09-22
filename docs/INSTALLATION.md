@@ -22,7 +22,7 @@ Plant configuration is stored by Home Assistant and the integration storage laye
 ## Shared configuration
 
 - **Latitude override** and **Longitude override**: optional coordinates. Leave both empty to use the Home Assistant location.
-- **Outdoor ozone sensor**: optional Home Assistant sensor used for outdoor interpretation.
+- **Ozone**: retrieved automatically from Open-Meteo for configured coordinates.
 - **Perenual API key**: optional species-enrichment credential.
 - **Perenual access level**: selects free or paid request behavior.
 - **Trefle API token**: optional species-enrichment credential.
@@ -38,7 +38,7 @@ Open the integration entry and select **Configure**.
 - **Edit plant** updates an existing plant while preserving its plant UUID and entity identity.
 - **Remove plant** asks for confirmation before removing the plant's runtime state, entities, registry entries, device, and owned stored data.
 
-Physical entity selectors may include soil moisture, soil temperature, humidity, illuminance, conductivity, battery, and outdoor ozone where supported by the flow. Battery accepts numeric percentage sensors and categorical soil-sensor battery-state entities.
+Physical entity selectors may include soil moisture, soil temperature, humidity, illuminance, conductivity, battery where supported by the flow. Battery accepts numeric percentage sensors and categorical soil-sensor battery-state entities.
 
 ## Optional species providers
 

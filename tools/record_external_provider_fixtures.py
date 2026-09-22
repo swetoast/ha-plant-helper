@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
-USER_AGENT = "Plant-Helper-Fixture-Recorder/0.0.16"
+USER_AGENT = "Plant-Helper-Fixture-Recorder/0.0.17"
 SECRET_QUERY_FIELDS = {"key", "token", "api_key", "apikey", "access_token"}
 
 

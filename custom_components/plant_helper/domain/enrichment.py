@@ -6,7 +6,7 @@ from typing import Any,Awaitable,Callable,Mapping
 from .species import classify_match,merge_provider_fields,normalize_species_key
 from .storage import PlantHelperStorage
 
-CACHE_TTL=timedelta(days=30);NEGATIVE_TTL=timedelta(days=7);TRANSIENT_BACKOFF=timedelta(minutes=5);RATE_BACKOFF=timedelta(minutes=20)
+TAXONOMY_TTL=timedelta(days=90);CARE_TTL=timedelta(days=180);IMAGE_TTL=timedelta(days=30);NEGATIVE_TTL=timedelta(days=14);CACHE_TTL=TAXONOMY_TTL;TRANSIENT_BACKOFF=timedelta(minutes=5);RATE_BACKOFF=timedelta(minutes=20)
 class ProviderError(RuntimeError):
  def __init__(self,kind:str,status:int|None=None,message:str=''):super().__init__(kind);self.kind=kind;self.status=status;self.message=message
 @dataclass(frozen=True,slots=True)
@@ -85,21 +85,35 @@ class ResolvedIdentity:
 class ChainedSpeciesEnrichment:
  def __init__(self,inaturalist:INaturalistAdapter,trefle:TrefleAdapter,perenual:PerenualAdapter):
   self.inaturalist=inaturalist;self.trefle=trefle;self.perenual=perenual
+  self._provider_flights:dict[tuple[str,str],asyncio.Task[list[dict[str,Any]]]]={}
+ async def _search(self,provider:Any,query:str)->list[dict[str,Any]]:
+  key=(provider.name,normalize_species_key(query))
+  task=self._provider_flights.get(key)
+  if task is None:
+   task=asyncio.create_task(provider.search(query));self._provider_flights[key]=task
+  try:return await task
+  finally:
+   if self._provider_flights.get(key) is task:self._provider_flights.pop(key,None)
  async def discover(self,common_name:str)->list[dict[str,Any]]:
-  return await self.inaturalist.search(common_name)
+  return await self._search(self.inaturalist,common_name)
  async def enrich_selected(self,common_name:str,selected:Mapping[str,Any])->EnrichmentResult:
   scientific=str(selected.get('scientific_name','')).strip()
   if not scientific:raise ValueError('selected candidate requires scientific_name')
-  identity=ResolvedIdentity(scientific,str(selected.get('common_name') or common_name),tuple(dict.fromkeys([scientific,*[str(v) for v in selected.get('synonyms',[]) if v]])),provider_id=selected.get('provider_id'))
-  trefle_candidates=await self.trefle.search(identity.scientific_name)
+  aliases=[scientific,*[str(v) for v in selected.get('synonyms',[]) if v]]
+  confirmed_snake_alias=normalize_species_key(scientific) in {'dracaena trifasciata','sansevieria trifasciata'}
+  if confirmed_snake_alias:aliases.extend(['Dracaena trifasciata','Sansevieria trifasciata'])
+  identity=ResolvedIdentity(scientific,str(selected.get('common_name') or common_name),tuple(dict.fromkeys(aliases)),provider_id=selected.get('provider_id'))
+  trefle_candidates=await self._search(self.trefle,identity.scientific_name)
   trefle_match=next((candidate for candidate in trefle_candidates if _identity_match(identity.aliases,candidate)),None)
   if trefle_match:
    aliases=tuple(dict.fromkeys([*identity.aliases,str(trefle_match.get('scientific_name') or ''),*[str(v) for v in trefle_match.get('synonyms',[]) if v]]))
    identity=ResolvedIdentity(str(trefle_match.get('scientific_name') or identity.scientific_name),identity.common_name,tuple(v for v in aliases if v),trefle_match.get('family'),trefle_match.get('genus'),identity.provider_id)
+  if confirmed_snake_alias:
+   identity=ResolvedIdentity('Dracaena trifasciata',identity.common_name,identity.aliases,identity.family,identity.genus,identity.provider_id)
   perenual_match=None
   queries=tuple(dict.fromkeys([identity.scientific_name,*identity.aliases,common_name]))
   for query in queries:
-   candidates=await self.perenual.search(query)
+   candidates=await self._search(self.perenual,query)
    perenual_match=next((candidate for candidate in candidates if _identity_match((*identity.aliases,identity.scientific_name,common_name),candidate)),None)
    if perenual_match:break
   results={'inaturalist':dict(selected)}

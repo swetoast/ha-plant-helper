@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.0.16 - 2026-09-22
+## 0.0.17 - 2026-09-22
+
+- Completed credential-aware provider activation and confirmed snake-plant alias resolution.
+- Added provider request single-flight handling and updated enrichment cache policy constants.
+- Preserved entity IDs, storage contracts, field-level provenance, and local image proxy behavior.
+
+## 0.0.17 - 2026-09-22
 
 - Removed the separate species input from plant setup.
 - Use the plant name as the common-name lookup sent to iNaturalist.

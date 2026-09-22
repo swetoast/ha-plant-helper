@@ -47,3 +47,9 @@ Regression coverage includes durable add and edit commits, post-commit activatio
 Home Assistant treats an entity's `entity_description` attribute as a framework `SensorEntityDescription` or `BinarySensorEntityDescription`. Plant Helper incorrectly assigned its smaller domain-only `EntityContract` to that reserved attribute. Home Assistant then accessed framework fields that the internal contract intentionally did not provide. Version 0.0.11 stores the internal contract separately and continues assigning supported entity properties directly.
 
 Plant device removal also now checks every entity-registry reference before deleting a device. A device remains while any Plant Helper or foreign entity, including a template entity, references it. This prevents dangling device IDs.
+
+## 0.0.12 entity completeness follow-up
+
+The physical runtime already collected humidity and battery values, but the public entity contract omitted both values. Version 0.0.12 adds `sensor.<plant>_humidity` and `sensor.<plant>_battery` without changing existing entities. Humidity is a percentage measurement. Battery remains a generic sensor because the verified source contract can be either numeric 0 through 100 or categorical `high`, `middle`, or `low`; no categorical value is converted into a guessed percentage.
+
+The calibration entity previously displayed `not_configured` and `progress: 0`, which incorrectly suggested unfinished user setup. Plant Helper currently relies on the selected source sensor's reading rather than requiring a separate Plant Helper calibration operation. The existing calibration entity is therefore retained but now reports `source_sensor` with a direct explanatory summary.
