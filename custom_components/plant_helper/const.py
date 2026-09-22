@@ -1,0 +1,8 @@
+DOMAIN="plant_helper"
+CONF_PERENUAL_ACCESS_LEVEL="perenual_access_level"
+CONF_UPDATE_INTERVAL="update_interval"
+CONF_LATITUDE="latitude"
+CONF_LONGITUDE="longitude"
+CONF_OZONE_ENTITY="ozone_entity"
+CONF_PERENUAL_API_KEY="perenual_api_key"
+CONF_TREFLE_API_KEY="trefle_api_key"

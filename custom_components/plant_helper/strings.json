@@ -1,0 +1,147 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Plant Helper",
+        "description": "Configure shared Plant Helper settings.",
+        "data": {
+          "latitude": "Latitude override",
+          "longitude": "Longitude override",
+          "ozone_entity": "Outdoor ozone sensor",
+          "perenual_api_key": "Perenual API key",
+          "perenual_access_level": "Perenual access level",
+          "trefle_api_key": "Trefle API token",
+          "update_interval": "Update interval"
+        },
+        "data_description": {
+          "latitude": "Leave empty to use Home Assistant latitude.",
+          "longitude": "Leave empty to use Home Assistant longitude.",
+          "ozone_entity": "Optional physical ozone source for outdoor plants.",
+          "perenual_api_key": "Optional credential stored in config-entry options.",
+          "perenual_access_level": "Select free or paid request behavior.",
+          "trefle_api_key": "Optional credential stored in config-entry options.",
+          "update_interval": "Periodic local evaluation interval in seconds."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Plant Helper",
+        "description": "Update shared Plant Helper settings.",
+        "data": {
+          "latitude": "Latitude override",
+          "longitude": "Longitude override",
+          "ozone_entity": "Outdoor ozone sensor",
+          "perenual_api_key": "Perenual API key",
+          "perenual_access_level": "Perenual access level",
+          "trefle_api_key": "Trefle API token",
+          "update_interval": "Update interval"
+        },
+        "data_description": {
+          "latitude": "Leave empty to use Home Assistant latitude.",
+          "longitude": "Leave empty to use Home Assistant longitude.",
+          "ozone_entity": "Optional physical ozone source for outdoor plants.",
+          "perenual_api_key": "Optional credential stored in config-entry options.",
+          "perenual_access_level": "Select free or paid request behavior.",
+          "trefle_api_key": "Optional credential stored in config-entry options.",
+          "update_interval": "Periodic local evaluation interval in seconds."
+        }
+      }
+    },
+    "error": {
+      "invalid": "The value is invalid.",
+      "invalid_global_settings": "The settings could not be validated."
+    },
+    "abort": {
+      "already_configured": "Plant Helper is already configured.",
+      "single_instance_allowed": "Only one Plant Helper entry is allowed.",
+      "reconfigure_successful": "Plant Helper settings were updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage plants",
+        "menu_options": {
+          "add": "Add a plant",
+          "edit": "Edit a plant",
+          "remove": "Remove a plant"
+        }
+      },
+      "add": {
+        "title": "Choose placement",
+        "data": {
+          "placement": "Placement"
+        }
+      },
+      "add_plant": {
+        "title": "Add plant",
+        "data": {
+          "display_name": "Plant name",
+          "soil_moisture": "Soil moisture sensor",
+          "species": "Species",
+          "soil_temperature": "Soil temperature sensor",
+          "humidity_sensor": "Air humidity sensor",
+          "lux": "Light sensor",
+          "battery": "Battery sensor",
+          "profile": "Care profile",
+          "custom_multiplier": "Custom multiplier",
+          "rain_limit_mm": "Rain suppression threshold"
+        }
+      },
+      "confirm_remove": {
+        "title": "Remove plant",
+        "description": "Confirm permanent removal of the selected plant.",
+        "data": {
+          "confirm": "Confirm removal"
+        }
+      },
+      "edit": {
+        "title": "Select plant",
+        "data": {
+          "plant_uuid": "Plant"
+        }
+      },
+      "edit_placement": {
+        "title": "Choose placement",
+        "data": {
+          "placement": "Placement"
+        }
+      },
+      "edit_plant": {
+        "title": "Edit plant",
+        "data": {
+          "display_name": "Plant name",
+          "soil_moisture": "Soil moisture sensor",
+          "species": "Species",
+          "soil_temperature": "Soil temperature sensor",
+          "humidity_sensor": "Air humidity sensor",
+          "lux": "Light sensor",
+          "battery": "Battery sensor",
+          "profile": "Care profile",
+          "custom_multiplier": "Custom multiplier",
+          "rain_limit_mm": "Rain suppression threshold"
+        }
+      },
+      "remove": {
+        "title": "Select plant",
+        "data": {
+          "plant_uuid": "Plant"
+        }
+      }
+    },
+    "abort": {
+      "plant_not_found": "The selected plant no longer exists."
+    },
+    "error": {
+      "name_required": "Enter a plant name.",
+      "moisture_required": "Select a soil moisture sensor.",
+      "moisture_not_ready": "The soil moisture sensor must report a number before the plant can be added.",
+      "moisture_not_numeric": "The soil moisture sensor is not reporting a numeric value.",
+      "moisture_out_of_range": "The soil moisture value must be between 0 and 100.",
+      "custom_multiplier_range": "The custom multiplier is outside the allowed range.",
+      "cannot_save_plant": "The plant could not be saved. No plant was added.",
+      "plant_changed": "The plant changed while this form was open. Reopen Edit and try again.",
+      "entities_remain": "Plant entities could not be fully removed. Cleanup will retry.",
+      "cannot_remove_plant": "The plant removal could not be completed. Cleanup will retry."
+    }
+  }
+}
