@@ -1,0 +1,67 @@
+{
+  "total_results": 3,
+  "page": 1,
+  "per_page": 10,
+  "results": [
+    {
+      "id": 67710,
+      "rank": "species",
+      "rank_level": 10,
+      "iconic_taxon_id": 47126,
+      "is_active": true,
+      "name": "Sansevieria trifasciata",
+      "parent_id": 67711,
+      "extinct": false,
+      "provisional": false,
+      "default_photo": {
+        "id": 488135905,
+        "license_code": "cc-by-nc",
+        "medium_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/488135905/medium.jpeg"
+      },
+      "observations_count": 33520,
+      "matched_term": "Snake Plant",
+      "iconic_taxon_name": "Plantae",
+      "preferred_common_name": "Snake Plant"
+    },
+    {
+      "id": 168422,
+      "rank": "species",
+      "rank_level": 10,
+      "iconic_taxon_id": 47126,
+      "is_active": true,
+      "name": "Sansevieria cylindrica",
+      "parent_id": 67711,
+      "extinct": false,
+      "provisional": false,
+      "default_photo": {
+        "id": 70512537,
+        "license_code": "cc-by-nc",
+        "medium_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/70512537/medium.jpeg"
+      },
+      "observations_count": 2912,
+      "matched_term": "Cylindrical Snake Plant",
+      "iconic_taxon_name": "Plantae",
+      "preferred_common_name": "African Spear"
+    },
+    {
+      "id": 550200,
+      "rank": "species",
+      "rank_level": 10,
+      "iconic_taxon_id": 47126,
+      "is_active": true,
+      "name": "Sansevieria masoniana",
+      "parent_id": 67711,
+      "extinct": false,
+      "provisional": false,
+      "default_photo": {
+        "id": 112262583,
+        "license_code": null,
+        "medium_url": "https://static.inaturalist.org/photos/112262583/medium.jpg"
+      },
+      "observations_count": 67,
+      "matched_term": "Whale Fin Snake Plant",
+      "iconic_taxon_name": "Plantae",
+      "preferred_common_name": "Whale Fin Snake Plant"
+    }
+  ]
+}

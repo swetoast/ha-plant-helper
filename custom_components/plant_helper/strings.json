@@ -7,7 +7,6 @@
         "data": {
           "latitude": "Latitude override",
           "longitude": "Longitude override",
-          "ozone_entity": "Outdoor ozone sensor",
           "perenual_api_key": "Perenual API key",
           "perenual_access_level": "Perenual access level",
           "trefle_api_key": "Trefle API token",
@@ -16,7 +15,6 @@
         "data_description": {
           "latitude": "Leave empty to use Home Assistant latitude.",
           "longitude": "Leave empty to use Home Assistant longitude.",
-          "ozone_entity": "Optional physical ozone source for outdoor plants.",
           "perenual_api_key": "Optional credential stored in config-entry options.",
           "perenual_access_level": "Select free or paid request behavior.",
           "trefle_api_key": "Optional credential stored in config-entry options.",
@@ -29,7 +27,6 @@
         "data": {
           "latitude": "Latitude override",
           "longitude": "Longitude override",
-          "ozone_entity": "Outdoor ozone sensor",
           "perenual_api_key": "Perenual API key",
           "perenual_access_level": "Perenual access level",
           "trefle_api_key": "Trefle API token",
@@ -38,7 +35,6 @@
         "data_description": {
           "latitude": "Leave empty to use Home Assistant latitude.",
           "longitude": "Leave empty to use Home Assistant longitude.",
-          "ozone_entity": "Optional physical ozone source for outdoor plants.",
           "perenual_api_key": "Optional credential stored in config-entry options.",
           "perenual_access_level": "Select free or paid request behavior.",
           "trefle_api_key": "Optional credential stored in config-entry options.",
@@ -125,6 +121,13 @@
         "title": "Select plant",
         "data": {
           "plant_uuid": "Plant"
+        }
+      },
+      "select_species": {
+        "title": "Choose the plant species",
+        "description": "More than one plant matches the common name. Choose the correct species.",
+        "data": {
+          "candidate": "Matching plant"
         }
       }
     },

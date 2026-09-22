@@ -1,0 +1,286 @@
+{
+  "data": [
+    {
+      "id": 62423,
+      "common_name": "Tarovine",
+      "slug": "monstera-adansonii",
+      "scientific_name": "Monstera adansonii",
+      "year": 1830,
+      "author": "Schott",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 8,
+      "complete_data": false,
+      "image_url": "https://bs.plantnet.org/image/o/38d4346034e89f4e5917357f2bc62cdcd150a3af",
+      "synonyms": [
+        "Calla dracontium",
+        "Dracontium pertusum",
+        "Calla pertusa"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-adansonii",
+        "plant": "/api/v1/plants/monstera-adansonii",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62427,
+      "common_name": "Fruit-salad-plant",
+      "slug": "monstera-deliciosa",
+      "scientific_name": "Monstera deliciosa",
+      "year": 1849,
+      "author": "Liebm.",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 14,
+      "complete_data": false,
+      "image_url": "https://bs.plantnet.org/image/o/a3a043c163463e4cf1941e473a134700ed327d84",
+      "synonyms": [
+        "Monstera deliciosa var. borsigiana",
+        "Monstera borsigiana",
+        "Philodendron anatomicum",
+        "Tornelia fragrans",
+        "Philodendron fenestratum",
+        "Monstera deliciosa var. sierrana",
+        "Monstera lenneana",
+        "Philodendron pertusum"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-deliciosa",
+        "plant": "/api/v1/plants/monstera-deliciosa",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62441,
+      "common_name": null,
+      "slug": "monstera-obliqua",
+      "scientific_name": "Monstera obliqua",
+      "year": 1845,
+      "author": "Miq.",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 6,
+      "complete_data": false,
+      "image_url": "https://bs.plantnet.org/image/o/0ced5365bd2a58d4b4ce2f66ae4d6d413756194e",
+      "synonyms": [
+        "Monstera killipii",
+        "Monstera expilata",
+        "Monstera fendleri",
+        "Monstera falcifolia var. latifolia",
+        "Monstera obliqua var. expilata",
+        "Monstera falcifolia",
+        "Monstera unilatera",
+        "Heteropsis obliqua",
+        "Monstera sagotiana",
+        "Monstera microstachys",
+        "Monstera snethlagei"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-obliqua",
+        "plant": "/api/v1/plants/monstera-obliqua",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62422,
+      "common_name": null,
+      "slug": "monstera-acuminata",
+      "scientific_name": "Monstera acuminata",
+      "year": 1855,
+      "author": "K.Koch",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 6,
+      "complete_data": false,
+      "image_url": "https://d2seqvvyy3b8p2.cloudfront.net/232d5ec496d5134f462aa18bbcb259c9.jpg",
+      "synonyms": [
+        "Monstera grandifolia",
+        "Monstera chiapensis",
+        "Monstera viridispatha",
+        "Monstera karwinskyi",
+        "Monstera belizensis",
+        "Monstera dimidiata"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-acuminata",
+        "plant": "/api/v1/plants/monstera-acuminata",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62429,
+      "common_name": null,
+      "slug": "monstera-dubia",
+      "scientific_name": "Monstera dubia",
+      "year": 1908,
+      "author": "(Kunth) Engl. & K.Krause",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 6,
+      "complete_data": false,
+      "image_url": "https://bs.plantnet.org/image/o/1bb23f47ab9f65fd07b167a6afc096bb017b573e",
+      "synonyms": [
+        "Monstera acreana",
+        "Marcgravia dubia",
+        "Monstera irritans"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-dubia",
+        "plant": "/api/v1/plants/monstera-dubia",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62435,
+      "common_name": null,
+      "slug": "monstera-lechleriana",
+      "scientific_name": "Monstera lechleriana",
+      "year": 1860,
+      "author": "Schott",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 6,
+      "complete_data": false,
+      "image_url": "https://bs.plantnet.org/image/o/ee60d43119ea5d58fcfc4d1057dca7e126db6e1f",
+      "synonyms": [
+        "Monstera maxima",
+        "Monstera henry-pittieri"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-lechleriana",
+        "plant": "/api/v1/plants/monstera-lechleriana",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62447,
+      "common_name": null,
+      "slug": "monstera-spruceana",
+      "scientific_name": "Monstera spruceana",
+      "year": 1878,
+      "author": "(Schott) Engl.",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 6,
+      "complete_data": false,
+      "image_url": "https://bs.plantnet.org/image/o/551ef488f0e8551bfd5edce0b3e938c6d072d31f",
+      "synonyms": [
+        "Monstera steyermarkii",
+        "Tornelia spruceana"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-spruceana",
+        "plant": "/api/v1/plants/monstera-spruceana",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62449,
+      "common_name": null,
+      "slug": "monstera-subpinnata",
+      "scientific_name": "Monstera subpinnata",
+      "year": 1879,
+      "author": "(Schott) Engl.",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 6,
+      "complete_data": false,
+      "image_url": "https://d2seqvvyy3b8p2.cloudfront.net/7ceb9343a8c91672539adaf33853289e.jpg",
+      "synonyms": [
+        "Monstera uleana",
+        "Tornelia subpinnata",
+        "Monstera latiloba"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-subpinnata",
+        "plant": "/api/v1/plants/monstera-subpinnata",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62428,
+      "common_name": null,
+      "slug": "monstera-dissecta",
+      "scientific_name": "Monstera dissecta",
+      "year": 1987,
+      "author": "(Schott) Croat & Grayum",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 6,
+      "complete_data": false,
+      "image_url": "https://bs.plantnet.org/image/o/7758a0df12ae1bcdd8af992ca39e98975439354c",
+      "synonyms": [
+        "Monstera peruviana",
+        "Monstera longipedunculata",
+        "Tornelia dissecta"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-dissecta",
+        "plant": "/api/v1/plants/monstera-dissecta",
+        "genus": "/api/v1/genus/monstera"
+      }
+    },
+    {
+      "id": 62421,
+      "common_name": null,
+      "slug": "monstera-acacoyaguensis",
+      "scientific_name": "Monstera acacoyaguensis",
+      "year": 1949,
+      "author": "Matuda",
+      "status": "accepted",
+      "rank": "species",
+      "genus_id": 2961,
+      "completion_ratio": 4,
+      "complete_data": false,
+      "image_url": null,
+      "synonyms": [
+        "Monstera magnispatha",
+        "Monstera magnispatha var. acacoyaguensis"
+      ],
+      "genus": "Monstera",
+      "family": "Araceae",
+      "links": {
+        "self": "/api/v1/species/monstera-acacoyaguensis",
+        "plant": "/api/v1/plants/monstera-acacoyaguensis",
+        "genus": "/api/v1/genus/monstera"
+      }
+    }
+  ],
+  "links": {
+    "self": "/api/v1/species/search?limit=10&q=monstera",
+    "first": "/api/v1/species/search?limit=10&page=1&q=monstera",
+    "next": "/api/v1/species/search?limit=10&page=2&q=monstera",
+    "last": "/api/v1/species/search?limit=10&page=10&q=monstera"
+  },
+  "meta": {
+    "total": 91
+  }
+}

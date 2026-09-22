@@ -33,7 +33,6 @@ class GlobalSettings:
     update_interval: int = 300
     latitude: float | None = None
     longitude: float | None = None
-    ozone_entity: str | None = None
     perenual_api_key: str | None = None
     trefle_api_key: str | None = None
 
@@ -48,11 +47,11 @@ class GlobalSettings:
         if not 60 <= interval <= 3600: raise ValidationError("update_interval")
         lat=None if raw.get("latitude") in (None,"") else _finite_float(raw["latitude"],"latitude",-90,90)
         lon=None if raw.get("longitude") in (None,"") else _finite_float(raw["longitude"],"longitude",-180,180)
-        return cls(access, interval, lat, lon, _optional_entity(raw.get("ozone_entity"),"ozone_entity"), _optional_secret(raw.get("perenual_api_key"),"perenual_api_key"), _optional_secret(raw.get("trefle_api_key"),"trefle_api_key"))
+        return cls(access, interval, lat, lon, _optional_secret(raw.get("perenual_api_key"),"perenual_api_key"), _optional_secret(raw.get("trefle_api_key"),"trefle_api_key"))
 
     def to_options(self) -> dict[str, Any]:
         result={"perenual_access_level":self.perenual_access_level,"update_interval":self.update_interval}
-        for key in ("latitude","longitude","ozone_entity","perenual_api_key","trefle_api_key"):
+        for key in ("latitude","longitude","perenual_api_key","trefle_api_key"):
             value=getattr(self,key)
             if value is not None: result[key]=value
         return result

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.15 - 2026-09-22
+
+- Removed the obsolete Home Assistant ozone sensor selector from setup and options.
+- Made Open-Meteo the sole ozone source using the configured coordinates.
+- Retained compatibility with existing entries by ignoring any legacy `ozone_entity` option.
+
+## 0.0.14 - 2026-09-22
+
+- Resolve the optional plant name as a common name during add-plant setup.
+- Show a species-selection step when iNaturalist returns multiple candidates, then store the selected scientific identity.
+- Keep the configured common-name fallback available while provider resolution runs or fails.
+- Reorganize tests by subsystem instead of keeping every regression and release check in the test root.
+
 ## 0.0.13 - 2026-09-22
 
 - Added the chained species-provider workflow: iNaturalist common-name discovery, Trefle taxonomy resolution, and Perenual care-data fallbacks.

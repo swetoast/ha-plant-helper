@@ -11,7 +11,6 @@ from .const import *
 GLOBAL_SCHEMA=vol.Schema({
     vol.Optional(CONF_LATITUDE): selector.NumberSelector(selector.NumberSelectorConfig(min=-90,max=90,mode=selector.NumberSelectorMode.BOX)),
     vol.Optional(CONF_LONGITUDE): selector.NumberSelector(selector.NumberSelectorConfig(min=-180,max=180,mode=selector.NumberSelectorMode.BOX)),
-    vol.Optional(CONF_OZONE_ENTITY): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
     vol.Optional(CONF_PERENUAL_API_KEY): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
     vol.Required(CONF_PERENUAL_ACCESS_LEVEL,default="free"): selector.SelectSelector(selector.SelectSelectorConfig(options=["free","paid"],mode=selector.SelectSelectorMode.DROPDOWN)),
     vol.Optional(CONF_TREFLE_API_KEY): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),

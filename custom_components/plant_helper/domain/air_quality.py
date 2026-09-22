@@ -24,7 +24,7 @@ def _value(v):
  except (TypeError,ValueError):raise AirQualityError('ozone') from None
  if not math.isfinite(n) or n<0:raise AirQualityError('ozone')
  return n
-def normalize(raw:Mapping[str,Any],physical:Any=None):
+def normalize(raw:Mapping[str,Any]):
  current=raw.get('current',{});hourly=raw.get('hourly',{});times=hourly.get('time');values=hourly.get('ozone')
  if not isinstance(times,list) or not isinstance(values,list) or len(times)!=len(values):raise AirQualityError('hourly')
  parsed=[]
@@ -34,16 +34,12 @@ def normalize(raw:Mapping[str,Any],physical:Any=None):
   if d.tzinfo is None:d=d.replace(tzinfo=timezone.utc)
   parsed.append((d,_value(v)))
  if tuple(sorted(t for t,_ in parsed))!=tuple(t for t,_ in parsed):raise AirQualityError('time')
- override=_value(physical) if physical not in (None,'unknown','unavailable') else None
- return (override if override is not None else _value(current.get('ozone'))),tuple(parsed),'physical' if override is not None else 'provider'
+ return _value(current.get('ozone')),tuple(parsed),'open_meteo'
 class AirQualityCollector:
  def __init__(self,fetch:Callable[[AirQualityRequest],Awaitable[Mapping[str,Any]]]):self.fetch=fetch;self.lock=asyncio.Lock();self.cache={};self.retry_after={};self.generation=0
- async def refresh(self,req:AirQualityRequest,now:datetime,physical_ozone:Any=None)->AirQualitySnapshot:
+ async def refresh(self,req:AirQualityRequest,now:datetime)->AirQualitySnapshot:
   key=(req.latitude,req.longitude);old=self.cache.get(key)
-  if old and now-old.fetched_at<REFRESH:
-   if physical_ozone not in (None,'unknown','unavailable'):
-    ozone=_value(physical_ozone);return AirQualitySnapshot(old.generation,old.fetched_at,old.stale,ozone,old.hourly_ozone,'physical')
-   return old
+  if old and now-old.fetched_at<REFRESH:return old
   if now<self.retry_after.get(key,datetime.min.replace(tzinfo=timezone.utc)) and old:return AirQualitySnapshot(old.generation,old.fetched_at,True,old.current_ozone,old.hourly_ozone,old.source)
   async with self.lock:
    try:raw=await self.fetch(req)
@@ -56,7 +52,7 @@ class AirQualityCollector:
     self.retry_after[key]=now+BACKOFF.get(status,timedelta(minutes=10))
     if old:return AirQualitySnapshot(old.generation,old.fetched_at,True,old.current_ozone,old.hourly_ozone,old.source)
     raise AirQualityError(str(status))
-   current,hourly,source=normalize(raw,physical_ozone);self.generation+=1;s=AirQualitySnapshot(self.generation,now,False,current,hourly,source);self.cache[key]=s;return s
+   current,hourly,source=normalize(raw);self.generation+=1;s=AirQualitySnapshot(self.generation,now,False,current,hourly,source);self.cache[key]=s;return s
 def combine_environment(forecast:Any,air:AirQualitySnapshot|None)->EnvironmentalSnapshot:
  values={'forecast':getattr(forecast,'data',None),'current_ozone':None if air is None else air.current_ozone}
  return EnvironmentalSnapshot(getattr(forecast,'generation',None),None if air is None else air.generation,forecast,air,MappingProxyType(values))

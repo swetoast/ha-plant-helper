@@ -38,6 +38,8 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
         self._expected_revision: int | None=None
         self._placement: str | None=None
         self._pending_form_input: dict[str,Any]={}
+        self._species_candidates: list[dict[str,Any]]=[]
+        self._species_return_step: str | None=None
 
     async def async_step_init(self,user_input: dict[str,Any] | None=None) -> ConfigFlowResult:
         return self.async_show_menu(step_id="init",menu_options=list(MENU_OPTIONS))
@@ -52,35 +54,75 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
         errors={}
         if user_input is not None:
             self._pending_form_input=dict(user_input)
-            runtime=self.config_entry.runtime_data
-            hooks=AddPlantHooks(
-                register_listeners=runtime.register_listeners,
-                request_entities=self._async_request_entities,
-                evaluate=runtime.evaluate,
-                schedule_enrichment=runtime.schedule_enrichment,
-                schedule_reconciliation=runtime.schedule_reconciliation,
-            )
-            try:
-                await async_add_plant(
-                    raw=user_input,
-                    placement=self._placement or "indoor",
-                    storage=runtime.require_storage(),
-                    runtime=runtime.plants,
-                    moisture_reader=lambda entity_id: self.hass.states.get(entity_id).state if self.hass.states.get(entity_id) else None,
-                    hooks=hooks,
-                )
-            except AddPlantError as err:
-                errors[err.key]="invalid"
-            except Exception:
-                _LOGGER.exception("Failed to add plant")
-                errors["base"]="cannot_save_plant"
-            else:
-                self._clear_transient()
-                return self.async_create_entry(title="",data={})
-        schema=plant_schema(self._placement or "indoor")
-        if user_input is not None:
-            schema=self.add_suggested_values_to_schema(schema,user_input)
+            species=str(user_input.get("species","")).strip()
+            if species:
+                result=await self._async_resolve_species(species,"add")
+                if result is not None:return result
+            return await self._async_finish_add()
+        schema=self.add_suggested_values_to_schema(plant_schema(self._placement or "indoor"),self._pending_form_input)
         return self.async_show_form(step_id="add_plant",data_schema=schema,errors=errors)
+
+    async def _async_resolve_species(self,query: str,return_step: str) -> ConfigFlowResult | None:
+        runtime=self.config_entry.runtime_data
+        chain=runtime.species_enrichment
+        if chain is None:return None
+        try:candidates=await chain.discover(query)
+        except Exception:
+            _LOGGER.exception("Failed to resolve common plant name")
+            return None
+        if not candidates:return None
+        self._species_candidates=candidates
+        self._species_return_step=return_step
+        if len(candidates)==1:
+            self._pending_form_input["species"]=str(candidates[0].get("scientific_name") or query)
+            return None
+        return await self.async_step_select_species()
+
+    async def async_step_select_species(self,user_input: dict[str,Any] | None=None) -> ConfigFlowResult:
+        if user_input is not None:
+            index=int(user_input["candidate"])
+            if index<0 or index>=len(self._species_candidates):
+                return self.async_abort(reason="plant_not_found")
+            selected=self._species_candidates[index]
+            self._pending_form_input["species"]=str(selected.get("scientific_name") or self._pending_form_input.get("species",''))
+            if self._species_return_step=="add":return await self._async_finish_add()
+            return self.async_abort(reason="plant_not_found")
+        options=[]
+        for index,candidate in enumerate(self._species_candidates):
+            scientific=str(candidate.get("scientific_name") or "Unknown species")
+            common=str(candidate.get("common_name") or "No common name")
+            matched=str(candidate.get("matched_term") or common)
+            options.append({"value":str(index),"label":f"{common} · {scientific} · matched: {matched}"})
+        return self.async_show_form(
+            step_id="select_species",
+            data_schema=vol.Schema({vol.Required("candidate"):selector.SelectSelector(selector.SelectSelectorConfig(options=options,mode=selector.SelectSelectorMode.DROPDOWN))}),
+        )
+
+    async def _async_finish_add(self) -> ConfigFlowResult:
+        runtime=self.config_entry.runtime_data
+        hooks=AddPlantHooks(
+            register_listeners=runtime.register_listeners,
+            request_entities=self._async_request_entities,
+            evaluate=runtime.evaluate,
+            schedule_enrichment=runtime.schedule_enrichment,
+            schedule_reconciliation=runtime.schedule_reconciliation,
+        )
+        try:
+            await async_add_plant(
+                raw=self._pending_form_input,
+                placement=self._placement or "indoor",
+                storage=runtime.require_storage(),
+                runtime=runtime.plants,
+                moisture_reader=lambda entity_id: self.hass.states.get(entity_id).state if self.hass.states.get(entity_id) else None,
+                hooks=hooks,
+            )
+        except AddPlantError as err:
+            return self.async_show_form(step_id="add_plant",data_schema=self.add_suggested_values_to_schema(plant_schema(self._placement or "indoor"),self._pending_form_input),errors={err.key:"invalid"})
+        except Exception:
+            _LOGGER.exception("Failed to add plant")
+            return self.async_show_form(step_id="add_plant",data_schema=self.add_suggested_values_to_schema(plant_schema(self._placement or "indoor"),self._pending_form_input),errors={"base":"cannot_save_plant"})
+        self._clear_transient()
+        return self.async_create_entry(title="",data={})
 
     async def _async_request_entities(self, plant_uuid: str) -> None:
         """Ask every loaded entity platform to reconcile this committed plant."""
