@@ -5,7 +5,7 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers import selector
 from homeassistant.core import callback
-from plant_helper_domain.config import GlobalSettings, ValidationError
+from .domain.config import GlobalSettings, ValidationError
 from .const import *
 
 GLOBAL_SCHEMA=vol.Schema({

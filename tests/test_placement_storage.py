@@ -1,6 +1,6 @@
 import pytest
-from plant_helper_domain.placement import decide_placement_transition
-from plant_helper_domain.storage_revision import check_plant_revision,next_revisions,StorageConflictError
+from domain.placement import decide_placement_transition
+from domain.storage_revision import check_plant_revision,next_revisions,StorageConflictError
 
 def test_placement_transition_preserves_baselines():
     result=decide_placement_transition("indoor","outdoor",destination_baseline_complete=False)

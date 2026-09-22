@@ -1,6 +1,6 @@
 import asyncio
-from plant_helper_domain.physical import PlantPhysicalProcessor,DEBOUNCE_SECONDS
-from plant_helper_domain.runtime import RuntimeCollection
+from domain.physical import PlantPhysicalProcessor,DEBOUNCE_SECONDS
+from domain.runtime import RuntimeCollection
 async def wait():await asyncio.sleep(DEBOUNCE_SECONDS+0.05)
 def run(c):return asyncio.run(c)
 def setup():

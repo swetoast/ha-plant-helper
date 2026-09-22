@@ -1,7 +1,7 @@
 from datetime import datetime,timezone,timedelta
 import pytest
-from plant_helper_domain.config import ValidationError
-from plant_helper_domain.environment import canonical_location,normalize_physical_state,normalize_weather_payload,derive_weather_windows
+from domain.config import ValidationError
+from domain.environment import canonical_location,normalize_physical_state,normalize_weather_payload,derive_weather_windows
 
 def test_canonical_location():
     loc=canonical_location(57.7210347,12.9398188,timezone_name="Europe/Stockholm",profile_version=2)

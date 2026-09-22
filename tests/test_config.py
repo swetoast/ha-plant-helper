@@ -1,5 +1,5 @@
 import re, pytest
-from plant_helper_domain.config import GlobalSettings, PlantConfig, ValidationError, new_plant_uuid, replace_editable
+from domain.config import GlobalSettings, PlantConfig, ValidationError, new_plant_uuid, replace_editable
 
 def test_global_minimum_and_clear():
     assert GlobalSettings.normalize({}).to_options()=={"perenual_access_level":"free","update_interval":300}

@@ -1,8 +1,8 @@
 import asyncio,copy
 import pytest
-from plant_helper_domain.remove_plant import RemoveHooks,RemovePlantError,async_remove_plant,async_reconcile_pending_removals
-from plant_helper_domain.runtime import RuntimeCollection
-from plant_helper_domain.storage import PlantHelperStorage
+from domain.remove_plant import RemoveHooks,RemovePlantError,async_remove_plant,async_reconcile_pending_removals
+from domain.runtime import RuntimeCollection
+from domain.storage import PlantHelperStorage
 class B:
  def __init__(self):self.data=None
  async def async_load(self):return copy.deepcopy(self.data)

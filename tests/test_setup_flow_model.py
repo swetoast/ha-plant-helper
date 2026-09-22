@@ -1,5 +1,5 @@
 import pytest
-from plant_helper_domain.setup_flow import SetupAborted,SetupCreated,SetupFlowModel,SetupForm
+from domain.setup_flow import SetupAborted,SetupCreated,SetupFlowModel,SetupForm
 
 def test_start_defaults_and_duplicate():
  model=SetupFlowModel(); result=model.start(existing_entry=False)

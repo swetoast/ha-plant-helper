@@ -1,6 +1,6 @@
 import copy
 import pytest
-from plant_helper_domain.options_flow import PlantOptionsFlowModel,OptionsMenu,PlacementForm,PlantForm,RemoveConfirmation
+from domain.options_flow import PlantOptionsFlowModel,OptionsMenu,PlacementForm,PlantForm,RemoveConfirmation
 
 PLANTS={
  "a":{"display_name":"Snake Plant","placement":"indoor","revision":3,"soil_moisture":"sensor.a","rain_limit_mm":99},

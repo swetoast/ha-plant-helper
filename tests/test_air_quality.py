@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime,timedelta,timezone
 import pytest
-from plant_helper_domain.air_quality import *
+from domain.air_quality import *
 NOW=datetime(2026,1,1,tzinfo=timezone.utc)
 def data(status=200):return {'status':status,'current':{'ozone':55},'hourly':{'time':[(NOW+timedelta(hours=i)).isoformat() for i in range(3)],'ozone':[50,51,52]}}
 def run(c):return asyncio.run(c)

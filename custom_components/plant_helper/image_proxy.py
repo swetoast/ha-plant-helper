@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any
-from plant_helper_domain.image_proxy import SpeciesImageProxy
+from .domain.image_proxy import SpeciesImageProxy
 
 IMAGE_PATH='/api/plant_helper/image/{hash}'
 class PlantHelperImageView:

@@ -5,9 +5,9 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers import selector
 from .const import DOMAIN
-from plant_helper_domain.add_plant import AddPlantError,AddPlantHooks,async_add_plant
-from plant_helper_domain.edit_plant import EditPlantError,EditPlantHooks,async_edit_plant
-from plant_helper_domain.remove_plant import RemoveHooks,RemovePlantError,async_remove_plant
+from .domain.add_plant import AddPlantError,AddPlantHooks,async_add_plant
+from .domain.edit_plant import EditPlantError,EditPlantHooks,async_edit_plant
+from .domain.remove_plant import RemoveHooks,RemovePlantError,async_remove_plant
 
 MENU_OPTIONS=("add","edit","remove")
 

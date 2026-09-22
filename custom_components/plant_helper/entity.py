@@ -1,7 +1,7 @@
 from __future__ import annotations
 from homeassistant.helpers.entity import Entity
-from plant_helper_domain.entity_contract import EntityContract,attributes_for,available,suggested_entity_id,unique_id
-from plant_helper_domain.runtime import RuntimePlant
+from .domain.entity_contract import EntityContract,attributes_for,available,suggested_entity_id,unique_id
+from .domain.runtime import RuntimePlant
 from .const import DOMAIN
 
 class PlantHelperEntity(Entity):

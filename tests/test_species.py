@@ -1,4 +1,4 @@
-from plant_helper_domain.species import normalize_species_key,classify_match,merge_provider_fields
+from domain.species import normalize_species_key,classify_match,merge_provider_fields
 
 def test_normalize_species_key():
     assert normalize_species_key("  Dracaena_trifasciata!! ")=="dracaena trifasciata"

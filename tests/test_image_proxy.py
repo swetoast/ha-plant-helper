@@ -3,7 +3,7 @@ from datetime import datetime,timedelta,timezone
 from pathlib import Path
 import pytest
 from PIL import Image
-from plant_helper_domain.image_proxy import *
+from domain.image_proxy import *
 NOW=datetime(2026,1,1,tzinfo=timezone.utc)
 def run(c):return asyncio.run(c)
 def image(size=(1200,800),fmt='JPEG'):

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 import pytest
-from plant_helper_domain.interpretation import *
+from domain.interpretation import *
 FORECAST={'season':'autumn','day_length':10.5,'solar_phase':'day','current_temperature':8,'derived':{'forecast_precipitation_6h':4,'radiation_24h':120,'et0_24h':5,'vpd_max_48h':1.8,'frost_hours_48h':2,'wet_hours_48h':14,'hazard':True}}
 def test_indoor_uses_only_daylight_and_seasonal_context():
  r=interpret('indoor',physical={'soil_temperature':22},forecast=FORECAST,air=SimpleNamespace(current_ozone=150))

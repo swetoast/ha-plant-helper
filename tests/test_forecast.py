@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime,timedelta,timezone
 import pytest
-from plant_helper_domain.forecast import *
+from domain.forecast import *
 NOW=datetime(2026,1,1,tzinfo=timezone.utc)
 def payload(status=200,daily=True):
  times=[(NOW+timedelta(hours=i)).isoformat() for i in range(-24,49)];n=len(times)

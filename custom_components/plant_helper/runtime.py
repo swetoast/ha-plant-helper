@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass,field
 from typing import Any
-from plant_helper_domain.runtime import RuntimeCollection
+from .domain.runtime import RuntimeCollection
 
 @dataclass(slots=True)
 class PlantHelperRuntime:

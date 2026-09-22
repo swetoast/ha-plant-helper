@@ -2,8 +2,8 @@ from pathlib import Path
 ROOT=Path(__file__).parents[1]
 def test_platforms_use_shared_contract_not_key_clutter():
  sensor=(ROOT/'custom_components/plant_helper/sensor.py').read_text();binary=(ROOT/'custom_components/plant_helper/binary_sensor.py').read_text()
- assert 'from plant_helper_domain.entity_contract import SENSORS' in sensor and 'SENSOR_KEYS=' not in sensor
- assert 'from plant_helper_domain.entity_contract import BINARY_SENSORS' in binary and 'BINARY_SENSOR_KEYS=' not in binary
+ assert 'from .domain.entity_contract import SENSORS' in sensor and 'SENSOR_KEYS=' not in sensor
+ assert 'from .domain.entity_contract import BINARY_SENSORS' in binary and 'BINARY_SENSOR_KEYS=' not in binary
 def test_dynamic_add_update_remove_registry_lifecycle():
  for name in ('sensor.py','binary_sensor.py'):
   text=(ROOT/'custom_components/plant_helper'/name).read_text();assert 'change.added-known' in text and 'change.updated' in text and 'change.removed' in text and 'async_remove()' in text

@@ -1,6 +1,6 @@
 import asyncio,copy
-from plant_helper_domain.learning import LearningRuntime
-from plant_helper_domain.storage import PlantHelperStorage
+from domain.learning import LearningRuntime
+from domain.storage import PlantHelperStorage
 class B:
  def __init__(self,data=None):self.data=copy.deepcopy(data)
  async def async_load(self):return copy.deepcopy(self.data)

@@ -1,8 +1,8 @@
 import asyncio,copy
 import pytest
-from plant_helper_domain.edit_plant import EditPlantError,EditPlantHooks,async_edit_plant,classify_species_change
-from plant_helper_domain.runtime import RuntimeCollection
-from plant_helper_domain.storage import PlantHelperStorage
+from domain.edit_plant import EditPlantError,EditPlantHooks,async_edit_plant,classify_species_change
+from domain.runtime import RuntimeCollection
+from domain.storage import PlantHelperStorage
 
 class Backend:
  def __init__(self): self.data=None; self.fail=False; self.save_calls=0

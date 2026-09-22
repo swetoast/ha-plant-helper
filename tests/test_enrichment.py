@@ -1,8 +1,8 @@
 import asyncio,copy
 from datetime import datetime,timedelta,timezone
 import pytest
-from plant_helper_domain.enrichment import *
-from plant_helper_domain.storage import PlantHelperStorage
+from domain.enrichment import *
+from domain.storage import PlantHelperStorage
 NOW=datetime(2026,1,1,tzinfo=timezone.utc)
 class B:
  def __init__(self,data=None):self.data=copy.deepcopy(data)

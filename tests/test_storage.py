@@ -8,7 +8,7 @@ def async_test(function):
     wrapper.__name__ = function.__name__
     return wrapper
 
-from plant_helper_domain.storage import (
+from domain.storage import (
     PlantHelperStorage, StorageConflictError, StorageError,
     PlantExistsError, PlantNotFoundError, empty_payload,
 )

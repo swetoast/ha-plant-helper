@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.2 - 2026-09-22
+
+- Fixed HACS installation packaging so all runtime domain modules are installed inside `custom_components/plant_helper`.
+- Fixed the Home Assistant config-flow import failure reported as `Invalid handler specified`.
+- Added isolated-package tests that import the integration and config flow without repository-root helper packages.
+
 ## 0.0.1 - 2026-09-22
 
 Initial GitHub and HACS repository release.

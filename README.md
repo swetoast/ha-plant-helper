@@ -60,7 +60,7 @@ No license file is included in this release. Distribution and reuse terms must b
 
 ## HACS installation
 
-Before the first public release, replace the repository metadata placeholders documented in [GitHub and HACS publication](docs/GITHUB_RELEASE.md).
+The repository metadata is configured for `https://github.com/swetoast/ha-plant-helper`.
 
 After the repository is published:
 

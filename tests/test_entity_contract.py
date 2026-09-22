@@ -1,4 +1,4 @@
-from plant_helper_domain.entity_contract import *
+from domain.entity_contract import *
 def test_final_meaningful_entity_set():
  assert tuple(x.key for x in SENSORS)==('care_status','moisture','light','temperature','health','calibration','species_context')
  assert tuple(x.key for x in BINARY_SENSORS)==('needs_attention',)

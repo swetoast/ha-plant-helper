@@ -1,5 +1,5 @@
 import pytest
-from plant_helper_domain.reconfigure_flow import ReconfigureFlowModel,ReconfigureForm,ReconfigureUpdated
+from domain.reconfigure_flow import ReconfigureFlowModel,ReconfigureForm,ReconfigureUpdated
 
 def test_open_uses_existing_normalized_values():
  current={"latitude":57.72,"longitude":12.94,"ozone_entity":"sensor.ozone","perenual_api_key":"key","perenual_access_level":"paid","trefle_api_key":"token","update_interval":600}

@@ -2,8 +2,8 @@ from __future__ import annotations
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.core import HomeAssistant,callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from plant_helper_domain.entity_contract import BINARY_SENSORS
-from plant_helper_domain.runtime import PlantSetChange,RuntimePlant
+from .domain.entity_contract import BINARY_SENSORS
+from .domain.runtime import PlantSetChange,RuntimePlant
 from . import PlantHelperConfigEntry
 from .entity import PlantHelperEntity
 

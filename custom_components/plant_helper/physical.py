@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any
 from homeassistant.core import HomeAssistant,Event,callback
 from homeassistant.helpers.event import async_track_state_change_event
-from plant_helper_domain.physical import PlantPhysicalProcessor
+from .domain.physical import PlantPhysicalProcessor
 
 PHYSICAL_KEYS=("soil_moisture","soil_temperature","humidity_sensor","lux","battery")
 class PhysicalSubscriptions:
