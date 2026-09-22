@@ -38,7 +38,7 @@ Open the integration entry and select **Configure**.
 - **Edit plant** updates an existing plant while preserving its plant UUID and entity identity.
 - **Remove plant** asks for confirmation before removing the plant's runtime state, entities, registry entries, device, and owned stored data.
 
-Physical entity selectors may include soil moisture, soil temperature, humidity, illuminance, conductivity, battery, and outdoor ozone where supported by the flow.
+Physical entity selectors may include soil moisture, soil temperature, humidity, illuminance, conductivity, battery, and outdoor ozone where supported by the flow. Battery accepts numeric percentage sensors and categorical soil-sensor battery-state entities.
 
 ## Optional species providers
 

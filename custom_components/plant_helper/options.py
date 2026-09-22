@@ -24,7 +24,7 @@ def plant_schema(placement: str) -> vol.Schema:
         vol.Optional("soil_temperature"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="temperature")),
         vol.Optional("humidity_sensor"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="humidity")),
         vol.Optional("lux"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="illuminance")),
-        vol.Optional("battery"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="battery")),
+        vol.Optional("battery"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
         vol.Required("profile",default="balanced"): selector.SelectSelector(selector.SelectSelectorConfig(options=["dry","balanced","moist","custom"])),
         vol.Optional("custom_multiplier"): selector.NumberSelector(selector.NumberSelectorConfig(min=0.25,max=4.0,mode=selector.NumberSelectorMode.BOX)),
     }

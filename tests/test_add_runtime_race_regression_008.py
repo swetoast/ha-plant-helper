@@ -15,4 +15,6 @@ def test_new_entities_are_not_written_before_home_assistant_attaches_them():
 def test_add_form_filters_required_physical_sensor_classes():
     source = (ROOT / "options.py").read_text()
     assert 'domain="sensor",device_class="moisture"' in source
-    assert 'domain="sensor",device_class="battery"' in source
+    battery_line = next(line for line in source.splitlines() if 'vol.Optional("battery")' in line)
+    assert 'domain="sensor"' in battery_line
+    assert 'device_class="battery"' not in battery_line

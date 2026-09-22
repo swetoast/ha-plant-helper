@@ -28,7 +28,7 @@ Entity cleanup previously used a broad UUID substring match. Cleanup now require
 
 ### Form behavior
 
-Removal previously executed whenever the confirmation form was submitted, including a false checkbox value. A checked confirmation is now required. Empty remove menus abort cleanly. Soil-moisture and battery selectors remain constrained to compatible numeric device classes.
+Removal previously executed whenever the confirmation form was submitted, including a false checkbox value. A checked confirmation is now required. Empty remove menus abort cleanly. The soil-moisture selector remains constrained to moisture sensors. Battery supports both numeric battery sensors and categorical soil-sensor battery-state entities.
 
 ### Setup and recovery
 

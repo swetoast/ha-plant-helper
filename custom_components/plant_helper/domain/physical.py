@@ -9,28 +9,42 @@ DEBOUNCE_SECONDS=0.350
 TOLERANCES={"soil_moisture":0.1,"soil_temperature":0.1,"humidity_sensor":0.1,"lux":1.0,"battery":1.0}
 RANGES={"soil_moisture":(0,100),"soil_temperature":(-100,200),"humidity_sensor":(0,100),"lux":(0,1000000),"battery":(0,100)}
 STATE_KEYS={"soil_moisture":"moisture","soil_temperature":"temperature","humidity_sensor":"humidity","lux":"light","battery":"battery"}
+BATTERY_STATES=frozenset({"empty","low","middle","high","full"})
+
+def normalize_battery_state(raw:Any)->float|str|None:
+ if isinstance(raw,str):
+  state=raw.strip().casefold()
+  if state in {"unknown","unavailable","none",""}:return None
+  if state in BATTERY_STATES:return state
+ normalized=normalize_physical_state(raw,minimum=0,maximum=100)
+ return normalized.value if normalized.status=="valid" else None
+
 @dataclass(frozen=True,slots=True)
 class PhysicalChange:
- plant_uuid:str; source_key:str; old_value:float|None; new_value:float|None; generation:int
+ plant_uuid:str; source_key:str; old_value:float|str|None; new_value:float|str|None; generation:int
 @dataclass(slots=True)
 class PlantPhysicalProcessor:
  runtime:RuntimeCollection
  evaluate:Callable[[str,Mapping[str,Any]],Awaitable[None]]
  cached_environment:Callable[[str],Mapping[str,Any]]
  external_call_count:int=0
- _values:dict[tuple[str,str],float|None]=field(default_factory=dict)
+ _values:dict[tuple[str,str],float|str|None]=field(default_factory=dict)
  _tasks:dict[str,asyncio.Task[None]]=field(default_factory=dict)
  _blocked:set[str]=field(default_factory=set)
 
- def material_change(self,key:str,old:float|None,new:float|None)->bool:
+ def material_change(self,key:str,old:float|str|None,new:float|str|None)->bool:
   if old is None or new is None:return old!=new
+  if isinstance(old,str) or isinstance(new,str):return old!=new
   return abs(new-old)>=TOLERANCES.get(key,0.0)
  def accept(self,plant_uuid:str,key:str,raw:Any)->bool:
   plant=self.runtime.plants.get(plant_uuid)
   if plant is None or plant.removing or plant_uuid in self._blocked:return False
-  minimum,maximum=RANGES[key]
-  normalized=normalize_physical_state(raw,minimum=minimum,maximum=maximum)
-  value=normalized.value if normalized.status=="valid" else None
+  if key=="battery":
+   value=normalize_battery_state(raw)
+  else:
+   minimum,maximum=RANGES[key]
+   normalized=normalize_physical_state(raw,minimum=minimum,maximum=maximum)
+   value=normalized.value if normalized.status=="valid" else None
   token=(plant_uuid,key);old=self._values.get(token)
   if token in self._values and not self.material_change(key,old,value):return False
   self._values[token]=value;plant.state[key]=value;plant.state[STATE_KEYS[key]]=value

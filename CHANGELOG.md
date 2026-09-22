@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.10 - 2026-09-22
+
+- Fixed the battery-source regression introduced by restricting the selector to numeric battery device-class sensors.
+- Restored support for soil sensors that expose categorical battery states such as `middle`.
+- Preserved numeric battery percentages as numbers and categorical battery states as source values without inventing percentages.
+- Kept unavailable, unknown, empty, and unsupported battery values unavailable.
+- Added fixture-backed regression tests for both real soil-sensor battery formats.
+
 ## 0.0.9 - 2026-09-22
 
 - Reworked add, edit, and remove lifecycle handling around durable storage commits.

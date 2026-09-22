@@ -16,4 +16,4 @@ def test_config_flow_handler_contract_is_importable_from_packaged_files():
  assert any(isinstance(node,ast.ClassDef) and any(isinstance(base,ast.Attribute) and base.attr=='ConfigFlow' for base in node.bases) for node in tree.body)
 def test_patch_version_matches_changelog():
  version=json.loads((INTEGRATION/'manifest.json').read_text())['version']
- assert version=='0.0.9' and f'## {version} - ' in (ROOT/'CHANGELOG.md').read_text()
+ assert version=='0.0.10' and f'## {version} - ' in (ROOT/'CHANGELOG.md').read_text()
