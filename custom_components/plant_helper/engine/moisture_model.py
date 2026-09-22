@@ -180,6 +180,10 @@ def evaluate_moisture(
     """
     usable = [s for s in sorted(compensated, key=lambda s: s.ts) if s.usable]
     current = usable[-1].value if usable else None
+    # Moisture is a percentage. Compensation must never expose impossible
+    # negative or over-range values, while a real 0% remains valid data.
+    if current is not None:
+        current = max(0.0, min(100.0, float(current)))
 
     events = detect_watering(compensated, max_gap)
     last = last_watering(events)
@@ -193,6 +197,16 @@ def evaluate_moisture(
             state=RECENTLY_WATERED, urgency=0.0, calculated_moisture=current,
             days_since_watered=days_since, days_until_dry=None,
             watering_kind=last.kind, suppressed=False, rain_would_alert=None,
+        )
+
+    # A lower-bound reading is an obvious current dry condition even while
+    # learned thresholds are still calibrating. Do not label valid 0% as normal.
+    if current is not None and current <= 0.0:
+        return MoistureAssessment(
+            state=GETTING_DRY, urgency=55.0, calculated_moisture=0.0,
+            days_since_watered=round(days_since, 2) if days_since is not None else None,
+            days_until_dry=None, watering_kind=last.kind if last is not None else None,
+            suppressed=False, rain_would_alert=None, below_dry=True, above_wet=False,
         )
 
     # Without learned thresholds or a live reading we stay neutral.

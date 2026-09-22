@@ -8,16 +8,14 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import (
-    CONF_ENABLE_INATURALIST_ENRICHMENT,
-    CONF_ENABLE_TREFLE_FALLBACK,
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_OZONE_ENTITY,
     CONF_PERENUAL_API_KEY,
+    CONF_PERENUAL_ACCESS_LEVEL,
+    PERENUAL_ACCESS_FREE,
     CONF_TREFLE_API_KEY,
     CONF_UPDATE_INTERVAL,
-    DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
-    DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_PLACEMENT,
     DEFAULT_PROFILE,
     DEFAULT_RAIN_LIMIT_MM,
@@ -104,7 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def _opt(key, default):
         value = entry.options.get(key, entry.data.get(key, default))
         return default if value in (None, "") else value
-    api=PlantDataAPI(async_get_clientsession(hass), perenual_key=_opt(CONF_PERENUAL_API_KEY,"") or None, storage=storage, trefle_key=_opt(CONF_TREFLE_API_KEY,"") or None, enable_trefle_fallback=_opt(CONF_ENABLE_TREFLE_FALLBACK,DEFAULT_ENABLE_TREFLE_FALLBACK), enable_inaturalist_enrichment=_opt(CONF_ENABLE_INATURALIST_ENRICHMENT,DEFAULT_ENABLE_INATURALIST_ENRICHMENT))
+    api=PlantDataAPI(async_get_clientsession(hass), perenual_key=_opt(CONF_PERENUAL_API_KEY,"") or None, perenual_access_level=_opt(CONF_PERENUAL_ACCESS_LEVEL, PERENUAL_ACCESS_FREE), storage=storage, trefle_key=_opt(CONF_TREFLE_API_KEY,"") or None, enable_inaturalist_enrichment=True)
     plants = _coordinator_plants(storage.get_all_user_plants(), storage)
 
     update_interval = int(

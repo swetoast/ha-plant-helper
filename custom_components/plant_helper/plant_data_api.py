@@ -27,21 +27,21 @@ class PlantDataAPI:
         self,
         session: aiohttp.ClientSession,
         perenual_key: str | None = None,
+        perenual_access_level: str = "free",
         storage: Any = None,
         trefle_key: str | None = None,
-        enable_trefle_fallback: bool = True,
         enable_inaturalist_enrichment: bool = True,
     ) -> None:
         """Initialize orchestrator."""
         self.session = session
         self.perenual_key = perenual_key or ""
+        self.perenual_access_level = perenual_access_level
         self.trefle_key = trefle_key or ""
         self.storage = storage
-        self.enable_trefle_fallback = enable_trefle_fallback
         self.enable_inaturalist_enrichment = enable_inaturalist_enrichment
 
-        self.perenual = PerenualProvider(session=session, api_key=self.perenual_key)
-        self.trefle = TrefleProvider(session=session, api_key=self.trefle_key, enabled=enable_trefle_fallback)
+        self.perenual = PerenualProvider(session=session, api_key=self.perenual_key, access_level=self.perenual_access_level)
+        self.trefle = TrefleProvider(session=session, api_key=self.trefle_key, enabled=bool(self.trefle_key))
         self.inaturalist = INaturalistProvider(session=session, enabled=enable_inaturalist_enrichment)
 
         self._last_error: str | None = None
@@ -77,6 +77,22 @@ class PlantDataAPI:
             "last_error": self._last_error,
             "last_success": self._last_success,
         }
+
+
+    @staticmethod
+    def _identity_matches(data: dict[str, Any], canonical: str) -> bool:
+        """Return whether provider data represents the canonical plant identity."""
+        def norm(value: Any) -> str:
+            return " ".join(str(value or "").casefold().split())
+
+        wanted = norm(canonical)
+        names = {
+            norm(data.get("scientific_name")),
+            norm(data.get("species")),
+        }
+        names.update(norm(value) for value in data.get("synonyms", []) or [])
+        names.update(norm(value) for value in data.get("other_name", []) or [])
+        return bool(wanted and wanted in names)
 
     async def fetch_perenual_plant(
         self,
@@ -155,15 +171,27 @@ class PlantDataAPI:
         )
         calls += perenual_result.calls_made
         messages["perenual"] = perenual_result.message
-        if perenual_result.found and perenual_result.data:
+        if (
+            perenual_result.found
+            and perenual_result.data
+            and self._identity_matches(perenual_result.data, lookup_term)
+        ):
             parts.append({**perenual_result.data, "provider": "perenual"})
+        elif perenual_result.found:
+            messages["perenual"] = "Perenual result did not match the resolved species"
 
         # 3. Trefle — botanical priors, also by scientific name (search -> detail).
         trefle_result = await self.trefle.fetch(lookup_term)
         calls += trefle_result.calls_made
         messages["trefle"] = trefle_result.message
-        if trefle_result.found and trefle_result.data:
+        if (
+            trefle_result.found
+            and trefle_result.data
+            and self._identity_matches(trefle_result.data, lookup_term)
+        ):
             parts.append({**trefle_result.data, "provider": "trefle"})
+        elif trefle_result.found:
+            messages["trefle"] = "Trefle result did not match the resolved species"
 
         if not parts:
             self._last_error = (

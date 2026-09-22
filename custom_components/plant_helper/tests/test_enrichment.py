@@ -60,13 +60,13 @@ check("none -> None", en.reference_watering_days({}) is None)
 print("== iNaturalist + Trefle ==")
 inat = {"provider": "inaturalist", "common_name": "Fern", "photos": ["https://p1.jpg", "https://p2.jpg"]}
 check("photo from photos list", en.summarize_enrichment(inat)["photo"] == "https://p1.jpg")
-trefle = {"provider": "trefle", "family": "Asparagaceae", "light": 7, "soil_moisture": 5,
-          "minimum_temperature_c": 10, "maximum_temperature_c": 30}
+trefle = {"provider": "trefle", "family": "Asparagaceae", "genus": "Dracaena",
+          "native_distribution": ["Africa"], "growth_habit": "herb"}
 ts = en.summarize_enrichment(trefle)
-check("trefle light carried", ts["light_requirement_0_10"] == 7)
-check("trefle soil-moisture pref carried", ts["soil_moisture_pref_0_10"] == 5)
-check("trefle temps carried", ts["min_temperature_c"] == 10 and ts["max_temperature_c"] == 30)
-check("trefle mid soil -> balanced", ts["suggested_profile"] == "balanced")
+check("trefle family carried", ts["family"] == "Asparagaceae")
+check("trefle genus carried", ts["genus"] == "Dracaena")
+check("trefle distribution carried", ts["native_distribution"] == ["Africa"])
+check("trefle does not derive care", "suggested_profile" not in ts)
 
 
 print("== merge_provider_data (uses all three) ==")
@@ -85,13 +85,13 @@ tre = {"provider": "trefle", "family": {"id": 356, "name": "Asparagaceae", "slug
 
 m = en.merge_provider_data([per, inat, tre])
 check("scientific name from iNaturalist (canonical)", m["scientific_name"] == "Dracaena trifasciata")
-check("common name from Perenual", m["common_name"] == "Snake Plant")
+check("common name from iNaturalist identity", m["common_name"] == "mother-in-law's tongue")
 check("family extracted to string from Trefle object", m["family"] == "Asparagaceae")
 check("care fields from Perenual", m["watering"] == "Minimum" and m["poisonous_to_pets"] == 1)
-check("Trefle botanical from nested growth", m["light"] == 7 and m["minimum_temperature_c"] == 10 and m["maximum_temperature_c"] == 30)
-check("Trefle pH from nested growth", m["ph_min"] == 6.0 and m["ph_max"] == 7.5)
+check("Trefle growth is not converted into care", "light" not in m and "minimum_temperature_c" not in m)
+check("Trefle pH is not converted into care", "ph_min" not in m and "ph_max" not in m)
 check("photo prefers iNaturalist (real) over Perenual", m["photo"] == "https://inat/photo.jpg")
-check("all three providers listed", m["providers"] == ["perenual", "inaturalist", "trefle"])
+check("all three providers listed", m["providers"] == ["inaturalist", "perenual", "trefle"])
 check("merged summarizes cleanly", en.summarize_enrichment(m)["suggested_profile"] == "dry_tolerant")
 sm = en.summarize_enrichment(m)
 check("wikipedia link surfaced", sm["wikipedia_url"] == "https://en.wikipedia.org/x")
@@ -121,14 +121,14 @@ check("placeholder rejected, real iNat photo used", mp["photo"] == "https://inat
 only_paywall = en.merge_provider_data([per_paywall])
 check("placeholder-only merge -> no photo", "photo" not in only_paywall)
 check("summarize drops placeholder", "photo" not in en.summarize_enrichment({"default_image": {"regular_url": _ph}}))
-check("two-provider merge lists both", m2["providers"] == ["perenual", "inaturalist"])
+check("two-provider merge lists both", m2["providers"] == ["inaturalist", "perenual"])
 
 print("== source reflects real providers (not local_cache) ==")
-check("source lists providers from merge", en.summarize_enrichment(m)["source"] == "perenual, inaturalist, trefle")
+check("source lists providers from merge", en.summarize_enrichment(m)["source"] == "inaturalist, perenual, trefle")
 check("iNat-only source", en.summarize_enrichment(only_inat)["source"] == "inaturalist")
 # A cached read tagged provider=local_cache still shows real providers if present.
 cached = {**m, "provider": "local_cache"}
-check("cached read still shows real providers as source", en.summarize_enrichment(cached)["source"] == "perenual, inaturalist, trefle")
+check("cached read still shows real providers as source", en.summarize_enrichment(cached)["source"] == "inaturalist, perenual, trefle")
 # Only when there are no providers does it fall back to the provider tag.
 check("no providers -> provider tag", en.summarize_enrichment({"common_name": "X", "provider": "local_cache"})["source"] == "local_cache")
 
@@ -150,7 +150,7 @@ _tre = {"provider": "trefle", "family": {"name": "Asparagaceae"},
 _s = en.summarize_enrichment(en.merge_provider_data([_inat, _per, _tre]))
 check("correct scientific name from autocomplete-shaped iNat", _s["scientific_name"] == "Dracaena trifasciata")
 check("real photo, paywall rejected", _s["photo"] == "https://inaturalist.org/photos/9/medium.jpg")
-check("Trefle soil moisture via atmospheric_humidity alias", _s["soil_moisture_pref_0_10"] == 4)
+check("Trefle care aliases are not derived", "soil_moisture_pref_0_10" not in _s)
 check("reference watering from Perenual word", _s["reference_watering_days"] == 14.0)
 check("data quality high with 3 real providers", en.species_data_quality(_s) == "high")
 

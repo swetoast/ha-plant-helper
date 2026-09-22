@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.4.12]
+
+- Added Perenual Free and Paid access modes, defaulting to Free.
+- Free mode avoids inaccessible detail requests for species IDs above 3000.
+- HTTP 429 upgrade responses no longer trigger a global rate-limit block.
+- Removed null, empty, upgrade-only, placeholder-image, iframe, and API-key-bearing Perenual values.
+- Retained populated search data when details require an upgraded account.
+
+- Clamp calculated soil moisture to the valid 0-100% range.
+- Preserve a valid 0% reading and classify it as dry during calibration.
+- Respect Perenual HTTP 429 Retry-After responses and suppress repeated calls during the backoff window.
+- Add regression coverage for lower-bound moisture and Perenual rate limiting.
+
+# Changelog
+
+## 4.4.10
+
+- Limited Trefle enrichment to populated free API identity, taxonomy, distribution, botanical appearance, image, attribution, and completeness fields.
+- Recursively removed null, empty, and literal null-like Trefle values while preserving meaningful false and zero values.
+- Removed Trefle-derived care and threshold values.
+
 ## 4.4.9
 
 - Replaced the initial setup form with a selector-free form to remove the complete schema serialization path from integration loading.

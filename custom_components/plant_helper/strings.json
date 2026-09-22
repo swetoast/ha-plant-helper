@@ -77,9 +77,8 @@
           "ozone_entity": "Ozone sensor (optional — outdoor ozone advisory)",
           "perenual_api_key": "Perenual API key (optional)",
           "trefle_api_key": "Trefle API token (optional)",
-          "enable_trefle_fallback": "Enable Trefle fallback",
-          "enable_inaturalist_enrichment": "Enable iNaturalist enrichment",
-          "update_interval": "Update interval"
+          "update_interval": "Update interval",
+          "perenual_access_level": "Perenual access level"
         }
       }
     },
@@ -114,6 +113,14 @@
           "name": "Plant ID",
           "description": "Optional single plant to refresh; omit for all."
         }
+      }
+    }
+  },
+  "selector": {
+    "perenual_access_level": {
+      "options": {
+        "free": "Free",
+        "paid": "Paid"
       }
     }
   }

@@ -24,7 +24,7 @@ def test_config_flow_keeps_real_sensor_compatibility_without_control_entities():
     assert '_optional(CONF_SOIL_TEMP' in source and '_sensor(["temperature"])' in source
     assert '_optional(CONF_LUX' in source and '_sensor(["illuminance"])' in source
     assert '_optional(CONF_BATTERY' in source and '_sensor()' in source
-    assert '{"domain": "sensor"}' in source
+    assert 'selector.EntitySelectorConfig(domain="sensor")' in source
 def test_linked_sources_are_exposed_on_fault_diagnostic():
     coordinator = (ROOT / "coordinator.py").read_text(encoding="utf-8")
     binary = (ROOT / "binary_sensor.py").read_text(encoding="utf-8")

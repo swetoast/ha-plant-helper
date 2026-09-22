@@ -8,6 +8,10 @@ STORAGE_VERSION = 1
 
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_PERENUAL_API_KEY = "perenual_api_key"
+CONF_PERENUAL_ACCESS_LEVEL = "perenual_access_level"
+PERENUAL_ACCESS_FREE = "free"
+PERENUAL_ACCESS_PAID = "paid"
+PERENUAL_FREE_MAX_SPECIES_ID = 3000
 CONF_TREFLE_API_KEY = "trefle_api_key"
 CONF_ENABLE_TREFLE_FALLBACK = "enable_trefle_fallback"
 CONF_ENABLE_INATURALIST_ENRICHMENT = "enable_inaturalist_enrichment"

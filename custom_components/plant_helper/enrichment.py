@@ -160,6 +160,15 @@ def summarize_enrichment(data: dict[str, Any] | None) -> dict[str, Any]:
 
     put("common_name", data.get("common_name"))
     put("scientific_name", _first(data.get("scientific_name")) or data.get("species"))
+    for key in (
+        "family", "genus", "rank", "status", "synonyms", "common_names",
+        "author", "year", "bibliography", "observations",
+        "native_distribution", "introduced_distribution", "growth_habit",
+        "flower_color", "foliage_color", "edible", "vegetable", "sources",
+        "completion_ratio", "complete_data", "images_count", "sources_count",
+        "synonyms_count", "provider_last_modified",
+    ):
+        put(key, data.get(key))
     put("family", _family_name(data.get("family")))
     put("cycle", data.get("cycle"))
     put("care_level", data.get("care_level"))
@@ -170,22 +179,6 @@ def summarize_enrichment(data: dict[str, Any] | None) -> dict[str, Any]:
     put("drought_tolerant", _as_bool(data.get("drought_tolerant")))
     put("poisonous_to_pets", _as_bool(data.get("poisonous_to_pets")))
     put("poisonous_to_humans", _as_bool(data.get("poisonous_to_humans")))
-
-    # Trefle botanical preferences (reference only).
-    put("light_requirement_0_10", data.get("light"))
-    put("soil_moisture_pref_0_10", data.get("soil_moisture"))
-    # Whether the species prefers humid air (Trefle atmospheric_humidity is 0-10;
-    # >= 6 indicates a humidity-loving plant). Feeds the humidity advisory.
-    atmos = data.get("atmospheric_humidity")
-    if atmos is None:
-        atmos = data.get("soil_moisture")  # some Trefle rows only carry this
-    try:
-        if atmos is not None and float(atmos) >= 6.0:
-            out["prefers_humidity"] = True
-    except (TypeError, ValueError):
-        pass
-    put("min_temperature_c", data.get("minimum_temperature_c") or data.get("min_temperature_c"))
-    put("max_temperature_c", data.get("maximum_temperature_c") or data.get("max_temperature_c"))
 
     desc = data.get("description") or data.get("wikipedia_summary")
     if isinstance(desc, str) and desc:
@@ -223,15 +216,7 @@ def _family_name(value: Any) -> str | None:
 
 
 def merge_provider_data(parts: list[dict[str, Any]]) -> dict[str, Any]:
-    """Merge normalized payloads from Perenual/Trefle/iNaturalist into one record.
-
-    Field precedence reflects each provider's strength:
-      * identity (scientific name, photo, wiki) -> iNaturalist (canonical taxonomy)
-      * care (watering, sunlight, toxicity, ...) -> Perenual
-      * botanical priors (light, soil moisture, temps, pH) -> Trefle
-    First non-empty wins within each group; the result lists which providers
-    contributed. Pure, so it's unit-tested.
-    """
+    """Merge identity, care context, and botanical metadata by provider role."""
     by = {p.get("provider"): p for p in parts if isinstance(p, dict)}
     per = by.get("perenual", {})
     inat = by.get("inaturalist", {})
@@ -239,36 +224,46 @@ def merge_provider_data(parts: list[dict[str, Any]]) -> dict[str, Any]:
     out: dict[str, Any] = {}
 
     out["scientific_name"] = _pick(
-        inat.get("scientific_name"), _first(per.get("scientific_name")),
-        _first(tre.get("scientific_name")), _first(per.get("species")),
+        inat.get("scientific_name"), _first(tre.get("scientific_name")),
+        _first(per.get("scientific_name")), _first(per.get("species")),
     )
-    out["common_name"] = _pick(per.get("common_name"), inat.get("common_name"), tre.get("common_name"))
-    out["family"] = _family_name(_pick(per.get("family"), inat.get("family"), tre.get("family")))
+    out["common_name"] = _pick(
+        inat.get("common_name"), per.get("common_name"), tre.get("common_name")
+    )
+    out["family"] = _family_name(
+        _pick(tre.get("family"), inat.get("family"), per.get("family"))
+    )
+    for key in (
+        "genus", "family_common_name", "rank", "status", "synonyms",
+        "common_names", "author", "year", "bibliography", "observations",
+        "native_distribution", "introduced_distribution", "growth_habit",
+        "flower_color", "foliage_color", "edible", "vegetable", "sources",
+        "completion_ratio", "complete_data", "images_count", "sources_count",
+        "synonyms_count", "provider_last_modified", "provider_id", "slug",
+    ):
+        if tre.get(key) not in (None, "", [], {}):
+            out[key] = tre[key]
 
     for key in (
-        "watering", "sunlight", "cycle", "care_level", "maintenance",
-        "drought_tolerant", "indoor", "poisonous_to_pets", "poisonous_to_humans",
-        "watering_general_benchmark", "growth_rate",
+        "watering", "sunlight", "soil", "cycle", "care_level", "maintenance",
+        "drought_tolerant", "indoor", "poisonous_to_pets",
+        "poisonous_to_humans", "watering_general_benchmark", "growth_rate",
+        "flowering_season", "pruning_month", "pest_susceptibility",
+        "common_diseases", "tips", "facts",
     ):
         if per.get(key) not in (None, "", [], {}):
             out[key] = per[key]
 
-    for key in ("light", "soil_moisture", "minimum_temperature_c", "maximum_temperature_c", "ph_min", "ph_max"):
-        if tre.get(key) not in (None, "", [], {}):
-            out[key] = tre[key]
-    out.update(_trefle_botanical(tre))
-
     out["description"] = _pick(per.get("description"), inat.get("description"))
-    # iNaturalist first: its photos are real and keyless. Perenual's free-tier
-    # image is an 'upgrade_access' placeholder that 404s, so it comes last and
-    # only if it passes the placeholder filter.
-    out["photo"] = _pick(_valid_photo(inat.get("photo")), _photo_url(inat), _photo_url(per))
-    out["photos"] = _pick(inat.get("photos"), per.get("photos")) or []
+    out["photo"] = _pick(
+        _valid_photo(inat.get("photo")), _photo_url(inat),
+        _valid_photo(tre.get("image_url")), _photo_url(tre), _photo_url(per),
+    )
+    out["photos"] = _pick(inat.get("photos"), tre.get("images"), per.get("photos")) or []
     out["wikipedia_url"] = inat.get("wikipedia_url")
-    out["providers"] = [p for p in ("perenual", "inaturalist", "trefle") if p in by]
+    out["providers"] = [p for p in ("inaturalist", "perenual", "trefle") if p in by]
 
     return {k: v for k, v in out.items() if v not in (None, "", [], {})}
-
 
 def _trefle_botanical(tre: dict[str, Any]) -> dict[str, Any]:
     """Pull botanical priors from Trefle's actual nested shape (growth/thresholds).

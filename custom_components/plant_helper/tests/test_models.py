@@ -260,3 +260,38 @@ def test_calibration_rejects_non_finite_observations():
     assert cal.reduce_window_observations(observations) == {"mid": (0.2, 1)}
     assert cal.thermal_mean([20.0, float("nan"), float("inf")]) == 20.0
     assert cal.diurnal_swing([(18.0, 24.0), (float("nan"), 25.0), (25.0, 20.0)]) == 6.0
+
+
+def test_zero_moisture_is_clamped_and_dry_during_calibration():
+    """A compensated lower-bound reading must never become negative or normal."""
+    now = datetime.now(timezone.utc)
+    result = mm.evaluate_moisture(
+        now=now,
+        compensated=[Sample(now, -1.14, True)],
+        max_gap=timedelta(minutes=15),
+        m_dry=None,
+        m_max=None,
+        drying_rate=None,
+        placement="indoor",
+        forecast_precip_mm=None,
+        profile_rain_limit_mm=1.0,
+    )
+    assert result.calculated_moisture == 0.0
+    assert result.state == mm.GETTING_DRY
+    assert result.below_dry is True
+
+
+def test_moisture_is_clamped_to_upper_bound():
+    now = datetime.now(timezone.utc)
+    result = mm.evaluate_moisture(
+        now=now,
+        compensated=[Sample(now, 101.5, True)],
+        max_gap=timedelta(minutes=15),
+        m_dry=None,
+        m_max=None,
+        drying_rate=None,
+        placement="indoor",
+        forecast_precip_mm=None,
+        profile_rain_limit_mm=1.0,
+    )
+    assert result.calculated_moisture == 100.0

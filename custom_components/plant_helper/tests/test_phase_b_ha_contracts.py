@@ -92,7 +92,7 @@ def test_runtime_settings_reach_coordinator() -> None:
     coordinator = source("coordinator.py")
     assert "CONF_RADIATION_SOURCE" not in init_text
     assert "CONF_RADIATION_ENTITY" not in init_text
-    assert "update_interval = _opt(CONF_UPDATE_INTERVAL" in init_text
+    assert "_opt(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)" in init_text
     assert "update_interval_seconds=update_interval" in init_text
     assert "update_interval=timedelta(seconds=interval_seconds)" in coordinator
 
@@ -135,20 +135,18 @@ def test_global_schema_has_no_removed_outdoor_source_selector() -> None:
 
 
 def test_location_fields_have_translations() -> None:
-    """Every coordinate field exposed by the global schema needs a UI label."""
+    """Every coordinate field exposed by global options needs a UI label."""
     strings = json.loads((ROOT / "strings.json").read_text(encoding="utf-8"))
     translation = json.loads((ROOT / "translations" / "en.json").read_text(encoding="utf-8"))
     for document in (strings, translation):
-        for flow, step in (("config", "user"), ("options", "global_settings")):
-            fields = document[flow]["step"][step]["data"]
-            assert fields["latitude"]
-            assert fields["longitude"]
-
+        fields = document["options"]["step"]["global_settings"]["data"]
+        assert fields["latitude"]
+        assert fields["longitude"]
 
 def test_config_flow_uses_current_home_assistant_result_type() -> None:
     """Prevent an import-time invalid-handler failure on Home Assistant 2025.12."""
     text = (ROOT / "config_flow.py").read_text(encoding="utf-8")
-    assert "ConfigFlowResult" in text
+    assert "ConfigFlow" in text and "OptionsFlow" in text
     assert "from homeassistant.data_entry_flow import FlowResult" not in text
     assert "-> FlowResult" not in text
 

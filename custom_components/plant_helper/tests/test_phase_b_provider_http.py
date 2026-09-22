@@ -14,6 +14,7 @@ if "plant_helper" not in sys.modules:
 
 from plant_helper.api.inaturalist import INaturalistProvider
 from plant_helper.api.trefle import TrefleProvider
+from plant_helper.api.perenual import PerenualProvider
 
 
 class Response:
@@ -21,6 +22,7 @@ class Response:
         self.payload = payload
         self.status = status
         self._text = text
+        self.headers = {}
 
     async def __aenter__(self):
         return self

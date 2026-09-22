@@ -1,4 +1,4 @@
-"""Trefle API fallback provider for Plant Helper."""
+"""Trefle botanical context provider for Plant Helper."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class TrefleProvider:
-    """Trefle fallback provider."""
+    """Trefle identity, taxonomy, distribution, and image provider."""
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class TrefleProvider:
     async def fetch(self, search_name: str) -> ProviderResult:
         """Fetch plant from Trefle."""
         if not self.enabled:
-            return ProviderResult(False, "trefle", api_checked=False, api_called=False, message="Trefle fallback disabled")
+            return ProviderResult(False, "trefle", api_checked=False, api_called=False, message="Trefle provider disabled")
         if not self.api_key:
             return ProviderResult(False, "trefle", api_checked=False, api_called=False, message="Trefle token missing")
         if not self.limiter.has_daily_capacity():
@@ -79,7 +79,11 @@ class TrefleProvider:
                 detail_payload = await self._get_path(f"/api/v1/species/{slug}")
 
             if detail_payload and isinstance(detail_payload.get("data"), dict):
-                detail_data = {**selected, **detail_payload["data"]}
+                detail_data = {
+                    **selected,
+                    **detail_payload["data"],
+                    "_response_meta": detail_payload.get("meta") or {},
+                }
 
             data = self._normalize(detail_data)
             self.last_error = None
@@ -131,21 +135,89 @@ class TrefleProvider:
                 return item
         return candidates[0] if candidates else None
 
-    def _normalize(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Normalize Trefle data to Plant Helper format."""
-        main0 = data.get("main_species") or {}
-        scientific_name = data.get("scientific_name") or main0.get("scientific_name")
-        common_name = data.get("common_name") or scientific_name or data.get("slug")
-        species = scientific_name or data.get("slug") or common_name
-        main = data.get("main_species") or {}
-        growth = data.get("growth") or main.get("growth") or {}
-        specifications = data.get("specifications") or main.get("specifications") or {}
-        images = data.get("images") or {}
+    @staticmethod
+    def _without_empty(value: Any) -> Any:
+        """Recursively omit null and empty values while preserving False and zero."""
+        if isinstance(value, dict):
+            cleaned = {
+                key: TrefleProvider._without_empty(item)
+                for key, item in value.items()
+            }
+            return {
+                key: item
+                for key, item in cleaned.items()
+                if item is not None and item != "" and item != [] and item != {}
+            }
+        if isinstance(value, list):
+            cleaned = [TrefleProvider._without_empty(item) for item in value]
+            return [
+                item
+                for item in cleaned
+                if item is not None and item != "" and item != [] and item != {}
+            ]
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped if stripped and stripped.casefold() not in {"null", "none"} else None
+        return value
 
-        return {
-            "species": species,
+    @staticmethod
+    def _synonym_names(value: Any) -> list[str]:
+        """Normalize Trefle search and detail synonym shapes to names."""
+        names: list[str] = []
+        for item in value or []:
+            name = item.get("name") if isinstance(item, dict) else item
+            if isinstance(name, str) and name.strip():
+                names.append(name.strip())
+        return list(dict.fromkeys(names))
+
+    @staticmethod
+    def _image_context(images: Any) -> dict[str, list[dict[str, Any]]]:
+        """Keep a compact licensed image sample from each populated category."""
+        if not isinstance(images, dict):
+            return {}
+        result: dict[str, list[dict[str, Any]]] = {}
+        for category, entries in images.items():
+            kept: list[dict[str, Any]] = []
+            for item in entries or []:
+                if not isinstance(item, dict) or not item.get("image_url"):
+                    continue
+                kept.append({
+                    key: item.get(key)
+                    for key in ("image_url", "copyright")
+                    if item.get(key) not in (None, "")
+                })
+                if len(kept) >= 2:
+                    break
+            if kept:
+                result[category] = kept
+        return result
+
+    def _normalize(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Normalize useful free Trefle identity and botanical context only."""
+        main = data.get("main_species") or {}
+        scientific_name = data.get("scientific_name") or main.get("scientific_name")
+        common_name = data.get("common_name") or scientific_name or data.get("slug")
+        response_meta = data.get("_response_meta") or {}
+        distribution = data.get("distribution") or {}
+        specifications = data.get("specifications") or {}
+        flower = data.get("flower") or {}
+        foliage = data.get("foliage") or {}
+
+        sources = []
+        for source in data.get("sources") or []:
+            if not isinstance(source, dict):
+                continue
+            sources.append({
+                key: source.get(key)
+                for key in ("name", "url", "citation", "licence", "licence_url")
+                if source.get(key) not in (None, "")
+            })
+
+        normalized = {
+            "species": scientific_name or data.get("slug") or common_name,
             "common_name": common_name,
             "scientific_name": scientific_name,
+            "common_names": data.get("common_names"),
             "other_name": self._flatten_common_names(data.get("common_names") or {}),
             "family": data.get("family"),
             "family_common_name": data.get("family_common_name"),
@@ -153,30 +225,34 @@ class TrefleProvider:
             "rank": data.get("rank"),
             "status": data.get("status"),
             "slug": data.get("slug"),
-            "image_url": data.get("image_url"),
-            "default_image": self._default_image(data),
-            "images": images,
-            "synonyms": data.get("synonyms", []),
-            "duration": data.get("duration"),
-            "edible": data.get("edible"),
-            "edible_part": data.get("edible_part"),
-            "vegetable": data.get("vegetable"),
+            "author": data.get("author"),
+            "year": data.get("year"),
+            "bibliography": data.get("bibliography"),
             "observations": data.get("observations"),
-            "distribution": data.get("distribution"),
-            "distributions": data.get("distributions"),
-            "foliage": data.get("foliage"),
-            "flower": data.get("flower"),
-            "fruit_or_seed": data.get("fruit_or_seed"),
-            "specifications": specifications,
-            "growth": growth,
-            "thresholds": self._thresholds(data),
-            "tips": self._tips(data),
-            "facts": self._facts(data),
+            "native_distribution": distribution.get("native"),
+            "introduced_distribution": distribution.get("introduced"),
+            "growth_habit": specifications.get("growth_habit"),
+            "flower_color": flower.get("color"),
+            "foliage_color": foliage.get("color"),
+            "edible": data.get("edible"),
+            "vegetable": data.get("vegetable"),
+            "image_url": data.get("image_url"),
+            "images": self._image_context(data.get("images")),
+            "synonyms": self._synonym_names(data.get("synonyms")),
+            "sources": sources,
+            "completion_ratio": data.get("completion_ratio"),
+            "complete_data": data.get("complete_data"),
+            "images_count": response_meta.get("images_count"),
+            "sources_count": response_meta.get("sources_count"),
+            "synonyms_count": response_meta.get("synonyms_count"),
+            "provider_last_modified": response_meta.get("last_modified"),
+            "growth": self._without_empty(data.get("growth") or {}),
             "source": "trefle",
             "provider": "trefle",
             "provider_id": data.get("id"),
             "updated_at": datetime.now().isoformat(),
         }
+        return self._without_empty(normalized)
 
     def _thresholds(self, data: dict[str, Any]) -> dict[str, Any]:
         """Build thresholds from Trefle growth fields."""

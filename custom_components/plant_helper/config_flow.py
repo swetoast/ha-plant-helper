@@ -28,16 +28,15 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_ENABLE_INATURALIST_ENRICHMENT,
-    CONF_ENABLE_TREFLE_FALLBACK,
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_OZONE_ENTITY,
     CONF_PERENUAL_API_KEY,
+    CONF_PERENUAL_ACCESS_LEVEL,
+    PERENUAL_ACCESS_FREE,
+    PERENUAL_ACCESS_PAID,
     CONF_TREFLE_API_KEY,
     CONF_UPDATE_INTERVAL,
-    DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
-    DEFAULT_ENABLE_TREFLE_FALLBACK,
     DEFAULT_PLACEMENT,
     DEFAULT_PROFILE,
     DEFAULT_RAIN_LIMIT_MM,
@@ -138,71 +137,57 @@ def _plant_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
 
 
 def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
+    """Global settings shared by all plants."""
     o = options or {}
     return vol.Schema(
         {
-            _optional(CONF_LATITUDE, o.get(CONF_LATITUDE)): selector.NumberSelector(selector.NumberSelectorConfig(min=-90, max=90, step=0.000001, mode=selector.NumberSelectorMode.BOX)),
-            _optional(CONF_LONGITUDE, o.get(CONF_LONGITUDE)): selector.NumberSelector(selector.NumberSelectorConfig(min=-180, max=180, step=0.000001, mode=selector.NumberSelectorMode.BOX)),
-            _optional(CONF_OZONE_ENTITY, o.get(CONF_OZONE_ENTITY)):
-                selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            _optional(CONF_PERENUAL_API_KEY, o.get(CONF_PERENUAL_API_KEY)):
-                selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
-            _optional(CONF_TREFLE_API_KEY, o.get(CONF_TREFLE_API_KEY)):
-                selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
+            _optional(CONF_LATITUDE, o.get(CONF_LATITUDE)): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=-90, max=90, step=0.000001,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            _optional(CONF_LONGITUDE, o.get(CONF_LONGITUDE)): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=-180, max=180, step=0.000001,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            _optional(CONF_OZONE_ENTITY, o.get(CONF_OZONE_ENTITY)): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            _optional(CONF_PERENUAL_API_KEY, o.get(CONF_PERENUAL_API_KEY)): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            ),
             vol.Optional(
-                CONF_ENABLE_TREFLE_FALLBACK,
-                default=o.get(CONF_ENABLE_TREFLE_FALLBACK, DEFAULT_ENABLE_TREFLE_FALLBACK),
-            ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_ENABLE_INATURALIST_ENRICHMENT,
-                default=o.get(CONF_ENABLE_INATURALIST_ENRICHMENT, DEFAULT_ENABLE_INATURALIST_ENRICHMENT),
-            ): selector.BooleanSelector(),
+                CONF_PERENUAL_ACCESS_LEVEL,
+                default=o.get(CONF_PERENUAL_ACCESS_LEVEL, PERENUAL_ACCESS_FREE),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[PERENUAL_ACCESS_FREE, PERENUAL_ACCESS_PAID],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="perenual_access_level",
+                )
+            ),
+            _optional(CONF_TREFLE_API_KEY, o.get(CONF_TREFLE_API_KEY)): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            ),
             vol.Optional(
                 CONF_UPDATE_INTERVAL,
                 default=o.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
             ): selector.NumberSelector(
-                selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s", mode=selector.NumberSelectorMode.BOX)
-            ),
-        }
-    )
-
-
-
-def _initial_schema() -> vol.Schema:
-    """Conservative initial form using only stable selector configurations."""
-    return vol.Schema(
-        {
-            vol.Optional(
-                CONF_ENABLE_TREFLE_FALLBACK,
-                default=DEFAULT_ENABLE_TREFLE_FALLBACK,
-            ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_ENABLE_INATURALIST_ENRICHMENT,
-                default=DEFAULT_ENABLE_INATURALIST_ENRICHMENT,
-            ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_UPDATE_INTERVAL,
-                default=DEFAULT_UPDATE_INTERVAL,
-            ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
-                    min=60,
-                    max=3600,
-                    step=30,
-                    unit_of_measurement="s",
+                    min=60, max=3600, step=30, unit_of_measurement="s",
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
-            vol.Optional(CONF_OZONE_ENTITY): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="sensor")
-            ),
-            vol.Optional(CONF_PERENUAL_API_KEY): selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
-            ),
-            vol.Optional(CONF_TREFLE_API_KEY): selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
-            ),
         }
     )
+
+
+def _initial_schema() -> vol.Schema:
+    """Initial setup settings; iNaturalist is always enabled."""
+    return _global_schema()
 
 
 # --- config flow (initial setup) ------------------------------------------
@@ -484,7 +469,14 @@ class PlantHelperOptionsFlow(OptionsFlow):
     # -- global settings --
     async def async_step_global_settings(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         if user_input is not None:
-            return self._finish(user_input)
+            settings = dict(user_input)
+            settings[CONF_PERENUAL_API_KEY] = (
+                settings.get(CONF_PERENUAL_API_KEY) or ""
+            ).strip()
+            settings[CONF_TREFLE_API_KEY] = (
+                settings.get(CONF_TREFLE_API_KEY) or ""
+            ).strip()
+            return self._finish(settings)
         return self.async_show_form(
             step_id="global_settings",
             data_schema=_global_schema(self.config_entry.options),

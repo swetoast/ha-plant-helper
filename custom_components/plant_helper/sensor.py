@@ -219,8 +219,8 @@ class PlantSpeciesInfoSensor(_PlantSensorBase):
     """Species context from the enrichment providers (Perenual/Trefle/iNaturalist).
 
     Reference/context only — it never affects care. State is the common name;
-    attributes carry care guidance, toxicity, a suggested profile, a reference
-    watering interval, and environmental preferences. A photo (if any) is shown
+    attributes carry populated identity, botanical context, optional Perenual care
+    guidance, toxicity, attribution, and provider information. A photo (if any) is shown
     as the entity picture.
     """
 
