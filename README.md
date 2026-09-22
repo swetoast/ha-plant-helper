@@ -2,11 +2,11 @@
 
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![HACS](https://img.shields.io/badge/HACS-Custom%20Repository-41BDF5)](https://hacs.xyz/)
-[![Version](https://img.shields.io/badge/version-4.4.17-blue)](custom_components/plant_helper/manifest.json)
+[![Version](https://img.shields.io/badge/version-4.4.19-blue)](custom_components/plant_helper/manifest.json)
 
 Plant Helper is a Home Assistant custom integration that turns soil-moisture, soil-temperature, and light readings into calibrated, time-based plant-care guidance. It learns how each plant behaves in its actual location and combines that local history with Open-Meteo outdoor context and optional read-only species context.
 
-> **Current release:** Version 4.4.17. See the changelog for release history.
+> **Current release:** Version 4.4.19. See the changelog for release history.
 
 ## Highlights
 
@@ -28,7 +28,7 @@ Plant Helper is a Home Assistant custom integration that turns soil-moisture, so
 
 - Home Assistant 2025.12.2 or later
 - One soil-moisture sensor per plant
-- Optional soil-temperature, illuminance, and battery sensors
+- Optional soil-temperature, air-humidity, illuminance, and battery sensors
 - Internet access for Open-Meteo outdoor context
 - Optional internet access for species providers
 

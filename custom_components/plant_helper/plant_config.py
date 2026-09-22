@@ -7,8 +7,22 @@ and otherwise just renders forms around these helpers.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
+
+from .const import (
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    CONF_OZONE_ENTITY,
+    CONF_PERENUAL_ACCESS_LEVEL,
+    CONF_PERENUAL_API_KEY,
+    CONF_TREFLE_API_KEY,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
+    PERENUAL_ACCESS_FREE,
+    PERENUAL_ACCESS_PAID,
+)
 
 # Form field keys (also the storage "entities" dict keys).
 CONF_NAME = "name"
@@ -31,11 +45,101 @@ ENTITY_KEYS = (
     CONF_LUX,
     CONF_BATTERY,
 )
+CONFIGURABLE_ENTITY_KEYS = frozenset(
+    {
+        *ENTITY_KEYS,
+        CONF_PLACEMENT,
+        CONF_PROFILE,
+        CONF_CUSTOM_MULTIPLIER,
+        CONF_RAIN_LIMIT_MM,
+    }
+)
 
 DEFAULT_PLACEMENT = "indoor"
 DEFAULT_PROFILE = "balanced"
 DEFAULT_RAIN_LIMIT_MM = 1.0
 PROFILE_CUSTOM = "custom"
+
+GLOBAL_OPTION_KEYS = frozenset(
+    {
+        CONF_LATITUDE,
+        CONF_LONGITUDE,
+        CONF_OZONE_ENTITY,
+        CONF_PERENUAL_API_KEY,
+        CONF_PERENUAL_ACCESS_LEVEL,
+        CONF_TREFLE_API_KEY,
+        CONF_UPDATE_INTERVAL,
+    }
+)
+
+
+def normalize_global_options(values: Any) -> dict[str, Any]:
+    """Normalize Global settings for setup, display, and persistence."""
+    source = values if isinstance(values, dict) else {}
+    normalized: dict[str, Any] = {
+        CONF_PERENUAL_ACCESS_LEVEL: PERENUAL_ACCESS_FREE,
+        CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL,
+    }
+
+    def _bounded_number(key: str, minimum: float, maximum: float) -> None:
+        value = source.get(key)
+        if isinstance(value, bool):
+            return
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(number) and minimum <= number <= maximum:
+            normalized[key] = number
+
+    _bounded_number(CONF_LATITUDE, -90.0, 90.0)
+    _bounded_number(CONF_LONGITUDE, -180.0, 180.0)
+
+    ozone_entity = source.get(CONF_OZONE_ENTITY)
+    if isinstance(ozone_entity, str):
+        ozone_entity = ozone_entity.strip()
+        if ozone_entity.startswith("sensor.") and len(ozone_entity) > len("sensor."):
+            normalized[CONF_OZONE_ENTITY] = ozone_entity
+
+    for key in (CONF_PERENUAL_API_KEY, CONF_TREFLE_API_KEY):
+        value = source.get(key)
+        if isinstance(value, str) and (value := value.strip()):
+            normalized[key] = value
+
+    access_level = source.get(CONF_PERENUAL_ACCESS_LEVEL)
+    if access_level in (PERENUAL_ACCESS_FREE, PERENUAL_ACCESS_PAID):
+        normalized[CONF_PERENUAL_ACCESS_LEVEL] = access_level
+
+    interval = source.get(CONF_UPDATE_INTERVAL)
+    if not isinstance(interval, bool):
+        try:
+            interval_number = float(interval)
+        except (TypeError, ValueError):
+            interval_number = float(DEFAULT_UPDATE_INTERVAL)
+        if math.isfinite(interval_number):
+            normalized[CONF_UPDATE_INTERVAL] = max(60, min(3600, int(interval_number)))
+
+    return normalized
+
+
+def next_revision(value: Any) -> int:
+    """Return a safe monotonically increasing options revision."""
+    if isinstance(value, bool):
+        return 1
+    try:
+        revision = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 1
+    return max(0, revision) + 1
+
+
+def replace_global_options(existing: Any, submitted: Any) -> dict[str, Any]:
+    """Replace all Global settings while preserving unrelated internal options."""
+    current = dict(existing) if isinstance(existing, dict) else {}
+    options = {key: value for key, value in current.items() if key not in GLOBAL_OPTION_KEYS}
+    options.update(normalize_global_options(submitted))
+    options["_rev"] = next_revision(current.get("_rev"))
+    return options
 
 _SLUG_RE = re.compile(r"[^a-z0-9_]+")
 

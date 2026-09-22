@@ -10,19 +10,23 @@ import voluptuous as vol
 from homeassistant.config_entries import OptionsFlow
 from homeassistant.helpers import selector
 
-from .config_flow import _global_schema, _plant_schema, _select
-from .const import (
-    CONF_PERENUAL_API_KEY,
-    CONF_TREFLE_API_KEY,
-    DEFAULT_PLACEMENT,
-    DOMAIN,
+from .config_flow import (
+    _global_schema,
+    _global_suggested_values,
+    _plant_schema,
+    _select,
 )
+from .const import DEFAULT_PLACEMENT, DOMAIN
 from .plant_config import (
     CONF_MOISTURE,
     CONF_NAME,
     CONF_PLACEMENT,
     CONF_PLANT_ID,
     CONF_SPECIES,
+    CONFIGURABLE_ENTITY_KEYS,
+    next_revision,
+    normalize_global_options,
+    replace_global_options,
     split_record,
     unique_plant_id,
     validate_plant,
@@ -58,7 +62,12 @@ class PlantHelperOptionsFlow(OptionsFlow):
         await storage.async_load()
         return storage
 
-    def _finish(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _finish(
+        self,
+        extra: dict[str, Any] | None = None,
+        *,
+        replace_globals: bool = False,
+    ) -> dict[str, Any]:
         """Close the options flow and trigger exactly one reload.
 
         Plant data lives in storage, so a mutation wouldn't otherwise change the
@@ -66,10 +75,14 @@ class PlantHelperOptionsFlow(OptionsFlow):
         options-update listener fires once — deterministically, and without the
         double reload a manual reload-plus-changed-options would cause.
         """
-        options = {**self.config_entry.options}
-        if extra:
-            options.update(extra)
-        options["_rev"] = int(self.config_entry.options.get("_rev", 0)) + 1
+        current = dict(self.config_entry.options)
+        if replace_globals:
+            options = replace_global_options(current, extra)
+        else:
+            options = current
+            if extra:
+                options.update(extra)
+            options["_rev"] = next_revision(current.get("_rev"))
         return self.async_create_entry(title="", data=options)
 
     def _remove_device(self, plant_id: str) -> None:
@@ -92,13 +105,14 @@ class PlantHelperOptionsFlow(OptionsFlow):
         if device is not None:
             device_registry.async_remove_device(device.id)
 
-    async def _purge_plant(self, storage: Any, plant_id: str) -> None:
+    async def _purge_plant(self, storage: Any, plant_id: str) -> bool:
         """Remove every trace of a plant: config, learned state, samples, device.
 
         Persisted immediately so the deletion survives the subsequent reload and
         nothing about the plant is left behind in Home Assistant.
         """
-        await storage.async_remove_user_plant(plant_id)  # persists immediately
+        if not await storage.async_remove_user_plant(plant_id):
+            return False
 
         runtime = self._runtime()
         learned = runtime.get("learned")
@@ -123,6 +137,7 @@ class PlantHelperOptionsFlow(OptionsFlow):
             getattr(coordinator, "_enrichment", {}).pop(plant_id, None)
 
         self._remove_device(plant_id)
+        return True
 
     def _moisture_state(self, data: dict[str, Any]) -> str | None:
         entity = data.get(CONF_MOISTURE)
@@ -149,19 +164,23 @@ class PlantHelperOptionsFlow(OptionsFlow):
             if not errors:
                 storage = await self._load_storage()
                 name, species, entities = split_record(user_input)
-                await self._ensure_species_stub(storage, species)
-                plant_id = unique_plant_id(storage.get_all_user_plants(), name)
-                await storage.async_add_user_plant(
-                    plant_id, species=species, custom_name=name, entities=entities
-                )
-                return self._finish()
+                if not await self._ensure_species_stub(storage, species):
+                    errors["base"] = "storage_error"
+                else:
+                    plant_id = unique_plant_id(storage.get_all_user_plants(), name)
+                    stored = await storage.async_add_user_plant(
+                        plant_id, species=species, custom_name=name, entities=entities
+                    )
+                    if stored:
+                        return self._finish()
+                    errors["base"] = "storage_error"
         return self.async_show_form(
             step_id="add_plant",
             data_schema=_plant_schema(user_input),
             errors=errors,
         )
 
-    async def _ensure_species_stub(self, storage: Any, species: str) -> None:
+    async def _ensure_species_stub(self, storage: Any, species: str) -> bool:
         """Ensure a cache entry exists so the plant can be stored.
 
         No API call here: the coordinator performs the real provider lookup on its
@@ -169,8 +188,11 @@ class PlantHelperOptionsFlow(OptionsFlow):
         client, and show up in the API diagnostic sensors). If the species is
         already cached with real data, that data is kept.
         """
-        if storage.get_plant(species) is None:
+        if storage.get_plant(species) is not None:
+            return True
+        return bool(
             await storage.async_add_plant(species, {"common_name": species})
+        )
 
     # -- edit --
     async def async_step_edit_plant_select(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -200,45 +222,56 @@ class PlantHelperOptionsFlow(OptionsFlow):
                 previous = record.get("entities") or {}
                 old_placement = previous.get(CONF_PLACEMENT, DEFAULT_PLACEMENT)
                 new_placement = entities.get(CONF_PLACEMENT, DEFAULT_PLACEMENT)
-                merged = {**previous, **entities}
-                await self._ensure_species_stub(storage, species)
-                await storage.async_update_user_plant(
-                    self._edit_id, {
-                        "custom_name": name,
-                        "species": species,
-                        "entities": merged,
-                    }
-                )
-                if new_placement != old_placement:
-                    runtime = self._runtime()
-                    learned = runtime.get("learned")
-                    samples = runtime.get("samples")
-                    if learned is not None:
-                        from .learned_store import set_timer, swap_placement
+                merged = {
+                    key: value
+                    for key, value in previous.items()
+                    if key not in CONFIGURABLE_ENTITY_KEYS
+                }
+                merged.update(entities)
+                if not await self._ensure_species_stub(storage, species):
+                    errors["base"] = "storage_error"
+                else:
+                    stored = await storage.async_update_user_plant(
+                        self._edit_id,
+                        {
+                            "custom_name": name,
+                            "species": species,
+                            "entities": merged,
+                        },
+                    )
+                    if not stored:
+                        errors["base"] = "storage_error"
+                    else:
+                        if new_placement != old_placement:
+                            runtime = self._runtime()
+                            learned = runtime.get("learned")
+                            samples = runtime.get("samples")
+                            if learned is not None:
+                                from .learned_store import set_timer, swap_placement
 
-                        needs_calibration = swap_placement(
-                            learned.data, self._edit_id, new_placement
-                        )
-                        if needs_calibration:
-                            _LOGGER.info(
-                                "Plant %s moved to %s without a complete baseline; "
-                                "placement calibration will resume",
-                                self._edit_id, new_placement,
-                            )
-                        else:
-                            _LOGGER.info(
-                                "Plant %s moved to %s and reused its complete baseline",
-                                self._edit_id, new_placement,
-                            )
-                        for timer in ("dry", "wet", "cold", "warm"):
-                            set_timer(learned.data, self._edit_id, timer, None)
-                        await learned.async_save()
-                    if samples is not None:
-                        from .sample_store import clear_key_prefix
+                                needs_calibration = swap_placement(
+                                    learned.data, self._edit_id, new_placement
+                                )
+                                if needs_calibration:
+                                    _LOGGER.info(
+                                        "Plant %s moved to %s without a complete baseline; "
+                                        "placement calibration will resume",
+                                        self._edit_id, new_placement,
+                                    )
+                                else:
+                                    _LOGGER.info(
+                                        "Plant %s moved to %s and reused its complete baseline",
+                                        self._edit_id, new_placement,
+                                    )
+                                for timer in ("dry", "wet", "cold", "warm"):
+                                    set_timer(learned.data, self._edit_id, timer, None)
+                                await learned.async_save()
+                            if samples is not None:
+                                from .sample_store import clear_key_prefix
 
-                        clear_key_prefix(samples.data, f"plant:{self._edit_id}:")
-                        await samples.async_save()
-                return self._finish()
+                                clear_key_prefix(samples.data, f"plant:{self._edit_id}:")
+                                await samples.async_save()
+                        return self._finish()
 
         defaults = {
             CONF_NAME: record.get("custom_name") or self._edit_id,
@@ -257,10 +290,12 @@ class PlantHelperOptionsFlow(OptionsFlow):
         plants = storage.get_all_user_plants()
         if not plants:
             return self.async_abort(reason="no_plants")
+        errors: dict[str, str] = {}
         if user_input is not None:
             plant_id = user_input[CONF_PLANT_ID]
-            await self._purge_plant(storage, plant_id)
-            return self._finish()
+            if await self._purge_plant(storage, plant_id):
+                return self._finish()
+            errors["base"] = "storage_error"
         labels = {
             pid: f"{rec.get('custom_name') or pid}" for pid, rec in plants.items()
         }
@@ -274,20 +309,18 @@ class PlantHelperOptionsFlow(OptionsFlow):
                     )
                 )}
             ),
+            errors=errors,
         )
 
     # -- global settings --
     async def async_step_global_settings(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         if user_input is not None:
-            settings = dict(user_input)
-            settings[CONF_PERENUAL_API_KEY] = (
-                settings.get(CONF_PERENUAL_API_KEY) or ""
-            ).strip()
-            settings[CONF_TREFLE_API_KEY] = (
-                settings.get(CONF_TREFLE_API_KEY) or ""
-            ).strip()
-            return self._finish(settings)
+            settings = normalize_global_options(user_input)
+            return self._finish(settings, replace_globals=True)
         return self.async_show_form(
             step_id="global_settings",
-            data_schema=_global_schema(self.config_entry.options),
+            data_schema=self.add_suggested_values_to_schema(
+                _global_schema(),
+                _global_suggested_values(dict(self.config_entry.options)),
+            ),
         )

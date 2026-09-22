@@ -1,3 +1,21 @@
+## [4.4.19] - 2026-09-22
+
+- Aligned initial setup and later Global settings so both use the same schema and normalization rules.
+- Fixed cleared optional global settings being restored from stale config-entry options.
+- Added safe handling for malformed legacy `_rev` values across every options operation.
+- Applied the same normalization to displayed, submitted, and persisted global values.
+- Added storage-result checks so failed plant additions, edits, or removals remain in the form and show an error instead of reporting success.
+- Fixed cleared optional plant sensors and custom-profile values being restored from the old stored entity mapping during edit.
+- Expanded regression coverage for clearing settings, malformed revisions, normalization, setup alignment, and storage-failure handling.
+
+## [4.4.18] - 2026-09-22
+
+- Fixed the Global settings form failing with a blank error by separating the selector schema from persisted suggested values.
+- Switched the options form to Home Assistant's `add_suggested_values_to_schema` path.
+- Sanitized legacy latitude, longitude, ozone entity, API key, access-level, and update-interval values before form serialization.
+- Added protection against non-finite numbers, incorrect persisted types, stale select values, and unsupported entity values.
+- Preserved the 4.4.17 air-humidity persistence correction.
+
 ## [4.4.17] - 2026-09-22
 
 - Fixed the air-humidity entity selected in Add plant or Edit plant being discarded before storage.

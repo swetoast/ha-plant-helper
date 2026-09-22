@@ -58,6 +58,7 @@ from .plant_config import (
     CONF_RAIN_LIMIT_MM,
     CONF_SOIL_TEMP,
     CONF_SPECIES,
+    normalize_global_options,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -133,45 +134,29 @@ def _plant_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
-def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
-    """Global settings shared by all plants.
-
-    Only valid persisted values are fed back into selector defaults. Older
-    entries may contain explicit ``None`` or empty-string values; passing those
-    as defaults makes Home Assistant fail while serializing the options form.
-    """
-    o = options or {}
-    access_level = o.get(CONF_PERENUAL_ACCESS_LEVEL)
-    if access_level not in (PERENUAL_ACCESS_FREE, PERENUAL_ACCESS_PAID):
-        access_level = PERENUAL_ACCESS_FREE
-    update_interval = o.get(CONF_UPDATE_INTERVAL)
-    if not isinstance(update_interval, (int, float)) or isinstance(update_interval, bool):
-        update_interval = DEFAULT_UPDATE_INTERVAL
-    update_interval = max(60, min(3600, int(update_interval)))
+def _global_schema() -> vol.Schema:
+    """Return the Global settings schema without persisted defaults."""
     return vol.Schema(
         {
-            _optional(CONF_LATITUDE, o.get(CONF_LATITUDE)): selector.NumberSelector(
+            vol.Optional(CONF_LATITUDE): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=-90, max=90, step=0.000001,
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
-            _optional(CONF_LONGITUDE, o.get(CONF_LONGITUDE)): selector.NumberSelector(
+            vol.Optional(CONF_LONGITUDE): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=-180, max=180, step=0.000001,
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
-            _optional(CONF_OZONE_ENTITY, o.get(CONF_OZONE_ENTITY)): selector.EntitySelector(
+            vol.Optional(CONF_OZONE_ENTITY): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
-            _optional(CONF_PERENUAL_API_KEY, o.get(CONF_PERENUAL_API_KEY)): selector.TextSelector(
+            vol.Optional(CONF_PERENUAL_API_KEY): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
             ),
-            vol.Optional(
-                CONF_PERENUAL_ACCESS_LEVEL,
-                default=access_level,
-            ): selector.SelectSelector(
+            vol.Optional(CONF_PERENUAL_ACCESS_LEVEL): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": PERENUAL_ACCESS_FREE, "label": "Free"},
@@ -180,13 +165,10 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
-            _optional(CONF_TREFLE_API_KEY, o.get(CONF_TREFLE_API_KEY)): selector.TextSelector(
+            vol.Optional(CONF_TREFLE_API_KEY): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
             ),
-            vol.Optional(
-                CONF_UPDATE_INTERVAL,
-                default=update_interval,
-            ): selector.NumberSelector(
+            vol.Optional(CONF_UPDATE_INTERVAL): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=60, max=3600, step=30, unit_of_measurement="s",
                     mode=selector.NumberSelectorMode.BOX,
@@ -194,6 +176,11 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
             ),
         }
     )
+
+
+def _global_suggested_values(options: dict[str, Any] | None) -> dict[str, Any]:
+    """Return selector-safe suggested values for Global settings."""
+    return normalize_global_options(options)
 
 
 # --- config flow (initial setup) ------------------------------------------
@@ -206,17 +193,22 @@ class PlantHelperConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        """Create the single integration entry with no initial selectors."""
+        """Create the single integration entry with shared Global settings."""
         if user_input is not None:
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
-                title="Plant Helper", data={}, options={}
+                title="Plant Helper",
+                data={},
+                options=normalize_global_options(user_input),
             )
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({}),
+            data_schema=self.add_suggested_values_to_schema(
+                _global_schema(),
+                normalize_global_options({}),
+            ),
         )
 
     @staticmethod

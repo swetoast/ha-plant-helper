@@ -203,8 +203,8 @@ def test_global_settings_perenual_selector_uses_compatible_options() -> None:
         assert {key.value for key in item.keys} == {"value", "label"}
 
 
-def test_global_settings_step_builds_its_schema_before_showing_form() -> None:
-    """The options step must call the schema builder with current options."""
+def test_global_settings_step_uses_sanitized_suggested_values() -> None:
+    """Global settings must use Home Assistant's suggested-values helper."""
     import ast
 
     tree = ast.parse((ROOT / "options.py").read_text(encoding="utf-8"))
@@ -217,11 +217,15 @@ def test_global_settings_step_builds_its_schema_before_showing_form() -> None:
         if isinstance(node, ast.AsyncFunctionDef) and node.name == "async_step_global_settings"
     )
     calls = [node for node in ast.walk(step) if isinstance(node, ast.Call)]
-    assert any(
-        isinstance(call.func, ast.Name)
-        and call.func.id == "_global_schema"
-        and len(call.args) == 1
-        and isinstance(call.args[0], ast.Attribute)
-        and call.args[0].attr == "options"
-        for call in calls
+    helper = next(
+        call for call in calls
+        if isinstance(call.func, ast.Attribute)
+        and call.func.attr == "add_suggested_values_to_schema"
     )
+    assert len(helper.args) == 2
+    assert isinstance(helper.args[0], ast.Call)
+    assert isinstance(helper.args[0].func, ast.Name)
+    assert helper.args[0].func.id == "_global_schema"
+    assert isinstance(helper.args[1], ast.Call)
+    assert isinstance(helper.args[1].func, ast.Name)
+    assert helper.args[1].func.id == "_global_suggested_values"

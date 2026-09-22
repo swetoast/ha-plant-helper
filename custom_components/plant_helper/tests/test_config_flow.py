@@ -48,36 +48,6 @@ check("0 and 100 are valid bounds",
       pc.validate_plant(base, moisture_state="0") == {} and pc.validate_plant(base, moisture_state="100") == {})
 
 
-print("== record persistence: all configured entity inputs ==")
-
-all_entities = {
-    pc.CONF_NAME: "Fern",
-    pc.CONF_SPECIES: "Nephrolepis exaltata",
-    pc.CONF_MOISTURE: "sensor.fern_soil_moisture",
-    pc.CONF_SOIL_TEMP: "sensor.fern_soil_temperature",
-    pc.CONF_HUMIDITY: "sensor.fern_air_humidity",
-    pc.CONF_LUX: "sensor.fern_illuminance",
-    pc.CONF_BATTERY: "sensor.fern_battery",
-    pc.CONF_PLACEMENT: "indoor",
-    pc.CONF_PROFILE: "balanced",
-    pc.CONF_RAIN_LIMIT_MM: 1.5,
-}
-_, _, persisted_entities = pc.split_record(all_entities)
-check(
-    "all selector-backed entity inputs survive split_record",
-    all(
-        persisted_entities.get(key) == all_entities[key]
-        for key in (
-            pc.CONF_MOISTURE,
-            pc.CONF_SOIL_TEMP,
-            pc.CONF_HUMIDITY,
-            pc.CONF_LUX,
-            pc.CONF_BATTERY,
-        )
-    ),
-)
-
-
 print("== validation: custom profile multiplier ==")
 
 custom = {pc.CONF_NAME: "Cactus", pc.CONF_MOISTURE: "sensor.m", pc.CONF_PROFILE: "custom"}
@@ -167,33 +137,182 @@ def test_remove_plant_cleans_entity_and_device_registries():
     assert "device_registry.async_remove_device(device.id)" in source
 
 
-def test_global_schema_accepts_empty_persisted_values() -> None:
-    """Global settings must render when older options contain empty values."""
-    import pytest
-    try:
-        from custom_components.plant_helper.config_flow import _global_schema
-    except ModuleNotFoundError as err:
-        pytest.skip(f"Home Assistant test environment unavailable: {err}")
-    from custom_components.plant_helper.const import (
-        CONF_PERENUAL_ACCESS_LEVEL, CONF_UPDATE_INTERVAL,
+def _load_global_suggested_values():
+    """Return the shared pure Global settings normalizer."""
+    return pc.normalize_global_options
+
+def test_global_suggested_values_accept_empty_persisted_values() -> None:
+    """Empty legacy options must produce selector-safe fallbacks."""
+    sanitize = _load_global_suggested_values()
+    values = sanitize({"perenual_access_level": "", "update_interval": None})
+    assert values["perenual_access_level"] == "free"
+    assert values["update_interval"] == 300
+    assert "latitude" not in values
+    assert "longitude" not in values
+    assert "ozone_entity" not in values
+
+
+def test_global_suggested_values_sanitize_all_legacy_types() -> None:
+    """Malformed saved options must never reach selector serialization."""
+    sanitize = _load_global_suggested_values()
+    invalid_cases = (
+        None,
+        [],
+        {
+            "latitude": "not-a-number",
+            "longitude": float("inf"),
+            "ozone_entity": ["sensor.ozone"],
+            "perenual_api_key": 123,
+            "perenual_access_level": {"value": "paid"},
+            "trefle_api_key": False,
+            "update_interval": float("nan"),
+        },
+        {
+            "latitude": 91,
+            "longitude": -181,
+            "ozone_entity": "binary_sensor.ozone",
+            "perenual_access_level": "enterprise",
+            "update_interval": True,
+        },
     )
+    for case in invalid_cases:
+        values = sanitize(case)
+        assert values == {
+            "perenual_access_level": "free",
+            "update_interval": 300,
+        }
 
-    values = _global_schema(
-        {CONF_PERENUAL_ACCESS_LEVEL: "", CONF_UPDATE_INTERVAL: None}
-    )({})
-    assert values[CONF_PERENUAL_ACCESS_LEVEL] == "free"
-    assert isinstance(values[CONF_UPDATE_INTERVAL], int)
-    assert values[CONF_UPDATE_INTERVAL] >= 60
+
+def test_global_suggested_values_preserve_valid_values() -> None:
+    """Valid settings must remain available when Global settings opens."""
+    sanitize = _load_global_suggested_values()
+    values = sanitize(
+        {
+            "latitude": "57.721035",
+            "longitude": 12.939819,
+            "ozone_entity": "sensor.outdoor_ozone",
+            "perenual_api_key": "perenual-secret",
+            "perenual_access_level": "paid",
+            "trefle_api_key": "trefle-secret",
+            "update_interval": "450",
+        }
+    )
+    assert values == {
+        "latitude": 57.721035,
+        "longitude": 12.939819,
+        "ozone_entity": "sensor.outdoor_ozone",
+        "perenual_api_key": "perenual-secret",
+        "perenual_access_level": "paid",
+        "trefle_api_key": "trefle-secret",
+        "update_interval": 450,
+    }
 
 
-def test_global_schema_clamps_invalid_persisted_interval() -> None:
-    """Out-of-range legacy intervals cannot break form serialization."""
-    import pytest
-    try:
-        from custom_components.plant_helper.config_flow import _global_schema
-    except ModuleNotFoundError as err:
-        pytest.skip(f"Home Assistant test environment unavailable: {err}")
-    from custom_components.plant_helper.const import CONF_UPDATE_INTERVAL
+def test_global_suggested_values_clamp_finite_interval() -> None:
+    """Finite old intervals are clamped to the supported selector range."""
+    sanitize = _load_global_suggested_values()
+    assert sanitize({"update_interval": 0})["update_interval"] == 60
+    assert sanitize({"update_interval": 99999})["update_interval"] == 3600
 
-    assert _global_schema({CONF_UPDATE_INTERVAL: 0})({})[CONF_UPDATE_INTERVAL] == 60
-    assert _global_schema({CONF_UPDATE_INTERVAL: 99999})({})[CONF_UPDATE_INTERVAL] == 3600
+
+
+def test_replace_global_options_clears_omitted_optional_values() -> None:
+    """Cleared optional fields must not be restored from old options."""
+    existing = {
+        "latitude": 57.7,
+        "longitude": 12.9,
+        "ozone_entity": "sensor.old_ozone",
+        "perenual_api_key": "old-perenual",
+        "trefle_api_key": "old-trefle",
+        "perenual_access_level": "paid",
+        "update_interval": 600,
+        "_rev": 4,
+        "unrelated_internal": "keep",
+    }
+    updated = pc.replace_global_options(existing, {})
+    assert updated == {
+        "perenual_access_level": "free",
+        "update_interval": 300,
+        "_rev": 5,
+        "unrelated_internal": "keep",
+    }
+
+
+def test_next_revision_handles_malformed_legacy_values() -> None:
+    """Every options operation must survive an invalid revision nonce."""
+    for value in (None, "", True, False, {}, [], object(), float("inf")):
+        assert pc.next_revision(value) == 1
+    assert pc.next_revision(-4) == 1
+    assert pc.next_revision("7") == 8
+    assert pc.next_revision(11) == 12
+
+
+def test_setup_and_options_share_global_normalization() -> None:
+    """Initial setup and later Global settings must use the same normalizer."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    config = ast.parse((root / "config_flow.py").read_text(encoding="utf-8"))
+    options = ast.parse((root / "options.py").read_text(encoding="utf-8"))
+    config_calls = [
+        node for node in ast.walk(config)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "normalize_global_options"
+    ]
+    options_calls = [
+        node for node in ast.walk(options)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "normalize_global_options"
+    ]
+    assert config_calls
+    assert options_calls
+
+
+def test_storage_mutations_are_checked_before_flow_completion() -> None:
+    """Add, edit, and remove must not report success after failed storage writes."""
+    from pathlib import Path
+
+    source = (Path(__file__).parents[1] / "options.py").read_text(encoding="utf-8")
+    assert "stored = await storage.async_add_user_plant" in source
+    assert "stored = await storage.async_update_user_plant" in source
+    assert "if not await storage.async_remove_user_plant(plant_id):" in source
+    assert source.count('errors["base"] = "storage_error"') == 5
+
+
+def test_edit_replacement_clears_omitted_optional_entity_fields() -> None:
+    """Editing a plant must remove optional selectors cleared in the form."""
+    previous = {
+        pc.CONF_MOISTURE: "sensor.soil",
+        pc.CONF_SOIL_TEMP: "sensor.old_temperature",
+        pc.CONF_HUMIDITY: "sensor.old_humidity",
+        pc.CONF_LUX: "sensor.old_light",
+        pc.CONF_BATTERY: "sensor.old_battery",
+        pc.CONF_PLACEMENT: "indoor",
+        pc.CONF_PROFILE: "balanced",
+        pc.CONF_RAIN_LIMIT_MM: 1.0,
+        "future_internal": "preserve",
+    }
+    submitted = {
+        pc.CONF_NAME: "Fern",
+        pc.CONF_MOISTURE: "sensor.soil",
+        pc.CONF_PLACEMENT: "outdoor",
+        pc.CONF_PROFILE: "balanced",
+        pc.CONF_RAIN_LIMIT_MM: 2.0,
+    }
+    _, _, entities = pc.split_record(submitted)
+    merged = {
+        key: value
+        for key, value in previous.items()
+        if key not in pc.CONFIGURABLE_ENTITY_KEYS
+    }
+    merged.update(entities)
+    assert merged == {
+        pc.CONF_MOISTURE: "sensor.soil",
+        pc.CONF_PLACEMENT: "outdoor",
+        pc.CONF_PROFILE: "balanced",
+        pc.CONF_RAIN_LIMIT_MM: 2.0,
+        "future_internal": "preserve",
+    }

@@ -3,7 +3,16 @@
     "step": {
       "user": {
         "title": "Plant Helper",
-        "description": "Create Plant Helper, then add plants and adjust optional global settings from the integration's Configure screen."
+        "description": "Global settings shared by all plants. Open-Meteo provides rain suppression and severe-weather alerts. The ozone sensor enables the outdoor ozone advisory. API keys are optional and only used for species context.",
+        "data": {
+          "latitude": "Latitude (optional, defaults to Home Assistant location)",
+          "longitude": "Longitude (optional, defaults to Home Assistant location)",
+          "ozone_entity": "Ozone sensor (optional — outdoor ozone advisory)",
+          "perenual_api_key": "Perenual API key (optional)",
+          "trefle_api_key": "Trefle API token (optional)",
+          "update_interval": "Update interval",
+          "perenual_access_level": "Perenual access level"
+        }
       }
     },
     "abort": {
@@ -87,7 +96,8 @@
       "moisture_required": "A soil-moisture sensor is required.",
       "moisture_not_numeric": "That soil-moisture sensor isn't reporting a number.",
       "moisture_out_of_range": "Soil moisture should read 0-100%. Check you picked the right sensor.",
-      "custom_multiplier_range": "The custom multiplier must be between 0 and 1 (e.g. 0.5)."
+      "custom_multiplier_range": "The custom multiplier must be between 0 and 1 (e.g. 0.5).",
+      "storage_error": "The plant configuration could not be saved. No changes were applied."
     },
     "abort": {
       "no_plants": "There are no configured plants yet. Add one first.",
