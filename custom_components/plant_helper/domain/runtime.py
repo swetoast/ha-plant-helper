@@ -51,6 +51,11 @@ class RuntimeCollection:
     def _notify(self, change: PlantSetChange) -> None:
         for listener in tuple(self._listeners): listener(change)
 
+    def notify_updated(self, plant_uuid: str) -> None:
+        if plant_uuid not in self._plants:
+            raise KeyError("plant_not_found")
+        self._notify(PlantSetChange(frozenset(), frozenset({plant_uuid}), frozenset()))
+
     def load(self, records: dict[str,dict[str,Any]]) -> None:
         if self._plants: raise RuntimeError("already_loaded")
         self._plants={uuid:RuntimePlant(uuid,dict(record)) for uuid,record in records.items()}

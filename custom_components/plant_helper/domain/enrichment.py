@@ -29,13 +29,29 @@ class PerenualAdapter:
  name='perenual'
  def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],credential:str=''):self.request=request;self.credential=credential
  async def search(self,query:str)->list[dict[str,Any]]:
-  raw=await self.request(query);items=raw.get('data',raw.get('results',[]))
+  raw=await self.request(query)
+  status=int(raw.get('http_status',raw.get('status',200)))
+  payload=raw.get('body',raw)
+  if status>=400:
+   message=str(payload)
+   kind='plan' if status==429 and 'upgrade plan' in message.casefold() else 'rate' if status==429 else 'auth' if status in {401,403} else 'provider'
+   raise ProviderError(kind,status,redact(message,(self.credential,) if self.credential else ()))
+  if not isinstance(payload,Mapping):return []
+  items=payload.get('data',payload.get('results'))
+  if isinstance(items,Mapping):items=[items]
+  elif not isinstance(items,list):items=[payload] if payload.get('scientific_name') else []
   return [{'scientific_name':_first(x.get('scientific_name')),'common_name':x.get('common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('synonyms',[]),'watering_category':x.get('watering'),'sunlight_requirements':x.get('sunlight'),'image_url':(x.get('default_image') or {}).get('regular_url')} for x in items]
 class TrefleAdapter:
  name='trefle'
  def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],credential:str=''):self.request=request;self.credential=credential
  async def search(self,query:str)->list[dict[str,Any]]:
-  raw=await self.request(query);items=raw.get('data',[])
+  raw=await self.request(query)
+  status=int(raw.get('http_status',raw.get('status',200)))
+  if status>=400:raise ProviderError('rate' if status==429 else 'auth' if status in {401,403} else 'provider',status)
+  payload=raw.get('body',raw)
+  items=payload.get('data',[]) if isinstance(payload,Mapping) else []
+  if isinstance(items,Mapping):items=[items]
+  elif not isinstance(items,list):items=[]
   return [{'scientific_name':x.get('scientific_name'),'common_name':x.get('common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('synonyms',[]),'image_url':x.get('image_url')} for x in items]
 class INaturalistAdapter:
  name='inaturalist'

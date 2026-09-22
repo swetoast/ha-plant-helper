@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.0.7 - 2026-09-22
+
+- Added sanitized Open-Meteo, Perenual, and Trefle regression fixtures from real provider responses.
+- Added real forecast coverage for rain accumulation, wet hours, ET0, radiation, timezone metadata, surface soil temperature, and modelled surface soil moisture.
+- Kept modelled Open-Meteo soil moisture separate from the physical plant moisture percentage entity.
+- Updated Perenual handling to accept both search lists and single details objects.
+- Distinguished Perenual paid-plan restrictions from ordinary not-found responses.
+- Updated Trefle handling to accept a single species details object.
+- Added tests for inconsistent Trefle summary metadata, categorized images, nullable botanical fields, and sanitized provider data.
+
+## 0.0.6 - 2026-09-22
+
+- Added sanitized regression fixtures from two real Home Assistant soil-sensor devices.
+- Added coverage for numeric moisture, temperature, humidity, illuminance, and battery readings.
+- Added coverage ensuring categorical battery states are not misreported as numeric percentages.
+- Preserved calibration, sampling, warning, link-quality, dry-state, and temperature-unit evidence without treating those control entities as plant measurements.
+
+## 0.0.5 - 2026-09-22
+
+- Connected configured physical source entities to the Plant Helper runtime.
+- Seeded current moisture, temperature, light, humidity, and battery values during startup.
+- Added live state-change subscriptions and debounced reevaluation.
+- Added functional status, health, calibration, species, and attention states without changing entity IDs or the entity contract.
+- Added real listener, task, entity-registry, device-registry, and unload cleanup.
+- Preserved optional provider isolation so enrichment failures cannot break core plant monitoring.
+
+## 0.0.4 - 2026-09-22
+
+- Fixed plants being created without sensor or binary-sensor entities.
+- Entity platforms now reconcile persisted plants directly during setup.
+- Add Plant now explicitly asks every loaded platform to create the new plant entities after persistence.
+- Entity creation is idempotent, so runtime notifications and explicit reconciliation cannot create duplicates.
+
 ## 0.0.3 - 2026-09-22
 
 - Fixed Add plant failing because the runtime storage backend was never created or loaded.

@@ -8,6 +8,7 @@ from .runtime import RuntimeCollection
 DEBOUNCE_SECONDS=0.350
 TOLERANCES={"soil_moisture":0.1,"soil_temperature":0.1,"humidity_sensor":0.1,"lux":1.0,"battery":1.0}
 RANGES={"soil_moisture":(0,100),"soil_temperature":(-100,200),"humidity_sensor":(0,100),"lux":(0,1000000),"battery":(0,100)}
+STATE_KEYS={"soil_moisture":"moisture","soil_temperature":"temperature","humidity_sensor":"humidity","lux":"light","battery":"battery"}
 @dataclass(frozen=True,slots=True)
 class PhysicalChange:
  plant_uuid:str; source_key:str; old_value:float|None; new_value:float|None; generation:int
@@ -32,7 +33,7 @@ class PlantPhysicalProcessor:
   value=normalized.value if normalized.status=="valid" else None
   token=(plant_uuid,key);old=self._values.get(token)
   if token in self._values and not self.material_change(key,old,value):return False
-  self._values[token]=value;plant.state[key]=value
+  self._values[token]=value;plant.state[key]=value;plant.state[STATE_KEYS[key]]=value
   generation=plant.generation
   previous=self._tasks.pop(plant_uuid,None)
   if previous is not None:previous.cancel()

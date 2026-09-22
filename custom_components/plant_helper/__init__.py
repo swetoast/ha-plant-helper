@@ -39,6 +39,7 @@ async def async_setup_entry(
     await entry.runtime_data.async_initialize(
         HomeAssistantStorageBackend(hass, entry.entry_id)
     )
+    await entry.runtime_data.async_start(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -49,5 +50,5 @@ async def async_unload_entry(
     """Unload platforms and release runtime subscriptions."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        entry.runtime_data.plants.unload()
+        await entry.runtime_data.async_unload()
     return unloaded

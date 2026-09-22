@@ -82,9 +82,13 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
             schema=self.add_suggested_values_to_schema(schema,user_input)
         return self.async_show_form(step_id="add_plant",data_schema=schema,errors=errors)
 
-    async def _async_request_entities(self,plant_uuid: str) -> None:
-        # RuntimeCollection.add emits the dynamic platform notification.
-        return None
+    async def _async_request_entities(self, plant_uuid: str) -> None:
+        """Ask every loaded entity platform to reconcile this committed plant."""
+        runtime = self.config_entry.runtime_data
+        for platform in ("sensor", "binary_sensor"):
+            callback = runtime.platform_callbacks.get(platform)
+            if callback is not None:
+                callback(plant_uuid)
 
     def _clear_transient(self) -> None:
         self._selected_plant_uuid=None
