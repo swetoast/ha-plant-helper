@@ -12,6 +12,12 @@ from .domain.runtime import RuntimeCollection
 from .domain.storage import PlantHelperStorage, StorageBackend
 from .physical import PhysicalSubscriptions
 from .domain.physical import PlantPhysicalProcessor
+from .domain.remove_plant import (
+    RemoveHooks,
+    RemoveResult,
+    async_reconcile_pending_removals,
+    async_remove_plant,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +45,7 @@ class PlantHelperRuntime:
     entities: dict[str, dict[str, Any]] = field(default_factory=dict)
     storage: PlantHelperStorage | None = None
     hass: HomeAssistant | None = None
+    entry_id: str | None = None
     physical_processor: PlantPhysicalProcessor | None = None
     physical_subscriptions: PhysicalSubscriptions | None = None
     learning: Any = None
@@ -52,9 +59,10 @@ class PlantHelperRuntime:
         self.storage = storage
         self.plants.load(snapshot.data["plants"])
 
-    async def async_start(self, hass: HomeAssistant) -> None:
+    async def async_start(self, hass: HomeAssistant, entry_id: str) -> None:
         """Connect stored plants to current Home Assistant source states."""
         self.hass = hass
+        self.entry_id = entry_id
         self.physical_processor = PlantPhysicalProcessor(
             self.plants,
             self.evaluate,
@@ -189,15 +197,27 @@ class PlantHelperRuntime:
         if self.physical_processor is not None:
             self.physical_processor.block(plant_uuid)
 
+    def _owns_registry_entity(self, entity: Any, plant_uuid: str) -> bool:
+        if entity.platform != DOMAIN:
+            return False
+        if self.entry_id is not None and entity.config_entry_id != self.entry_id:
+            return False
+        return entity.unique_id.startswith(f"{self.entry_id}_{plant_uuid}_")
+
+    async def remove_loaded_entities(self, plant_uuid: str) -> None:
+        """Remove attached platform entities and tolerate not-yet-added entities."""
+        platform_entities = self.entities.pop(plant_uuid, {})
+        for entities in platform_entities.values():
+            for entity in tuple(entities):
+                if entity.hass is not None:
+                    await entity.async_remove()
+
     async def remove_entity_registry(self, plant_uuid: str) -> None:
         if self.hass is None:
             return
         registry = er.async_get(self.hass)
-        prefix = f"{plant_uuid}_"
         for entity in list(registry.entities.values()):
-            if entity.platform != DOMAIN:
-                continue
-            if f"_{plant_uuid}_" in entity.unique_id or entity.unique_id.startswith(prefix):
+            if self._owns_registry_entity(entity, plant_uuid):
                 registry.async_remove(entity.entity_id)
 
     async def verify_entities_gone(self, plant_uuid: str) -> bool:
@@ -205,7 +225,7 @@ class PlantHelperRuntime:
             return True
         registry = er.async_get(self.hass)
         return not any(
-            entity.platform == DOMAIN and f"_{plant_uuid}_" in entity.unique_id
+            self._owns_registry_entity(entity, plant_uuid)
             for entity in registry.entities.values()
         )
 
@@ -221,6 +241,36 @@ class PlantHelperRuntime:
         self.entities.pop(plant_uuid, None)
         self._blocked.discard(plant_uuid)
 
+    def removal_hooks(self) -> RemoveHooks:
+        return RemoveHooks(
+            self.cancel_tasks,
+            self.unsubscribe_listeners,
+            self.block_evaluation,
+            self.remove_loaded_entities,
+            self.remove_entity_registry,
+            self.verify_entities_gone,
+            self.remove_device_registry,
+            self.remove_owned_state,
+        )
+
+    async def remove_plant(
+        self, plant_uuid: str, expected_revision: int
+    ) -> RemoveResult:
+        return await async_remove_plant(
+            plant_uuid=plant_uuid,
+            expected_revision=expected_revision,
+            storage=self.require_storage(),
+            runtime=self.plants,
+            hooks=self.removal_hooks(),
+        )
+
+    async def reconcile_pending_removals(self) -> list[RemoveResult]:
+        return await async_reconcile_pending_removals(
+            storage=self.require_storage(),
+            runtime=self.plants,
+            hooks_factory=lambda _plant_uuid: self.removal_hooks(),
+        )
+
     async def async_unload(self) -> None:
         """Release subscriptions, debounce tasks, and runtime references."""
         if self.physical_subscriptions is not None:
@@ -232,3 +282,4 @@ class PlantHelperRuntime:
         self.physical_subscriptions = None
         self.physical_processor = None
         self.hass = None
+        self.entry_id = None

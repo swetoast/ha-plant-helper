@@ -100,8 +100,11 @@ async def async_edit_plant(
             await hooks.handle_species_change(plant_uuid,species_change)
         await hooks.evaluate(plant_uuid); evaluated=True
     except Exception:
-        await hooks.schedule_reconciliation(plant_uuid)
-        raise
+        try:
+            await hooks.schedule_reconciliation(plant_uuid)
+        except Exception:
+            # Persistence already succeeded. Startup restoration remains authoritative.
+            pass
 
     if replacement.species and species_change.kind!="unchanged":
         try:

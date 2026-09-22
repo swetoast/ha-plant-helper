@@ -64,10 +64,10 @@ def test_storage_failure_reports_no_success_and_no_runtime_actions():
 
 def test_activation_failure_keeps_persisted_authority_and_schedules_reconciliation():
  backend,storage,runtime,calls=setup(); calls.activation_error="entities"
- with pytest.raises(RuntimeError,match="entities"):
-  run(async_add_plant(raw=valid(),placement="indoor",storage=storage,runtime=runtime,moisture_reader=lambda _:40,hooks=calls.hooks(),uuid_factory=lambda:"e"*32))
+ result=run(async_add_plant(raw=valid(),placement="indoor",storage=storage,runtime=runtime,moisture_reader=lambda _:40,hooks=calls.hooks(),uuid_factory=lambda:"e"*32))
  assert "e"*32 in backend.data["plants"] and "e"*32 in runtime.plants
- assert calls.items[-1]==("reconcile","e"*32)
+ assert not result.entities_requested and not result.evaluated
+ assert ("reconcile","e"*32) in calls.items
 
 @pytest.mark.parametrize("value,key",[(None,"moisture_not_ready"),("unknown","moisture_not_ready"),("unavailable","moisture_not_ready"),("bad","moisture_not_numeric"),(-1,"moisture_out_of_range"),(101,"moisture_out_of_range")])
 def test_moisture_readiness_rejects_before_uuid_persistence(value,key):

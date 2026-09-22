@@ -75,9 +75,9 @@ def test_species_alias_normalization_avoids_unnecessary_enrichment():
 
 def test_activation_failure_schedules_reconciliation_after_persisted_revision():
  b,st,rt,c=setup(); c.fail="listeners"
- with pytest.raises(RuntimeError,match="listeners"):
-  run(async_edit_plant(plant_uuid="a"*32,expected_revision=1,raw=replacement(),placement="indoor",storage=st,runtime=rt,moisture_reader=lambda _:50,destination_baseline_complete=True,hooks=c.hooks()))
+ result=run(async_edit_plant(plant_uuid="a"*32,expected_revision=1,raw=replacement(),placement="indoor",storage=st,runtime=rt,moisture_reader=lambda _:50,destination_baseline_complete=True,hooks=c.hooks()))
  assert b.data["plants"]["a"*32]["revision"]==2 and rt.plants["a"*32].generation==1
+ assert not result.listeners_replaced and not result.evaluated
  assert c.items[-1]==("reconcile","a"*32)
 
 @pytest.mark.parametrize("value,key",[(None,"moisture_not_ready"),("bad","moisture_not_numeric"),(101,"moisture_out_of_range")])

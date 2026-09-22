@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.0.9 - 2026-09-22
+
+- Reworked add, edit, and remove lifecycle handling around durable storage commits.
+- Fixed removal failures caused by post-commit entity and registry cleanup being reported as if the plant still existed.
+- Added idempotent removal cleanup with persisted progress and automatic retry during integration setup.
+- Moved removal ownership into the runtime lifecycle coordinator instead of the options form.
+- Removed loaded entities safely, including entities still waiting to be attached by Home Assistant.
+- Scoped entity-registry cleanup to the current config entry and exact plant unique-ID prefix.
+- Required the removal confirmation checkbox and handled empty plant lists.
+- Prevented post-commit add and edit activation failures from producing false save-failure messages.
+- Added lifecycle foundation tests for durable removal, retry after restart, confirmation, and setup ordering.
+
+## 0.0.8 - 2026-09-22
+
+- Fixed Add Plant reporting failure after the plant had already been persisted and created.
+- Prevented newly queued entities from writing state before Home Assistant has attached them to the entity platform.
+- Restricted the soil-moisture selector to moisture sensors and the battery selector to numeric battery sensors.
+- Added regression coverage for the asynchronous entity-creation race observed in Home Assistant.
+
 ## 0.0.7 - 2026-09-22
 
 - Added sanitized Open-Meteo, Perenual, and Trefle regression fixtures from real provider responses.

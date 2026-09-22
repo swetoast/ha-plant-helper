@@ -12,7 +12,7 @@ def test_options_menu_and_transient_fields():
 
 def test_completed_add_edit_and_remove_commits_are_present():
  source=(Path(__file__).parents[1]/"custom_components"/"plant_helper"/"options.py").read_text()
- assert "async_add_plant" in source and "async_edit_plant" in source and "async_remove_plant" in source
+ assert "async_add_plant" in source and "async_edit_plant" in source and "runtime.remove_plant" in source
  assert 'step_id="confirm_remove"' in source
 
 def test_options_translations_and_flow_hook():

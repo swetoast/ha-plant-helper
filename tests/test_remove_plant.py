@@ -33,8 +33,9 @@ def test_stale_revision_changes_nothing():
  assert 'a' in b.data['plants'] and 'a' in r.plants and h.calls==[]
 def test_entity_verification_failure_leaves_marker_for_retry():
  b,s,r,h,_=setup();h.entities_gone=False
- with pytest.raises(RemovePlantError,match='entities_remain'):run(async_remove_plant(plant_uuid='a',expected_revision=1,storage=s,runtime=r,hooks=h.hooks()))
- assert 'a' not in b.data['plants'] and 'a' in b.data['cleanup'];assert b.data['cleanup']['a']['steps']==['tasks','listeners','evaluation','runtime','loaded_entities','entity_registry']
+ result=run(async_remove_plant(plant_uuid='a',expected_revision=1,storage=s,runtime=r,hooks=h.hooks()))
+ assert not result.completed
+ assert 'a' not in b.data['plants'] and 'a' in b.data['cleanup'];assert 'verify_entities' not in b.data['cleanup']['a']['steps']
  h.entities_gone=True;result=run(async_remove_plant(plant_uuid='a',expected_revision=1,storage=s,runtime=r,hooks=h.hooks(),retry=True));assert result.retried and 'a' not in b.data['cleanup']
 def test_startup_reconciliation_resumes_pending_cleanup():
  b,s,r,h,_=setup();run(s.async_remove_plant('a',1));results=run(async_reconcile_pending_removals(storage=s,runtime=r,hooks_factory=lambda _:h.hooks()));assert results[0].retried and 'a' not in b.data['cleanup']

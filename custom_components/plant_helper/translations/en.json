@@ -129,7 +129,8 @@
       }
     },
     "abort": {
-      "plant_not_found": "The selected plant no longer exists."
+      "plant_not_found": "The selected plant no longer exists.",
+      "no_plants": "There are no plants to remove."
     },
     "error": {
       "name_required": "Enter a plant name.",
@@ -141,7 +142,8 @@
       "cannot_save_plant": "The plant could not be saved. No plant was added.",
       "plant_changed": "The plant changed while this form was open. Reopen Edit and try again.",
       "entities_remain": "Plant entities could not be fully removed. Cleanup will retry.",
-      "cannot_remove_plant": "The plant removal could not be completed. Cleanup will retry."
+      "cannot_remove_plant": "The plant removal could not be completed. Cleanup will retry.",
+      "confirmation_required": "Select Confirm removal before submitting."
     }
   }
 }

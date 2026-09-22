@@ -69,8 +69,11 @@ async def async_add_plant(
         runtime_plant.state["moisture"]=moisture.value
         await hooks.evaluate(plant_uuid); evaluated=True
     except Exception:
-        await hooks.schedule_reconciliation(plant_uuid)
-        raise
+        try:
+            await hooks.schedule_reconciliation(plant_uuid)
+        except Exception:
+            # Persistence already succeeded. Startup restoration remains authoritative.
+            pass
 
     species=saved.record.get("species")
     if species:

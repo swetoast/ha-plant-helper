@@ -41,7 +41,8 @@ async def async_setup_entry(
             ensure_plant(plant_uuid)
         for plant_uuid in change.updated:
             for entity in runtime.entities.get(plant_uuid, {}).get("sensor", []):
-                entity.async_write_ha_state()
+                if entity.hass is not None:
+                    entity.async_write_ha_state()
         for plant_uuid in change.removed:
             known.discard(plant_uuid)
             for entity in runtime.entities.get(plant_uuid, {}).pop("sensor", []):

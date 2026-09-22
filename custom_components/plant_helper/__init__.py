@@ -39,8 +39,9 @@ async def async_setup_entry(
     await entry.runtime_data.async_initialize(
         HomeAssistantStorageBackend(hass, entry.entry_id)
     )
-    await entry.runtime_data.async_start(hass)
+    await entry.runtime_data.async_start(hass, entry.entry_id)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await entry.runtime_data.reconcile_pending_removals()
     return True
 
 

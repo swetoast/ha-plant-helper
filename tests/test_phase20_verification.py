@@ -17,7 +17,7 @@ def test_manifest_is_valid_and_contains_no_placeholder_urls():
  manifest=json.loads((ROOT/'custom_components/plant_helper/manifest.json').read_text())
  assert manifest['domain']=='plant_helper' and manifest['name']=='Plant Helper'
  assert manifest['config_flow'] is True and manifest['iot_class']=='local_push'
- assert manifest['version']=='0.0.7' and isinstance(manifest['requirements'],list)
+ assert manifest['version']=='0.0.9' and isinstance(manifest['requirements'],list)
  assert 'example.invalid' not in json.dumps(manifest)
 
 def test_translation_files_are_valid_and_identical():

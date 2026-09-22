@@ -7,7 +7,7 @@ INTEGRATION = ROOT / "custom_components" / "plant_helper"
 
 def test_runtime_starts_before_platform_forwarding():
     source = (INTEGRATION / "__init__.py").read_text()
-    assert source.index("async_start(hass)") < source.index("async_forward_entry_setups")
+    assert source.index("async_start(hass, entry.entry_id)") < source.index("async_forward_entry_setups")
 
 
 def test_physical_sources_map_to_public_entity_keys():
@@ -41,5 +41,5 @@ def test_public_entity_contract_is_unchanged():
 
 def test_patch_release_metadata_is_aligned():
     manifest = json.loads((INTEGRATION / "manifest.json").read_text())
-    assert manifest["version"] == "0.0.7"
-    assert "## 0.0.7 - 2026-09-22" in (ROOT / "CHANGELOG.md").read_text()
+    assert manifest["version"] == "0.0.9"
+    assert "## 0.0.9 - 2026-09-22" in (ROOT / "CHANGELOG.md").read_text()

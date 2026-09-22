@@ -8,7 +8,7 @@ from homeassistant.helpers import selector
 from .const import DOMAIN
 from .domain.add_plant import AddPlantError,AddPlantHooks,async_add_plant
 from .domain.edit_plant import EditPlantError,EditPlantHooks,async_edit_plant
-from .domain.remove_plant import RemoveHooks,RemovePlantError,async_remove_plant
+from .domain.remove_plant import RemovePlantError
 
 _LOGGER=logging.getLogger(__name__)
 
@@ -19,12 +19,12 @@ PLACEMENT_SCHEMA=vol.Schema({vol.Required("placement"): selector.SelectSelector(
 def plant_schema(placement: str) -> vol.Schema:
     schema={
         vol.Required("display_name"): selector.TextSelector(),
-        vol.Required("soil_moisture"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+        vol.Required("soil_moisture"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="moisture")),
         vol.Optional("species"): selector.TextSelector(),
         vol.Optional("soil_temperature"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="temperature")),
         vol.Optional("humidity_sensor"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="humidity")),
         vol.Optional("lux"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="illuminance")),
-        vol.Optional("battery"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+        vol.Optional("battery"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="battery")),
         vol.Required("profile",default="balanced"): selector.SelectSelector(selector.SelectSelectorConfig(options=["dry","balanced","moist","custom"])),
         vol.Optional("custom_multiplier"): selector.NumberSelector(selector.NumberSelectorConfig(min=0.25,max=4.0,mode=selector.NumberSelectorMode.BOX)),
     }
@@ -167,6 +167,8 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
             if plant is None:return self.async_abort(reason="plant_not_found")
             self._expected_revision=int(plant.config["revision"])
             return await self.async_step_confirm_remove()
+        if not plants:
+            return self.async_abort(reason="no_plants")
         options=[{"value":u,"label":f"{p.config.get('display_name',u)} · {str(p.config.get('placement','')).title()}"} for u,p in sorted(plants.items())]
         return self.async_show_form(step_id="remove",data_schema=vol.Schema({vol.Required("plant_uuid"):selector.SelectSelector(selector.SelectSelectorConfig(options=options))}))
 
@@ -175,15 +177,17 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
         if uuid is None or self._expected_revision is None:return self.async_abort(reason="plant_not_found")
         errors={}
         if user_input is not None:
-            hooks=RemoveHooks(runtime.cancel_tasks,runtime.unsubscribe_listeners,runtime.block_evaluation,self._async_remove_loaded_entities,runtime.remove_entity_registry,runtime.verify_entities_gone,runtime.remove_device_registry,runtime.remove_owned_state)
-            try: await async_remove_plant(plant_uuid=uuid,expected_revision=self._expected_revision,storage=runtime.require_storage(),runtime=runtime.plants,hooks=hooks)
-            except RemovePlantError as err: errors["base"]=err.key
-            except Exception: errors["base"]="cannot_remove_plant"
-            else:self._clear_transient();return self.async_create_entry(title="",data={})
+            if not user_input.get("confirm", False):
+                errors["base"] = "confirmation_required"
+            else:
+                try:
+                    await runtime.remove_plant(uuid, self._expected_revision)
+                except RemovePlantError as err:
+                    errors["base"] = err.key
+                except Exception:
+                    _LOGGER.exception("Failed to remove plant before durable deletion")
+                    errors["base"] = "cannot_remove_plant"
+                else:
+                    self._clear_transient()
+                    return self.async_create_entry(title="", data={})
         return self.async_show_form(step_id="confirm_remove",data_schema=vol.Schema({vol.Required("confirm",default=False):bool}),errors=errors)
-
-    async def _async_remove_loaded_entities(self,plant_uuid:str)->None:
-        runtime=self.config_entry.runtime_data
-        for entities in runtime.entities.get(plant_uuid,{}).values():
-            for entity in tuple(entities): await entity.async_remove()
-        runtime.entities.pop(plant_uuid,None)
