@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any
+import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
@@ -8,6 +9,8 @@ from .const import DOMAIN
 from .domain.add_plant import AddPlantError,AddPlantHooks,async_add_plant
 from .domain.edit_plant import EditPlantError,EditPlantHooks,async_edit_plant
 from .domain.remove_plant import RemoveHooks,RemovePlantError,async_remove_plant
+
+_LOGGER=logging.getLogger(__name__)
 
 MENU_OPTIONS=("add","edit","remove")
 
@@ -61,7 +64,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                 await async_add_plant(
                     raw=user_input,
                     placement=self._placement or "indoor",
-                    storage=runtime.storage,
+                    storage=runtime.require_storage(),
                     runtime=runtime.plants,
                     moisture_reader=lambda entity_id: self.hass.states.get(entity_id).state if self.hass.states.get(entity_id) else None,
                     hooks=hooks,
@@ -69,6 +72,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
             except AddPlantError as err:
                 errors[err.key]="invalid"
             except Exception:
+                _LOGGER.exception("Failed to add plant")
                 errors["base"]="cannot_save_plant"
             else:
                 self._clear_transient()
@@ -133,7 +137,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                     expected_revision=self._expected_revision,
                     raw=user_input,
                     placement=self._placement or plant.config["placement"],
-                    storage=runtime.storage,
+                    storage=runtime.require_storage(),
                     runtime=runtime.plants,
                     moisture_reader=lambda entity_id: self.hass.states.get(entity_id).state if self.hass.states.get(entity_id) else None,
                     destination_baseline_complete=bool(runtime.destination_baseline_complete(uuid,self._placement or plant.config["placement"])),
@@ -168,7 +172,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
         errors={}
         if user_input is not None:
             hooks=RemoveHooks(runtime.cancel_tasks,runtime.unsubscribe_listeners,runtime.block_evaluation,self._async_remove_loaded_entities,runtime.remove_entity_registry,runtime.verify_entities_gone,runtime.remove_device_registry,runtime.remove_owned_state)
-            try: await async_remove_plant(plant_uuid=uuid,expected_revision=self._expected_revision,storage=runtime.storage,runtime=runtime.plants,hooks=hooks)
+            try: await async_remove_plant(plant_uuid=uuid,expected_revision=self._expected_revision,storage=runtime.require_storage(),runtime=runtime.plants,hooks=hooks)
             except RemovePlantError as err: errors["base"]=err.key
             except Exception: errors["base"]="cannot_remove_plant"
             else:self._clear_transient();return self.async_create_entry(title="",data={})

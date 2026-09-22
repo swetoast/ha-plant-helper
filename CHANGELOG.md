@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.3 - 2026-09-22
+
+- Fixed Add plant failing because the runtime storage backend was never created or loaded.
+- Runtime storage now loads before sensor and binary-sensor platforms are forwarded.
+- Existing stored plants are restored into the runtime collection during setup.
+- Added safe operational defaults for optional runtime hooks used by plant management.
+- Added server-side exception logging for unexpected Add plant failures.
+
 ## 0.0.2 - 2026-09-22
 
 - Fixed HACS installation packaging so all runtime domain modules are installed inside `custom_components/plant_helper`.
