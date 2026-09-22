@@ -73,7 +73,6 @@
         "data": {
           "display_name": "Plant name",
           "soil_moisture": "Soil moisture sensor",
-          "species": "Species",
           "soil_temperature": "Soil temperature sensor",
           "humidity_sensor": "Air humidity sensor",
           "lux": "Light sensor",
@@ -107,7 +106,6 @@
         "data": {
           "display_name": "Plant name",
           "soil_moisture": "Soil moisture sensor",
-          "species": "Species",
           "soil_temperature": "Soil temperature sensor",
           "humidity_sensor": "Air humidity sensor",
           "lux": "Light sensor",

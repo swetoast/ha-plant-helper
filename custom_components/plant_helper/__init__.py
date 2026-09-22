@@ -11,6 +11,11 @@ from .const import DOMAIN
 from .runtime import PlantHelperRuntime
 
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload Plant Helper after global options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 type PlantHelperConfigEntry = ConfigEntry[PlantHelperRuntime]
 
 
@@ -39,7 +44,9 @@ async def async_setup_entry(
     await entry.runtime_data.async_initialize(
         HomeAssistantStorageBackend(hass, entry.entry_id)
     )
+    await entry.runtime_data.async_configure_enrichment(hass, entry.options)
     await entry.runtime_data.async_start(hass, entry.entry_id)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await entry.runtime_data.reconcile_pending_removals()
     return True
