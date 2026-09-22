@@ -2,8 +2,8 @@
 
 Design goals:
   * Simple: adding a plant asks only for what the v4 engine actually uses —
-    soil moisture (required), soil temperature, light, and battery. No species
-    pre-caching, no room temp/humidity (the engine never reads those).
+    soil moisture (required), soil temperature, air humidity, light, and
+    battery. Species remains optional.
   * Powerful: full lifecycle from Options — add, edit, remove plants, and edit
     global settings (credentials, Open-Meteo location overrides, ozone advisory, poll rate).
   * Validated: the required soil-moisture sensor must be provided and read as a
@@ -58,9 +58,6 @@ from .plant_config import (
     CONF_RAIN_LIMIT_MM,
     CONF_SOIL_TEMP,
     CONF_SPECIES,
-    split_record,
-    unique_plant_id,
-    validate_plant,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -199,11 +196,6 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
-def _initial_schema() -> vol.Schema:
-    """Initial setup settings; iNaturalist is always enabled."""
-    return _global_schema()
-
-
 # --- config flow (initial setup) ------------------------------------------
 
 class PlantHelperConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -235,5 +227,3 @@ class PlantHelperConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return PlantHelperOptionsFlow()
 
-
-# --- options flow (lifecycle management) ----------------------------------

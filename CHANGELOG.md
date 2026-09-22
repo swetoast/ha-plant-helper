@@ -1,3 +1,9 @@
+## [4.4.17] - 2026-09-22
+
+- Fixed the air-humidity entity selected in Add plant or Edit plant being discarded before storage.
+- Added regression coverage proving that every selector-backed plant entity survives record construction.
+- Removed dead initial-schema code and stale combined-flow wording left behind by the config/options split.
+
 ## [4.4.16] - 2026-09-22
 
 - Moved the options flow implementation into `options.py` while keeping the initial config flow in `config_flow.py`.

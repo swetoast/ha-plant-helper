@@ -48,6 +48,36 @@ check("0 and 100 are valid bounds",
       pc.validate_plant(base, moisture_state="0") == {} and pc.validate_plant(base, moisture_state="100") == {})
 
 
+print("== record persistence: all configured entity inputs ==")
+
+all_entities = {
+    pc.CONF_NAME: "Fern",
+    pc.CONF_SPECIES: "Nephrolepis exaltata",
+    pc.CONF_MOISTURE: "sensor.fern_soil_moisture",
+    pc.CONF_SOIL_TEMP: "sensor.fern_soil_temperature",
+    pc.CONF_HUMIDITY: "sensor.fern_air_humidity",
+    pc.CONF_LUX: "sensor.fern_illuminance",
+    pc.CONF_BATTERY: "sensor.fern_battery",
+    pc.CONF_PLACEMENT: "indoor",
+    pc.CONF_PROFILE: "balanced",
+    pc.CONF_RAIN_LIMIT_MM: 1.5,
+}
+_, _, persisted_entities = pc.split_record(all_entities)
+check(
+    "all selector-backed entity inputs survive split_record",
+    all(
+        persisted_entities.get(key) == all_entities[key]
+        for key in (
+            pc.CONF_MOISTURE,
+            pc.CONF_SOIL_TEMP,
+            pc.CONF_HUMIDITY,
+            pc.CONF_LUX,
+            pc.CONF_BATTERY,
+        )
+    ),
+)
+
+
 print("== validation: custom profile multiplier ==")
 
 custom = {pc.CONF_NAME: "Cactus", pc.CONF_MOISTURE: "sensor.m", pc.CONF_PROFILE: "custom"}
