@@ -35,9 +35,10 @@ def test_configuration_docs_match_runtime() -> None:
         "Soil temperature",
         "Light (lux)",
         "Battery level",
-        "Radiation source",
     ):
         assert field in README
+    assert "Open-Meteo is always enabled" in README
+    assert "weather-source selector" in README
 
 
 def test_services_are_documented() -> None:

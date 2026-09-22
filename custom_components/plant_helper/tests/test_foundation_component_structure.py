@@ -71,7 +71,7 @@ init_text = (ROOT / "__init__.py").read_text()
 assert "radiation_source = _opt(CONF_RADIATION_SOURCE" not in init_text
 assert "radiation_entity" not in init_text
 assert "update_interval_seconds=update_interval" in init_text
-flow_text = (ROOT / "config_flow.py").read_text()
+flow_text = (ROOT / "options.py").read_text()
 assert "def _remove_device" in flow_text and "device_registry.async_remove_device" in flow_text
 coord_text = (ROOT / "coordinator.py").read_text()
 assert "source_ts" in coord_text and "current_reading_stale" in coord_text

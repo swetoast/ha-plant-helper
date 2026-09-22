@@ -1,3 +1,10 @@
+## [4.4.16] - 2026-09-22
+
+- Moved the options flow implementation into `options.py` while keeping the initial config flow in `config_flow.py`.
+- Added regression coverage for flow separation, lazy options-handler loading, lifecycle steps, and foundation ownership.
+- Updated existing flow regression tests to follow the new module boundary without weakening lifecycle checks.
+- Updated public documentation to describe the always-on Open-Meteo outdoor data path and Home Assistant 2025.12.2 support baseline.
+
 ## 4.4.15
 
 - Fixed the Global settings options form failing with a blank Error dialog when persisted select or update-interval values were empty or invalid.

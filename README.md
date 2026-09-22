@@ -2,11 +2,11 @@
 
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![HACS](https://img.shields.io/badge/HACS-Custom%20Repository-41BDF5)](https://hacs.xyz/)
-[![Version](https://img.shields.io/badge/version-4.4.15-blue)](custom_components/plant_helper/manifest.json)
+[![Version](https://img.shields.io/badge/version-4.4.16-blue)](custom_components/plant_helper/manifest.json)
 
-Plant Helper is a Home Assistant custom integration that turns soil-moisture, soil-temperature, and light readings into calibrated, time-based plant-care guidance. It learns how each plant behaves in its actual location and combines that local history with optional solar-radiation data, weather forecasts, and read-only species context.
+Plant Helper is a Home Assistant custom integration that turns soil-moisture, soil-temperature, and light readings into calibrated, time-based plant-care guidance. It learns how each plant behaves in its actual location and combines that local history with Open-Meteo outdoor context and optional read-only species context.
 
-> **Current release:** Version 4.4.14. See the changelog for release history.
+> **Current release:** Version 4.4.16. See the changelog for release history.
 
 ## Highlights
 
@@ -17,9 +17,8 @@ Plant Helper is a Home Assistant custom integration that turns soil-moisture, so
 - Profile-aware dry-threshold regeneration
 - Gap-aware validation that avoids learning across missing or invalid telemetry
 - Restart-safe calibration, samples, timers, daily history, and learned state
-- STRÅNG solar radiation in Nordic coverage
-- Source-isolated estimated Open-Meteo radiation fallback elsewhere
-- Optional Home Assistant or Open-Meteo weather forecasts
+- Always-on Open-Meteo radiation and weather context for outdoor plants
+- Automatic use of the Home Assistant location, with optional latitude and longitude overrides
 - Bounded outdoor ET₀ drying-pressure adjustment
 - Precipitation-probability-aware rain suppression
 - Weather hazards, ozone advisory, dormancy, and species context
@@ -27,11 +26,11 @@ Plant Helper is a Home Assistant custom integration that turns soil-moisture, so
 
 ## Requirements
 
-- A recent Home Assistant release
+- Home Assistant 2025.12.2 or later
 - One soil-moisture sensor per plant
 - Optional soil-temperature, illuminance, and battery sensors
-- Optional Home Assistant weather forecast entity
-- Optional internet access for STRÅNG, Open-Meteo, and species providers
+- Internet access for Open-Meteo outdoor context
+- Optional internet access for species providers
 
 Physical plant sensors remain authoritative. Modelled Open-Meteo soil values are regional context only and never replace or calibrate a local plant sensor.
 
@@ -69,7 +68,6 @@ Plant Helper exposes these shared options:
 - **Perenual access level:** choose **Free** or **Paid** to match the API plan connected to the key
 - **Trefle API token:** optional botanical fallback context
 - **Update interval:** default 300 seconds, accepted range 60–3600 seconds
-- **Radiation source:** selected automatically from location coverage; no user-facing selector is exposed in version 4.4.14
 
 #### Perenual access levels
 
@@ -84,7 +82,7 @@ Perenual, Trefle, and iNaturalist data is read-only context. Provider data does 
 
 ### Outdoor weather and radiation behavior
 
-Plant Helper uses the Home Assistant location unless latitude and longitude overrides are provided. Open-Meteo supplies shared forecast context for outdoor plants, including precipitation, weather conditions, and ET0 drying pressure. There is no user-facing weather-source selector in version 4.4.14.
+Plant Helper uses the Home Assistant location unless latitude and longitude overrides are provided. Open-Meteo supplies shared forecast context for outdoor plants, including precipitation, weather conditions, and ET0 drying pressure. Open-Meteo is always enabled and there is no user-facing weather-source selector.
 
 For radiation, Plant Helper prefers the direct STRANG API when the configured location is inside its supported Nordic coverage. Outside that coverage it uses source-isolated estimated PAR derived from Open-Meteo shortwave radiation. Radiation histories use separate storage keys so one daily-light calculation cannot mix providers within the same calendar day.
 
@@ -140,7 +138,6 @@ Outdoor watering guidance can be suppressed when meaningful rain is expected.
 - Forecast precipitation must meet the plant's configured rain threshold.
 - When probability is available, the maximum probability within 48 hours must be at least 60%.
 - Low-confidence rain does not suppress watering guidance.
-- Forecast providers without probability retain amount-only behavior.
 - Invalid probabilities cannot suppress guidance.
 - Suppression is re-evaluated during every coordinator update.
 

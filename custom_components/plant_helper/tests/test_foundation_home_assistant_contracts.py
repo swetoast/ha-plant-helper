@@ -27,7 +27,7 @@ def function_names(name: str) -> set[str]:
 
 
 def test_config_flow_exposes_complete_lifecycle() -> None:
-    names = function_names("config_flow.py")
+    names = function_names("config_flow.py") | function_names("options.py")
     assert {
         "async_step_user",
         "async_get_options_flow",
@@ -41,14 +41,14 @@ def test_config_flow_exposes_complete_lifecycle() -> None:
 
 
 def test_config_flow_uses_single_reload_revision_path() -> None:
-    text = source("config_flow.py")
+    text = source("options.py")
     assert "def _finish" in text
     assert 'options["_rev"]' in text
     assert "async_reload" not in text
 
 
 def test_remove_flow_purges_all_runtime_layers() -> None:
-    text = source("config_flow.py")
+    text = source("options.py")
     purge = text[text.index("async def _purge_plant"):text.index("def _moisture_state")]
     assert "async_remove_user_plant" in purge
     assert "from .learned_store import remove_plant" in purge
@@ -153,11 +153,14 @@ def test_config_flow_uses_current_home_assistant_result_type() -> None:
 
 def test_options_flow_is_defined_once_and_uses_managed_config_entry() -> None:
     """Options remain in config_flow.py and use HA's managed config_entry property."""
-    text = (ROOT / "config_flow.py").read_text(encoding="utf-8")
-    assert text.count("class PlantHelperOptionsFlow(OptionsFlow):") == 1
-    assert "return PlantHelperOptionsFlow()" in text
-    assert "self.config_entry =" not in text
-    assert not (ROOT / "options.py").exists()
+    config_text = (ROOT / "config_flow.py").read_text(encoding="utf-8")
+    options_text = (ROOT / "options.py").read_text(encoding="utf-8")
+    assert "class PlantHelperOptionsFlow" not in config_text
+    assert options_text.count("class PlantHelperOptionsFlow(OptionsFlow):") == 1
+    assert "from .options import PlantHelperOptionsFlow" in config_text
+    assert "return PlantHelperOptionsFlow()" in config_text
+    assert "self.config_entry =" not in options_text
+    assert (ROOT / "options.py").is_file()
 
 
 def test_removed_provider_contract_is_absent_from_runtime_modules() -> None:
@@ -204,7 +207,7 @@ def test_global_settings_step_builds_its_schema_before_showing_form() -> None:
     """The options step must call the schema builder with current options."""
     import ast
 
-    tree = ast.parse((ROOT / "config_flow.py").read_text(encoding="utf-8"))
+    tree = ast.parse((ROOT / "options.py").read_text(encoding="utf-8"))
     options_flow = next(
         node for node in tree.body
         if isinstance(node, ast.ClassDef) and node.name == "PlantHelperOptionsFlow"

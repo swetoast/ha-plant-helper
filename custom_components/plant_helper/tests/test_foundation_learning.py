@@ -78,7 +78,7 @@ def test_swap_to_complete_baseline_reuses_without_resetting_progress():
     assert ls.get_calibration(data, "p", "outdoor")["day_records"] == [{"day": 1}]
 
 def test_options_flow_consumes_placement_transition_decision():
-    source = (Path(__file__).resolve().parents[1] / "config_flow.py").read_text()
+    source = (Path(__file__).resolve().parents[1] / "options.py").read_text()
     assert "from .learned_store import set_timer, swap_placement" in source
     assert "needs_calibration = swap_placement(" in source
     assert "if needs_calibration:" in source

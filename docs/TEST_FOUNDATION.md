@@ -21,7 +21,7 @@ The test suite describes the current component rather than historical implementa
 - Learned state, samples, and configuration persistence
 - Perenual, Trefle, and iNaturalist integrations
 - Species enrichment and cache behavior
-- Forecast, Open-Meteo, STRANG, and radiation handling
+- Open-Meteo forecast, radiation, weather-hazard, and failure handling
 - Manifest, translations, documentation, and release packaging
 
 ## Release validation
