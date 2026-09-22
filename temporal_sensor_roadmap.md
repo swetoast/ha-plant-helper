@@ -1258,3 +1258,41 @@ developing trend
 long-term health
 actionable concern
 ```
+
+### 1. Seasonal Dormancy Detection (Wintering)
+
+Given that we are crossing the autumn equinox and approaching the darker months, your `effective_light_exposure` and Open-Meteo context will soon show a massive drop in natural light duration and intensity. Indoor plants respond by entering dormancy, meaning their water uptake plummets.
+
+**The Mechanic:**
+If the 30-day rolling average of `effective_light_exposure` drops below a profile-specific threshold, and baseline room temperatures drop slightly, the engine internally transitions the plant to a `dormant` state.
+
+* **Impact on $k_{drying}$:** The dynamic wet-duration allowance is extended drastically (e.g., up to 300%).
+* **Status Update:** The `needs_water` threshold is lowered so you aren't prompted to water a dormant plant at its usual summer frequency, preventing winter root rot.
+* **Attribute:** `reason: seasonal_dormancy` is added to the status entity.
+
+### 2. True VPD (Vapor Pressure Deficit) Integration
+
+Phase 3 currently combines temperature and humidity into a contextual `normalized_vapor_dryness`. You can replace this abstraction with a scientifically accurate Vapor Pressure Deficit (VPD) calculation in kilopascals (kPa). VPD is the exact physical force pulling water out of the plant's leaves.
+
+**The Mechanic:**
+Calculate internal saturation vapor pressure (SVP) and actual vapor pressure (AVP) using the Tetens equation:
+
+
+$$SVP = 0.61078 \times \exp\left(\frac{17.27 \times T}{T + 237.3}\right)$$
+
+$$AVP = SVP \times \left(\frac{RH}{100}\right)$$
+
+$$VPD = SVP - AVP$$
+
+* **Impact:** Instead of guessing if "warm and humid" is stressful, VPD gives you an exact metric. If VPD is too high ($> 1.5$ kPa), the plant is transpiring too fast (`accelerated_drying`). If VPD is too low ($< 0.4$ kPa), the plant cannot breathe (`slow_drying_humid_condition`).
+* **Output:** This replaces the basic temperature/humidity duration trackers with a single, highly accurate internal stress metric.
+
+### 3. Partial Watering Detection (Volume Deficit)
+
+Phase 2 detects a sharp moisture rise and flags it as `recently_watered`. Phase 6 learns the "Typical peak moisture". You can combine these to evaluate the *quality* of the watering event.
+
+**The Mechanic:**
+When a watering event settles and the moisture peaks, compare the new peak to the baseline learned peak.
+
+* If the pot usually peaks at 65% but only hit 40% before plateauing, the soil was only partially saturated.
+* **Status Impact:** Instead of returning to `normal`, the state shifts to `partial_watering` or immediately back to `approaching_dry`, preventing the engine from assuming the plant has a full reservoir to draw from over the next week.
