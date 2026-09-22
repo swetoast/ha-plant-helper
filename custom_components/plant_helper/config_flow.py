@@ -137,8 +137,20 @@ def _plant_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
 
 
 def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
-    """Global settings shared by all plants."""
+    """Global settings shared by all plants.
+
+    Only valid persisted values are fed back into selector defaults. Older
+    entries may contain explicit ``None`` or empty-string values; passing those
+    as defaults makes Home Assistant fail while serializing the options form.
+    """
     o = options or {}
+    access_level = o.get(CONF_PERENUAL_ACCESS_LEVEL)
+    if access_level not in (PERENUAL_ACCESS_FREE, PERENUAL_ACCESS_PAID):
+        access_level = PERENUAL_ACCESS_FREE
+    update_interval = o.get(CONF_UPDATE_INTERVAL)
+    if not isinstance(update_interval, (int, float)) or isinstance(update_interval, bool):
+        update_interval = DEFAULT_UPDATE_INTERVAL
+    update_interval = max(60, min(3600, int(update_interval)))
     return vol.Schema(
         {
             _optional(CONF_LATITUDE, o.get(CONF_LATITUDE)): selector.NumberSelector(
@@ -161,7 +173,7 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
             ),
             vol.Optional(
                 CONF_PERENUAL_ACCESS_LEVEL,
-                default=o.get(CONF_PERENUAL_ACCESS_LEVEL, PERENUAL_ACCESS_FREE),
+                default=access_level,
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
@@ -176,7 +188,7 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
             ),
             vol.Optional(
                 CONF_UPDATE_INTERVAL,
-                default=o.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+                default=update_interval,
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=60, max=3600, step=30, unit_of_measurement="s",

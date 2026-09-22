@@ -135,3 +135,27 @@ def test_remove_plant_cleans_entity_and_device_registries():
     assert "entity.config_entry_id == self.config_entry.entry_id" in source
     assert 'unique_prefix = f"{self.config_entry.entry_id}_{plant_id}_"' in source
     assert "device_registry.async_remove_device(device.id)" in source
+
+
+def test_global_schema_accepts_empty_persisted_values() -> None:
+    """Global settings must render when older options contain empty values."""
+    from custom_components.plant_helper.config_flow import _global_schema
+    from custom_components.plant_helper.const import (
+        CONF_PERENUAL_ACCESS_LEVEL, CONF_UPDATE_INTERVAL,
+    )
+
+    values = _global_schema(
+        {CONF_PERENUAL_ACCESS_LEVEL: "", CONF_UPDATE_INTERVAL: None}
+    )({})
+    assert values[CONF_PERENUAL_ACCESS_LEVEL] == "free"
+    assert isinstance(values[CONF_UPDATE_INTERVAL], int)
+    assert values[CONF_UPDATE_INTERVAL] >= 60
+
+
+def test_global_schema_clamps_invalid_persisted_interval() -> None:
+    """Out-of-range legacy intervals cannot break form serialization."""
+    from custom_components.plant_helper.config_flow import _global_schema
+    from custom_components.plant_helper.const import CONF_UPDATE_INTERVAL
+
+    assert _global_schema({CONF_UPDATE_INTERVAL: 0})({})[CONF_UPDATE_INTERVAL] == 60
+    assert _global_schema({CONF_UPDATE_INTERVAL: 99999})({})[CONF_UPDATE_INTERVAL] == 3600

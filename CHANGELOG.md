@@ -1,3 +1,8 @@
+## 4.4.15
+
+- Fixed the Global settings options form failing with a blank Error dialog when persisted select or update-interval values were empty or invalid.
+- Added regression coverage for empty and out-of-range persisted global settings.
+
 # Changelog
 
 ## [4.4.14] - 2026-09-22
