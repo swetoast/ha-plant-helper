@@ -45,3 +45,52 @@ def test_provider_backoff_auth_suspension_and_failure_isolation():
  assert run(e.enrich('Another plant',NOW+timedelta(minutes=1))).status in {'not_found','unavailable'} and auth.calls==1 and rate.calls==1
 def test_redaction():
  text=redact('https://x.test?api_key=abc token=xyz Authorization=secret bearer live.token',('live.token',));assert 'abc' not in text and 'xyz' not in text and 'secret' not in text and 'live.token' not in text
+
+def test_chained_common_name_discovery_preserves_ambiguous_candidates():
+ from domain.enrichment import ChainedSpeciesEnrichment
+ ina=INaturalistAdapter(lambda query:asyncio.sleep(0,result={'results':[
+  {'id':67710,'rank':'species','is_active':True,'name':'Sansevieria trifasciata','preferred_common_name':'Snake Plant','matched_term':'Snake Plant','iconic_taxon_name':'Plantae'},
+  {'id':168422,'rank':'species','is_active':True,'name':'Sansevieria cylindrica','preferred_common_name':'African Spear','matched_term':'Cylindrical Snake Plant','iconic_taxon_name':'Plantae'}]}))
+ chain=ChainedSpeciesEnrichment(ina,TrefleAdapter(lambda q:asyncio.sleep(0,result={'data':[]})),PerenualAdapter(lambda q:asyncio.sleep(0,result={'data':[]})))
+ candidates=run(chain.discover('Snake Plant'))
+ assert [candidate['scientific_name'] for candidate in candidates]==['Sansevieria trifasciata','Sansevieria cylindrica']
+ assert candidates[0]['synonyms']==['Snake Plant']
+
+def test_chained_selected_identity_trefle_then_perenual_fallbacks():
+ from domain.enrichment import ChainedSpeciesEnrichment
+ calls=[]
+ async def trefle(query):
+  calls.append(('trefle',query));return {'data':[{'scientific_name':'Dracaena trifasciata','synonyms':['Sansevieria trifasciata'],'family':'Asparagaceae','genus':'Dracaena'}]}
+ async def perenual(query):
+  calls.append(('perenual',query))
+  if query=='Snake Plant':return {'data':[{'scientific_name':['Sansevieria trifasciata'],'common_name':'Snake Plant','watering':'Minimum','sunlight':['part shade']} ]}
+  return {'data':[]}
+ selected={'provider_id':67710,'scientific_name':'Sansevieria trifasciata','common_name':'Snake Plant','synonyms':['Snake Plant'],'image_url':'inat.jpg'}
+ chain=ChainedSpeciesEnrichment(INaturalistAdapter(lambda q:asyncio.sleep(0,result={})),TrefleAdapter(trefle),PerenualAdapter(perenual))
+ result=run(chain.enrich_selected('Snake Plant',selected))
+ assert result.status=='matched'
+ assert result.data['scientific_name']=='Dracaena trifasciata'
+ assert result.data['common_name']=='Snake Plant'
+ assert result.data['family']=='Asparagaceae' and result.data['genus']=='Dracaena'
+ assert result.data['watering_category']=='Minimum'
+ assert calls==[('trefle','Sansevieria trifasciata'),('perenual','Dracaena trifasciata'),('perenual','Sansevieria trifasciata'),('perenual','Snake Plant')]
+
+def test_chained_perenual_family_only_match_is_rejected():
+ from domain.enrichment import ChainedSpeciesEnrichment
+ selected={'scientific_name':'Sansevieria trifasciata','common_name':'Snake Plant','synonyms':['Snake Plant']}
+ trefle=TrefleAdapter(lambda q:asyncio.sleep(0,result={'data':[{'scientific_name':'Dracaena trifasciata','synonyms':['Sansevieria trifasciata'],'family':'Asparagaceae'}]}))
+ perenual=PerenualAdapter(lambda q:asyncio.sleep(0,result={'data':[{'scientific_name':['Agave americana'],'common_name':'Century Plant','family':'Asparagaceae','watering':'Minimum'}]}))
+ result=run(ChainedSpeciesEnrichment(INaturalistAdapter(lambda q:asyncio.sleep(0,result={})),trefle,perenual).enrich_selected('Snake Plant',selected))
+ assert 'watering_category' not in result.data
+ assert result.providers==('inaturalist','trefle')
+
+
+def test_exact_common_name_selection_requires_one_candidate():
+ from domain.enrichment import select_exact_common_name_candidate
+ candidates=[
+  {'scientific_name':'Sansevieria trifasciata','common_name':'Snake Plant','matched_term':'Snake Plant'},
+  {'scientific_name':'Sansevieria cylindrica','common_name':'African Spear','matched_term':'Cylindrical Snake Plant'},
+ ]
+ assert select_exact_common_name_candidate('Snake Plant',candidates)['scientific_name']=='Sansevieria trifasciata'
+ assert select_exact_common_name_candidate('Plant',candidates) is None
+ assert select_exact_common_name_candidate('Snake Plant',[candidates[0],dict(candidates[0])]) is None

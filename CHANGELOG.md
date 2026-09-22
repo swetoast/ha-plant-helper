@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.13 - 2026-09-22
+
+- Added the chained species-provider workflow: iNaturalist common-name discovery, Trefle taxonomy resolution, and Perenual care-data fallbacks.
+- Preserved resolved species context across later sensor evaluations and refreshed stored plants during startup.
+- Reloaded the integration when global provider options change.
+- Added recorded provider fixtures and regression tests for empty, ambiguous, synonym, and multiple-candidate responses.
+
+## 0.0.12 - 2026-09-22
+
+- Added a humidity entity for each plant with a configured humidity source.
+- Added a battery entity that preserves verified categorical states (`high`, `middle`, `low`) or numeric values from 0 through 100.
+- Improved the calibration entity so it clearly reports `source_sensor` instead of implying that setup was incomplete.
+- Replaced the meaningless calibration progress value with a concise explanation that Plant Helper uses the selected source sensor's calibrated reading.
+- Preserved all existing entity keys and added the new entities without renaming or replacing existing entities.
+- Added regression coverage for the humidity contract, mixed battery contract, calibration meaning, and entity-key preservation.
+
 ## 0.0.11 - 2026-09-22
 
 - Fixed Home Assistant entity setup crashes caused by assigning Plant Helper's internal `EntityContract` as `entity_description`.

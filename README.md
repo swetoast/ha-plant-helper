@@ -34,6 +34,9 @@ See [Installation and configuration](docs/INSTALLATION.md) for upgrades, configu
 
 ## Entities
 
+Humidity and battery source values are exposed when configured. Battery preserves either `high`, `middle`, or `low`, or a numeric value from 0 through 100. Calibration reports `source_sensor` to confirm that Plant Helper uses the selected sensor reading and does not require a separate Plant Helper calibration step.
+
+
 Each plant can expose seven sensors and one binary sensor. Entities remain unavailable until data for that specific entity exists. Missing optional data does not make unrelated plant entities unavailable.
 
 See [Entity reference](docs/ENTITIES.md).

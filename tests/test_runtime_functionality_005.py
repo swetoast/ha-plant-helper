@@ -41,5 +41,15 @@ def test_public_entity_contract_is_unchanged():
 
 def test_patch_release_metadata_is_aligned():
     manifest = json.loads((INTEGRATION / "manifest.json").read_text())
-    assert manifest["version"] == "0.0.11"
-    assert "## 0.0.11 - 2026-09-22" in (ROOT / "CHANGELOG.md").read_text()
+    assert manifest["version"] == "0.0.13"
+    assert "## 0.0.13 - 2026-09-22" in (ROOT / "CHANGELOG.md").read_text()
+
+
+def test_provider_runtime_preserves_enrichment_and_reloads_options():
+    runtime = (ROOT / "custom_components/plant_helper/runtime.py").read_text()
+    init = (ROOT / "custom_components/plant_helper/__init__.py").read_text()
+    assert "self.species_context.get(plant_uuid)" in runtime
+    assert "self.species_context[plant_uuid]" in runtime
+    assert "hass.async_create_task(" in runtime
+    assert "self.schedule_enrichment(plant_uuid, str(species))" in runtime
+    assert "entry.add_update_listener(async_reload_entry)" in init

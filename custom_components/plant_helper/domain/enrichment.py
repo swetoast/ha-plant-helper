@@ -57,8 +57,71 @@ class INaturalistAdapter:
  name='inaturalist'
  def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],credential:str=''):self.request=request;self.credential=credential
  async def search(self,query:str)->list[dict[str,Any]]:
-  raw=await self.request(query);items=raw.get('results',[])
-  return [{'scientific_name':x.get('name'),'common_name':x.get('preferred_common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('names',[]),'image_url':(x.get('default_photo') or {}).get('medium_url')} for x in items]
+  raw=await self.request(query)
+  status=int(raw.get('http_status',raw.get('status',200)))
+  payload=raw.get('body',raw)
+  if status>=400:raise ProviderError('rate' if status==429 else 'auth' if status in {401,403} else 'provider',status,redact(payload,(self.credential,) if self.credential else ()))
+  items=payload.get('results',[]) if isinstance(payload,Mapping) else []
+  if not isinstance(items,list):return []
+  candidates=[]
+  for item in items:
+   if not isinstance(item,Mapping) or item.get('is_active') is False or item.get('extinct') is True or item.get('provisional') is True:continue
+   if item.get('rank') not in {None,'species'} or item.get('iconic_taxon_name') not in {None,'Plantae'}:continue
+   synonyms=list(item.get('names',[])) if isinstance(item.get('names',[]),list) else []
+   matched=item.get('matched_term')
+   if matched and normalize_species_key(str(matched)) not in {normalize_species_key(str(value)) for value in synonyms}:synonyms.append(matched)
+   candidates.append({'scientific_name':item.get('name'),'common_name':item.get('preferred_common_name'),'family':item.get('family'),'genus':item.get('genus'),'synonyms':synonyms,'image_url':(item.get('default_photo') or {}).get('medium_url'),'provider_id':item.get('id'),'matched_term':matched})
+  return candidates
+
+@dataclass(frozen=True,slots=True)
+class ResolvedIdentity:
+ scientific_name:str
+ common_name:str|None
+ aliases:tuple[str,...]
+ family:str|None=None
+ genus:str|None=None
+ provider_id:int|None=None
+
+class ChainedSpeciesEnrichment:
+ def __init__(self,inaturalist:INaturalistAdapter,trefle:TrefleAdapter,perenual:PerenualAdapter):
+  self.inaturalist=inaturalist;self.trefle=trefle;self.perenual=perenual
+ async def discover(self,common_name:str)->list[dict[str,Any]]:
+  return await self.inaturalist.search(common_name)
+ async def enrich_selected(self,common_name:str,selected:Mapping[str,Any])->EnrichmentResult:
+  scientific=str(selected.get('scientific_name','')).strip()
+  if not scientific:raise ValueError('selected candidate requires scientific_name')
+  identity=ResolvedIdentity(scientific,str(selected.get('common_name') or common_name),tuple(dict.fromkeys([scientific,*[str(v) for v in selected.get('synonyms',[]) if v]])),provider_id=selected.get('provider_id'))
+  trefle_candidates=await self.trefle.search(identity.scientific_name)
+  trefle_match=next((candidate for candidate in trefle_candidates if _identity_match(identity.aliases,candidate)),None)
+  if trefle_match:
+   aliases=tuple(dict.fromkeys([*identity.aliases,str(trefle_match.get('scientific_name') or ''),*[str(v) for v in trefle_match.get('synonyms',[]) if v]]))
+   identity=ResolvedIdentity(str(trefle_match.get('scientific_name') or identity.scientific_name),identity.common_name,tuple(v for v in aliases if v),trefle_match.get('family'),trefle_match.get('genus'),identity.provider_id)
+  perenual_match=None
+  queries=tuple(dict.fromkeys([identity.scientific_name,*identity.aliases,common_name]))
+  for query in queries:
+   candidates=await self.perenual.search(query)
+   perenual_match=next((candidate for candidate in candidates if _identity_match((*identity.aliases,identity.scientific_name,common_name),candidate)),None)
+   if perenual_match:break
+  results={'inaturalist':dict(selected)}
+  if trefle_match:results['trefle']=trefle_match
+  if perenual_match:results['perenual']=perenual_match
+  data=merge_provider_fields(results)
+  data['scientific_name']=identity.scientific_name
+  data['common_name']=identity.common_name
+  if identity.family:data['family']=identity.family
+  if identity.genus:data['genus']=identity.genus
+  return EnrichmentResult(normalize_species_key(common_name),'matched',data,tuple(results),False)
+
+def _identity_match(aliases:tuple[str,...],candidate:Mapping[str,Any])->bool:
+ names={normalize_species_key(value) for value in aliases if value}
+ candidate_names={normalize_species_key(str(candidate.get('scientific_name',''))),normalize_species_key(str(candidate.get('common_name','')))}
+ candidate_names.update(normalize_species_key(str(value)) for value in candidate.get('synonyms',[]) if value)
+ return bool(names & candidate_names)
+
+def select_exact_common_name_candidate(query:str,candidates:list[dict[str,Any]])->dict[str,Any]|None:
+ normalized=normalize_species_key(query)
+ exact=[candidate for candidate in candidates if normalized in {normalize_species_key(str(candidate.get('common_name',''))),normalize_species_key(str(candidate.get('matched_term','')))}]
+ return exact[0] if len(exact)==1 else None
 
 class SpeciesEnrichment:
  def __init__(self,storage:PlantHelperStorage,providers:list[Any]):

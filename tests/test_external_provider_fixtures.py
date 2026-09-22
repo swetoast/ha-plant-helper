@@ -116,7 +116,63 @@ def test_trefle_details_object_is_accepted_and_summary_counter_is_not_trusted():
 
 def test_external_fixtures_are_sanitized():
     forbidden = ("token=", "api_key=", "x-amz-credential", "x-amz-signature", "nabu.casa")
-    for directory in ("open_meteo", "perenual", "trefle"):
+    for directory in ("open_meteo", "perenual", "trefle", "inaturalist"):
         for path in (FIXTURES / directory).glob("*.json"):
             text = path.read_text().casefold()
             assert all(item not in text for item in forbidden), path
+
+
+def test_inaturalist_no_results_is_an_empty_candidate_set():
+    fixture = load("inaturalist/no_results.json")
+    from domain.enrichment import INaturalistAdapter
+    candidates = run(INaturalistAdapter(lambda _query: asyncio.sleep(0, result=fixture)).search("definitely missing"))
+    assert fixture["total_results"] == 0
+    assert candidates == []
+
+
+def test_inaturalist_ambiguous_results_preserve_all_candidates():
+    fixture = load("inaturalist/ambiguous_results.json")
+    from domain.enrichment import INaturalistAdapter
+    candidates = run(INaturalistAdapter(lambda _query: asyncio.sleep(0, result=fixture)).search("Snake Plant"))
+    assert fixture["total_results"] == 3
+    assert [item["scientific_name"] for item in candidates] == [
+        "Sansevieria trifasciata",
+        "Sansevieria cylindrica",
+        "Sansevieria masoniana",
+    ]
+    assert candidates[0]["image_url"].endswith("/medium.jpeg")
+
+
+def test_perenual_empty_search_is_an_empty_candidate_set():
+    fixture = load("perenual/empty_search.json")
+    candidates = run(PerenualAdapter(lambda _query: asyncio.sleep(0, result=fixture)).search("definitely missing"))
+    assert fixture["total"] == 0
+    assert candidates == []
+
+
+def test_trefle_multiple_candidates_are_not_collapsed_by_the_adapter():
+    fixture = load("trefle/multiple_candidates.json")
+    candidates = run(TrefleAdapter(lambda _query: asyncio.sleep(0, result=fixture)).search("monstera"))
+    assert fixture["meta"]["total"] == 91
+    assert len(candidates) == 10
+    assert candidates[1]["scientific_name"] == "Monstera deliciosa"
+    assert candidates[1]["family"] == "Araceae"
+    assert len(candidates[1]["synonyms"]) == 8
+
+
+def test_inaturalist_dracaena_synonym_resolves_to_current_sansevieria_taxon():
+    fixture = load("inaturalist/inaturalist_dracaena_trifasciata.json")
+    from domain.enrichment import INaturalistAdapter
+    candidates = run(INaturalistAdapter(lambda _query: asyncio.sleep(0, result=fixture)).search("Dracaena trifasciata"))
+    assert fixture["total_results"] == 1
+    assert fixture["results"][0]["matched_term"] == "Dracaena trifasciata"
+    assert candidates == [{
+        "scientific_name": "Sansevieria trifasciata",
+        "common_name": "Snake Plant",
+        "family": None,
+        "genus": None,
+        "synonyms": ["Dracaena trifasciata"],
+        "image_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/488135905/medium.jpeg",
+        "provider_id": 67710,
+        "matched_term": "Dracaena trifasciata",
+    }]

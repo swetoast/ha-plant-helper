@@ -1,6 +1,6 @@
 from domain.entity_contract import *
 def test_final_meaningful_entity_set():
- assert tuple(x.key for x in SENSORS)==('care_status','moisture','light','temperature','health','calibration','species_context')
+ assert tuple(x.key for x in SENSORS)==('care_status','moisture','light','temperature','humidity','battery','health','calibration','species_context')
  assert tuple(x.key for x in BINARY_SENSORS)==('needs_attention',)
  assert not ({'provider_status','api_status','debug','cache','generation'} & set(BY_KEY))
 def test_stable_unique_and_entity_ids():
