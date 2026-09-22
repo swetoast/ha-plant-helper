@@ -1,6 +1,19 @@
 # Changelog
 
-## [4.4.12]
+## [4.4.14] - 2026-09-22
+
+- Fixed the Global settings form failing to open because the Perenual access selector used an incompatible selector argument.
+- Changed the selector to explicit Free and Paid value-label options.
+- Added foundation regressions for Global settings schema construction and selector compatibility.
+
+## [4.4.13] - 2026-09-22
+
+- Reorganized historical phase-labelled tests into current behavioral foundation suites.
+- Added a strict inventory covering every production Python module and every public top-level function and class.
+- Added test-foundation documentation and a guard that rejects future phase-labelled test files.
+- Preserved the full behavioral regression suite while making ownership explicit for current component architecture.
+
+## [4.4.12] - 2026-09-22
 
 - Added Perenual Free and Paid access modes, defaulting to Free.
 - Free mode avoids inaccessible detail requests for species IDs above 3000.

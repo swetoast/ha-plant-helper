@@ -164,9 +164,11 @@ def _global_schema(options: dict[str, Any] | None = None) -> vol.Schema:
                 default=o.get(CONF_PERENUAL_ACCESS_LEVEL, PERENUAL_ACCESS_FREE),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[PERENUAL_ACCESS_FREE, PERENUAL_ACCESS_PAID],
+                    options=[
+                        {"value": PERENUAL_ACCESS_FREE, "label": "Free"},
+                        {"value": PERENUAL_ACCESS_PAID, "label": "Paid"},
+                    ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
-                    translation_key="perenual_access_level",
                 )
             ),
             _optional(CONF_TREFLE_API_KEY, o.get(CONF_TREFLE_API_KEY)): selector.TextSelector(

@@ -2,11 +2,11 @@
 
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![HACS](https://img.shields.io/badge/HACS-Custom%20Repository-41BDF5)](https://hacs.xyz/)
-[![Version](https://img.shields.io/badge/version-4.4.12-blue)](custom_components/plant_helper/manifest.json)
+[![Version](https://img.shields.io/badge/version-4.4.14-blue)](custom_components/plant_helper/manifest.json)
 
 Plant Helper is a Home Assistant custom integration that turns soil-moisture, soil-temperature, and light readings into calibrated, time-based plant-care guidance. It learns how each plant behaves in its actual location and combines that local history with optional solar-radiation data, weather forecasts, and read-only species context.
 
-> **Current release:** Version 4.4.12. See the changelog for release history.
+> **Current release:** Version 4.4.14. See the changelog for release history.
 
 ## Highlights
 
@@ -61,30 +61,32 @@ Until Plant Helper is available through the default HACS catalogue:
 
 ### Global settings
 
-- **Forecast source:** optional Home Assistant weather entity or sensor containing a forecast attribute
-- **Outdoor weather source:** automatic, Home Assistant, Open-Meteo, or disabled
-- **Radiation source:** automatic, direct STRÅNG API, or existing Home Assistant STRÅNG sensors
-- **Ozone sensor:** optional outdoor ozone advisory source
+Plant Helper exposes these shared options:
+
+- **Latitude and longitude:** optional overrides for the Home Assistant location used by outdoor weather and radiation data
+- **Ozone sensor:** optional sensor used for the outdoor ozone advisory
 - **Perenual API key:** optional species context
+- **Perenual access level:** choose **Free** or **Paid** to match the API plan connected to the key
 - **Trefle API token:** optional botanical fallback context
-- **iNaturalist enrichment:** optional keyless identity and photo context
 - **Update interval:** default 300 seconds, accepted range 60–3600 seconds
+- **Radiation source:** selected automatically from location coverage; no user-facing selector is exposed in version 4.4.14
 
-### Outdoor weather-source behavior
+#### Perenual access levels
 
-- **Automatic:** preserves a configured Home Assistant forecast; otherwise uses Open-Meteo
-- **Home Assistant:** uses the configured Home Assistant forecast source
-- **Open-Meteo:** uses one shared location-level Open-Meteo request for all plants
-- **Disabled:** does not provide forecast-based outdoor context
+Select the access level that matches the Perenual account:
 
-### Radiation-source behavior
+- **Free:** uses search results as useful species context, avoids detail requests for plant IDs above 3000, and ignores upgrade-only placeholders returned by the service.
+- **Paid:** allows detail requests for all returned plant IDs.
 
-- **Automatic inside Nordic coverage:** prefers the direct STRÅNG API
-- **Automatic outside Nordic coverage:** uses source-isolated estimated PAR derived from Open-Meteo shortwave radiation
-- **Direct API:** uses STRÅNG explicitly
-- **Home Assistant sensors:** uses the configured STRÅNG sensor entities explicitly
+An upgrade-related HTTP 429 response is treated as a plan restriction rather than a general rate-limit event. Actual rate limiting still applies normal provider backoff. Changing the access level or API key invalidates incompatible cached Perenual data so the next refresh uses the current settings.
 
-Explicit STRÅNG modes are never silently replaced by Open-Meteo. Radiation histories use separate storage keys so a complete daily-light calculation cannot mix providers within one calendar day.
+Perenual, Trefle, and iNaturalist data is read-only context. Provider data does not replace the configured sensors or rewrite learned care thresholds.
+
+### Outdoor weather and radiation behavior
+
+Plant Helper uses the Home Assistant location unless latitude and longitude overrides are provided. Open-Meteo supplies shared forecast context for outdoor plants, including precipitation, weather conditions, and ET0 drying pressure. There is no user-facing weather-source selector in version 4.4.14.
+
+For radiation, Plant Helper prefers the direct STRANG API when the configured location is inside its supported Nordic coverage. Outside that coverage it uses source-isolated estimated PAR derived from Open-Meteo shortwave radiation. Radiation histories use separate storage keys so one daily-light calculation cannot mix providers within the same calendar day.
 
 ### Per-plant settings
 

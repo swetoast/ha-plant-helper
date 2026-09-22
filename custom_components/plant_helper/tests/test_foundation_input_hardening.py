@@ -1,0 +1,60 @@
+"""Phase C source and lifecycle hardening contracts."""
+from pathlib import Path
+import json
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def text(name):
+    return (ROOT / name).read_text(encoding="utf-8")
+
+def test_open_meteo_only_radiation_policy():
+    source = text("coordinator.py")
+    assert '"configured_source": "open_meteo"' in source
+    assert '"active_source": "open_meteo"' in source
+    assert "_radiation_source" not in source
+    assert "_use_strang_api" not in source
+    assert "_refresh_strang" not in source
+
+def test_radiation_diagnostics_exposed():
+    coordinator = text("coordinator.py")
+    binary = text("binary_sensor.py")
+    for key in ("configured_source", "active_source", "last_attempt", "last_success", "last_error", "latest_data_time", "data_age_hours", "sample_counts", "consecutive_failures", "fallback"):
+        assert f'"{key}"' in coordinator
+    assert "class RadiationSourceIssueBinary" in binary
+    assert "radiation_status" in binary
+
+def test_provider_health_contract_is_consistent():
+    source = text("coordinator.py")
+    for key in ("configured", "enabled", "ok", "last_result", "partial_result", "last_attempt", "last_success", "last_error", "calls_today", "daily_limit", "throttled"):
+        assert f'"{key}"' in source
+    for state in ("not_configured", "throttled", "error", "success", "idle"):
+        assert f'"{state}"' in source
+
+def test_duplicate_engine_enrichment_is_absent():
+    assert not (ROOT / "engine" / "enrichment.py").exists()
+    for path in ROOT.rglob("*.py"):
+        if path == Path(__file__):
+            continue
+        assert "engine.enrichment" not in path.read_text(encoding="utf-8")
+
+def test_services_registered_at_domain_setup_and_resolve_runtime_entry():
+    source = text("__init__.py")
+    assert "async def async_setup(hass: HomeAssistant" in source
+    assert "_register_services(hass)" in source
+    assert "hass.services.async_remove" not in source
+    assert '"entry_id": entry.entry_id' in source
+    assert 'entry_id = data.get("entry_id")' in source
+
+def test_public_metadata_is_privacy_safe():
+    assert 'AUTHOR = "Plant Helper"' in text("const.py")
+    assert "Peter Skopa" not in text("const.py")
+    manifest = json.loads(text("manifest.json"))
+    assert tuple(map(int, manifest["version"].split("."))) >= (4, 0, 24)
+
+
+def test_entity_availability_respects_coordinator_failures():
+    """Entities must not expose stale values after a coordinator update failure."""
+    entity_source = text("entity.py")
+    sensor_source = text("sensor.py")
+    assert "return super().available and self._result is not None" in entity_source
+    assert "CoordinatorEntity.available.fget(self) and bool(self._info())" in sensor_source
