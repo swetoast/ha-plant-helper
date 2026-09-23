@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.22 - 2026-09-23
+
+- Introduced the temporal soil engine (`domain/temporal/`): a pure, clock-injected moisture interpreter that replaces the static per-reading band check. `sensor.<plant>_status`, `sensor.<plant>_health`, and `binary_sensor.<plant>_needs_attention` are now driven by an observation history and a wet/dry state machine rather than a single instantaneous reading. Raw measurement entities are unchanged.
+- Fixed the long-standing false alarm where one elevated reading on a dry-profile plant (for example 47% against a 15-45 band) immediately read `too_wet`. A single elevated reading now reads `wet` with good health and no attention; escalation to `too_wet` requires sustained wetness beyond the drying limit with sufficient confidence. Rain suppression still folds in for outdoor plants, and critically dry soil still overrides it.
+- BREAKING: the status string `water_soon` is renamed to `needs_water`. New status strings are also introduced (`recently_watered`, `wet`, `staying_wet`, `too_wet`, `drying`, `approaching_dry`, `too_dry`, and `waiting_for_data`), while `normal` and `watering_paused` are retained. Grep your automations and dashboards for `water_soon` before upgrading.
+- Consolidated the test suite from 34 files into 10 foundational modules to keep the upload file count down, preserving the behavioral, structural, and packaging coverage.
+
 ## 0.0.21 - 2026-09-23
 
 - Maintenance release. No runtime behavior change.

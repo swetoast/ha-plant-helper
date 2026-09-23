@@ -11,8 +11,10 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN
 from .domain.runtime import RuntimeCollection
-from .domain.care import evaluate_care
 from .domain.interpretation import interpret_indoor, interpret_outdoor
+from .domain.temporal.history import ObservationHistory
+from .domain.temporal.moisture import TemporalMoistureState, evaluate_moisture
+from .domain.temporal.observation import PlantObservation
 from .domain.forecast import (
     ForecastCollector,
     request_for as forecast_request_for,
@@ -74,6 +76,8 @@ class PlantHelperRuntime:
     forecast_data: dict[str, Any] | None = None
     air_snapshot: Any = None
     weather_unsub: Any = None
+    temporal_history: dict[str, ObservationHistory] = field(default_factory=dict)
+    temporal_state: dict[str, TemporalMoistureState] = field(default_factory=dict)
     _blocked: set[str] = field(default_factory=set)
 
     async def async_initialize(self, backend: StorageBackend) -> None:
@@ -251,9 +255,29 @@ class PlantHelperRuntime:
             placement == "outdoor" and bool(conditions.get("rain_suppression"))
         )
 
-        decision = evaluate_care(
-            moisture, profile, placement, rain_suppression=rain_suppression
+        now = datetime.now(timezone.utc)
+        history = self.temporal_history.get(plant_uuid)
+        if history is None:
+            history = ObservationHistory()
+            self.temporal_history[plant_uuid] = history
+        soil_temperature = state.get("temperature")
+        history.append(
+            PlantObservation(
+                observed_at=now,
+                moisture=moisture,
+                soil_temperature=soil_temperature,
+                moisture_valid=moisture is not None,
+                soil_temperature_valid=soil_temperature is not None,
+            )
         )
+        decision, moisture_state = evaluate_moisture(
+            history,
+            self.temporal_state.get(plant_uuid),
+            now,
+            profile,
+            {"placement": placement, "rain_suppression": rain_suppression},
+        )
+        self.temporal_state[plant_uuid] = moisture_state
 
         care_attributes: dict[str, Any] = {
             "summary": decision.summary,
@@ -273,13 +297,13 @@ class PlantHelperRuntime:
                     "external_daylight"
                 )
 
-        state["care_status"] = decision.care_status
+        state["care_status"] = decision.status
         state["care_status_attributes"] = care_attributes
         state["health"] = decision.health
         state["health_attributes"] = {"summary": decision.summary}
-        state["needs_attention"] = decision.attention
+        state["needs_attention"] = decision.needs_attention
         state["needs_attention_attributes"] = {
-            "reason": decision.reason if decision.attention else None
+            "reason": decision.reason if decision.needs_attention else None
         }
         state["calibration"] = "source_sensor"
         state["calibration_attributes"] = {
@@ -485,6 +509,8 @@ class PlantHelperRuntime:
 
     async def remove_owned_state(self, plant_uuid: str) -> None:
         self.entities.pop(plant_uuid, None)
+        self.temporal_history.pop(plant_uuid, None)
+        self.temporal_state.pop(plant_uuid, None)
         self._blocked.discard(plant_uuid)
 
     def removal_hooks(self) -> RemoveHooks:
@@ -531,6 +557,8 @@ class PlantHelperRuntime:
             self.physical_subscriptions.unload()
         self.platform_callbacks.clear()
         self.entities.clear()
+        self.temporal_history.clear()
+        self.temporal_state.clear()
         self._blocked.clear()
         self.plants.unload()
         self.physical_subscriptions = None
