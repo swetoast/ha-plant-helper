@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.21 - 2026-09-23
+
+- Maintenance release. No runtime behavior change.
+- Removed source-string snapshot tests that asserted implementation text rather than behavior and would break on any refactor. Kept and consolidated the behavioral, structural, and packaging checks. Manifest version is now validated only for self-consistency against the changelog, so a release bump touches one place instead of several.
+- Added `docs/design/execution_roadmap.md`: a sequenced plan from the current release toward the full design, so temporal-sensor work and the remaining enrichment work proceed in order rather than scattered.
+
 ## 0.0.20 - 2026-09-23
 
 - Wired Open-Meteo into the runtime. The forecast and air-quality collectors now run against the live Open-Meteo Forecast and Air Quality APIs through a new HTTP client and response adapter, so the previously unused collectors are connected.
