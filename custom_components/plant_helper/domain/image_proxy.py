@@ -3,7 +3,7 @@ import hashlib,io,ipaddress,socket
 from dataclasses import dataclass
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
-from typing import Any,Awaitable,Callable,Iterable,Mapping
+from typing import Awaitable,Callable,Iterable,Mapping
 from urllib.parse import urljoin,urlsplit
 from PIL import Image,ImageOps,UnidentifiedImageError
 

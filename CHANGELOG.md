@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.0.20 - 2026-09-23
+
+- Wired Open-Meteo into the runtime. The forecast and air-quality collectors now run against the live Open-Meteo Forecast and Air Quality APIs through a new HTTP client and response adapter, so the previously unused collectors are connected.
+- Added a periodic weather coordinator keyed off the configured update interval and the canonical coordinates (Plant Helper override or Home Assistant location). Forecast and air-quality caches self-throttle and refresh independently; a plant census decides whether the outdoor forecast and air-quality requests run.
+- Plant evaluation now consumes the cached environment. Indoor plants use external daylight and seasonal context; outdoor plants gain rain suppression, drying context, frost, and exposure context. Physical moisture stays authoritative and critically dry soil still recommends watering regardless of forecast rain.
+- The `sensor.<plant>_status` entity now exposes weather-derived attributes (placement, and for outdoor plants rain suppression, drying context, frost hours, and exposure; external daylight for indoor plants) when a forecast is available.
+
+## 0.0.19 - 2026-09-23
+
+- The species sensor now publishes the merged enrichment result. The iNaturalist to Trefle to Perenual chain already resolved identity and care data, but the entity only exposed the scientific name and family. The `sensor.<plant>_species` entity now also exposes common name, genus, watering category, and sunlight requirements as attributes when the providers return them.
+- No change to the state value (the resolved scientific name), entity IDs, unique IDs, units, device classes, or storage schema. Provider, provenance, and other diagnostic fields remain internal.
+
+## 0.0.18 - 2026-09-23
+
+- Plant add, edit, and remove no longer overwrite global options with an empty set. The plant-management flow now returns the current options unchanged, so latitude, longitude, provider credentials, access level, and update interval survive plant changes.
+- Plant management no longer triggers a full config-entry reload. Removed the entry update listener that reloaded on every options write; global reconfigure still reloads exactly once through the config flow.
+- Stopped exposing raw third-party species image URLs as an entity attribute. The species entity no longer publishes a provider hotlink; the local authenticated image path remains reserved in the entity contract for a future release.
+- Hygiene: replaced the star import in the config flow with explicit names, computed the entity unique ID once through the domain helper, and removed unused imports in the options, config, and storage modules.
+
 ## 0.0.17 - 2026-09-22
 
 - Completed credential-aware provider activation and confirmed snake-plant alias resolution.

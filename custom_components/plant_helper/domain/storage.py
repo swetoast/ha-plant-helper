@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Callable, Protocol
 
 SCHEMA_VERSION = 1
 

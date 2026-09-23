@@ -6,7 +6,15 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers import selector
 from homeassistant.core import callback
 from .domain.config import GlobalSettings, ValidationError
-from .const import *
+from .const import (
+    DOMAIN,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    CONF_PERENUAL_API_KEY,
+    CONF_PERENUAL_ACCESS_LEVEL,
+    CONF_TREFLE_API_KEY,
+    CONF_UPDATE_INTERVAL,
+)
 
 GLOBAL_SCHEMA=vol.Schema({
     vol.Optional(CONF_LATITUDE): selector.NumberSelector(selector.NumberSelectorConfig(min=-90,max=90,mode=selector.NumberSelectorMode.BOX)),

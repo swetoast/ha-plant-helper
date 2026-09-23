@@ -53,3 +53,11 @@ Plant device removal also now checks every entity-registry reference before dele
 The physical runtime already collected humidity and battery values, but the public entity contract omitted both values. Version 0.0.12 adds `sensor.<plant>_humidity` and `sensor.<plant>_battery` without changing existing entities. Humidity is a percentage measurement. Battery remains a generic sensor because the verified source contract can be either numeric 0 through 100 or categorical `high`, `middle`, or `low`; no categorical value is converted into a guessed percentage.
 
 The calibration entity previously displayed `not_configured` and `progress: 0`, which incorrectly suggested unfinished user setup. Plant Helper currently relies on the selected source sensor's reading rather than requiring a separate Plant Helper calibration operation. The existing calibration entity is therefore retained but now reports `source_sensor` with a direct explanatory summary.
+
+## 0.0.18 options-preservation and image-exposure follow-up
+
+The plant-management options flow returned an empty options set on every add, edit, and remove. Because a Home Assistant options flow replaces the stored options with its returned data, each plant change wiped the global settings (latitude, longitude, Perenual and Trefle credentials, access level, update interval). A registered entry update listener then reloaded the whole config entry on that write, contradicting the dynamic no-reload plant lifecycle. The flow now returns the current options unchanged, so global settings survive and an unchanged options write no longer forces a reload. Global reconfiguration continues to reload exactly once through the config flow's update-and-reload path.
+
+The species entity previously published the raw provider image URL as an attribute, bypassing the intended local validated-image path. The runtime no longer copies the third-party URL into entity attributes. The local authenticated image path remains reserved in the entity contract for a later release that wires the image proxy.
+
+No entity IDs, unique-ID format, units, device classes, state classes, plant UUIDs, configuration fields, or storage schema versions were changed.

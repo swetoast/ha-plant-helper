@@ -15,7 +15,7 @@ class EntityContract:
  attributes:tuple[str,...]=()
 
 SENSORS=(
- EntityContract('sensor','care_status','Status',icon='mdi:sprout',attributes=('summary','reason')),
+ EntityContract('sensor','care_status','Status',icon='mdi:sprout',attributes=('summary','reason','placement','rain_suppression','drying_context','frost_hours','exposure','external_daylight')),
  EntityContract('sensor','moisture','Moisture','%',device_class='moisture',state_class='measurement',icon='mdi:water-percent'),
  EntityContract('sensor','light','Light','lx',device_class='illuminance',state_class='measurement',icon='mdi:brightness-5'),
  EntityContract('sensor','temperature','Temperature','°C',device_class='temperature',state_class='measurement',icon='mdi:thermometer'),
@@ -23,7 +23,7 @@ SENSORS=(
  EntityContract('sensor','battery','Battery',icon='mdi:battery'),
  EntityContract('sensor','health','Health',icon='mdi:leaf',attributes=('summary',)),
  EntityContract('sensor','calibration','Calibration',icon='mdi:tune',attributes=('summary',)),
- EntityContract('sensor','species_context','Species',icon='mdi:flower',attributes=('scientific_name','family','image_url')),
+ EntityContract('sensor','species_context','Species',icon='mdi:flower',attributes=('scientific_name','common_name','family','genus','watering_category','sunlight_requirements','image_url')),
 )
 BINARY_SENSORS=(EntityContract('binary_sensor','needs_attention','Needs attention',device_class='problem',icon='mdi:alert-circle-outline',attributes=('reason',)),)
 BY_KEY={item.key:item for item in (*SENSORS,*BINARY_SENSORS)}

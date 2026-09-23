@@ -5,7 +5,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers import selector
-from .const import DOMAIN
 from .domain.add_plant import AddPlantError,AddPlantHooks,async_add_plant
 from .domain.edit_plant import EditPlantError,EditPlantHooks,async_edit_plant
 from .domain.remove_plant import RemovePlantError
@@ -122,7 +121,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
             _LOGGER.exception("Failed to add plant")
             return self.async_show_form(step_id="add_plant",data_schema=self.add_suggested_values_to_schema(plant_schema(self._placement or "indoor"),self._pending_form_input),errors={"base":"cannot_save_plant"})
         self._clear_transient()
-        return self.async_create_entry(title="",data={})
+        return self.async_create_entry(title="",data=dict(self.config_entry.options))
 
     async def _async_request_entities(self, plant_uuid: str) -> None:
         """Ask every loaded entity platform to reconcile this committed plant."""
@@ -195,7 +194,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                 errors["base"]="cannot_save_plant"
             else:
                 self._clear_transient()
-                return self.async_create_entry(title="",data={})
+                return self.async_create_entry(title="",data=dict(self.config_entry.options))
         suggestions={key:value for key,value in plant.config.items() if key not in {"plant_uuid","revision","placement"}}
         if user_input is not None: suggestions=user_input
         schema=self.add_suggested_values_to_schema(plant_schema(self._placement or plant.config["placement"]),suggestions)
@@ -231,5 +230,5 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                     errors["base"] = "cannot_remove_plant"
                 else:
                     self._clear_transient()
-                    return self.async_create_entry(title="", data={})
+                    return self.async_create_entry(title="", data=dict(self.config_entry.options))
         return self.async_show_form(step_id="confirm_remove",data_schema=vol.Schema({vol.Required("confirm",default=False):bool}),errors=errors)

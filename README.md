@@ -18,7 +18,7 @@ Plant Helper is a Home Assistant custom integration for monitoring indoor and ou
 
 - Home Assistant with support for config-entry based custom integrations.
 - Physical Home Assistant sensor entities are optional, but provide the most useful measurements.
-- Internet access is optional. It is used only by configured forecast, air-quality, species, or image features.
+- Internet access is optional. It is used by the Open-Meteo forecast and air-quality features and by the optional species providers. Without it, plants fall back to physical-sensor-only care.
 - Perenual and Trefle credentials are optional.
 
 ## Installation
@@ -47,7 +47,7 @@ Plant management is performed through the integration configuration and options 
 
 ## Species data and images
 
-Species providers are optional. Provider failures do not make the plant unavailable. Accepted images are downloaded only over HTTPS, validated, converted to static WebP thumbnails, stored by content hash, and served through an authenticated Home Assistant endpoint.
+Species providers are optional. Provider failures do not make the plant unavailable. Species images are not published as entity attributes in this release. The local image pipeline (HTTPS-only download, validation, static WebP conversion, content-hash storage, and an authenticated Home Assistant endpoint) is present in the source but not yet wired into the runtime, so no raw provider image URL is exposed.
 
 ## Troubleshooting
 

@@ -6,7 +6,7 @@ Plant Helper creates one device per plant. Unique IDs are based on the config en
 
 ### Status
 
-A concise categorical care state such as a normal state or a direct care recommendation. Attributes are limited to a user-facing summary and reason when available.
+A concise categorical care state such as a normal state or a direct care recommendation. Outdoor plants can report `watering_paused` when the soil is below the care profile but rain is expected soon; critically dry soil still recommends watering. Attributes are a user-facing summary and reason, and, when a forecast is available, weather context: placement, and for outdoor plants rain suppression, drying context, frost hours, and exposure, or external daylight for indoor plants.
 
 ### Moisture
 
@@ -30,7 +30,7 @@ The current learning or calibration state. The optional attribute is calibration
 
 ### Species
 
-The resolved species context. Optional attributes are scientific name, family, and the authenticated local image URL. Provider names, raw responses, credentials, cache internals, and debug details are not exposed.
+The resolved species context. The state is the resolved scientific name. Optional attributes are scientific name, common name, family, genus, watering category, and sunlight requirements, populated as the iNaturalist, Trefle, and Perenual providers return them. A local authenticated image URL is reserved for a future release. Provider names, raw responses, credentials, cache internals, and debug details are not exposed.
 
 ## Binary sensor
 

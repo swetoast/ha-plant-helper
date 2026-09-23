@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import Any, Mapping
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN
 from .domain.runtime import RuntimeCollection
+from .domain.care import evaluate_care
+from .domain.interpretation import interpret_indoor, interpret_outdoor
+from .domain.forecast import (
+    ForecastCollector,
+    request_for as forecast_request_for,
+)
+from .domain.air_quality import (
+    AirQualityCollector,
+    request_for as air_quality_request_for,
+)
 from .domain.enrichment import (
     ChainedSpeciesEnrichment,
     INaturalistAdapter,
@@ -26,15 +38,10 @@ from .domain.remove_plant import (
     async_reconcile_pending_removals,
     async_remove_plant,
 )
+from .weather import OpenMeteoClient
 
 _LOGGER = logging.getLogger(__name__)
 
-_PROFILE_BANDS: dict[str, tuple[float, float]] = {
-    "dry": (15.0, 45.0),
-    "balanced": (25.0, 65.0),
-    "moist": (40.0, 80.0),
-    "custom": (25.0, 65.0),
-}
 _SOURCE_TO_STATE = {
     "soil_moisture": "moisture",
     "soil_temperature": "temperature",
@@ -60,6 +67,13 @@ class PlantHelperRuntime:
     species_image_proxy: Any = None
     species_enrichment: ChainedSpeciesEnrichment | None = None
     species_context: dict[str, tuple[str, dict[str, Any]]] = field(default_factory=dict)
+    weather_client: Any = None
+    forecast_collector: ForecastCollector | None = None
+    air_collector: AirQualityCollector | None = None
+    weather_options: dict[str, Any] = field(default_factory=dict)
+    forecast_data: dict[str, Any] | None = None
+    air_snapshot: Any = None
+    weather_unsub: Any = None
     _blocked: set[str] = field(default_factory=set)
 
     async def async_initialize(self, backend: StorageBackend) -> None:
@@ -76,7 +90,7 @@ class PlantHelperRuntime:
         self.physical_processor = PlantPhysicalProcessor(
             self.plants,
             self.evaluate,
-            lambda _plant_uuid: {},
+            self.current_environment,
         )
         self.physical_subscriptions = PhysicalSubscriptions(
             hass, self.physical_processor
@@ -90,11 +104,94 @@ class PlantHelperRuntime:
                     self.schedule_enrichment(plant_uuid, str(species)),
                     f"Plant Helper species enrichment for {plant_uuid}",
                 )
+        await self._refresh_weather()
+        interval = int(self.weather_options.get("update_interval", 300) or 300)
+        self.weather_unsub = async_track_time_interval(
+            hass, self._weather_tick, timedelta(seconds=interval)
+        )
 
     def require_storage(self) -> PlantHelperStorage:
         if self.storage is None:
             raise RuntimeError("plant_helper_storage_not_initialized")
         return self.storage
+
+    async def async_configure_weather(
+        self, hass: HomeAssistant, options: Mapping[str, Any]
+    ) -> None:
+        """Build the Open-Meteo forecast and air-quality collectors."""
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        session = async_get_clientsession(hass)
+        self.weather_client = OpenMeteoClient(session)
+        self.forecast_collector = ForecastCollector(
+            self.weather_client.fetch_forecast
+        )
+        self.air_collector = AirQualityCollector(
+            self.weather_client.fetch_air_quality
+        )
+        self.weather_options = dict(options)
+
+    def _coordinates(self) -> tuple[float | None, float | None]:
+        latitude = self.weather_options.get("latitude")
+        longitude = self.weather_options.get("longitude")
+        if self.hass is not None:
+            if latitude is None:
+                latitude = self.hass.config.latitude
+            if longitude is None:
+                longitude = self.hass.config.longitude
+        return latitude, longitude
+
+    def _has_outdoor_plant(self) -> bool:
+        return any(
+            str(plant.config.get("placement")) == "outdoor"
+            for plant in self.plants.plants.values()
+        )
+
+    def current_environment(
+        self, _plant_uuid: str | None = None
+    ) -> dict[str, Any]:
+        """Return the latest cached Open-Meteo environment for evaluation."""
+        return {"forecast": self.forecast_data, "air": self.air_snapshot}
+
+    async def _refresh_weather(self) -> None:
+        """Refresh cached weather when at least one plant needs it."""
+        if self.forecast_collector is None or not self.plants.plants:
+            return
+        latitude, longitude = self._coordinates()
+        if latitude is None or longitude is None:
+            return
+        now = datetime.now(timezone.utc)
+        outdoor = self._has_outdoor_plant()
+        try:
+            snapshot = await self.forecast_collector.refresh(
+                forecast_request_for(latitude, longitude, outdoor), now
+            )
+            self.forecast_data = snapshot.data
+        except Exception:
+            _LOGGER.debug(
+                "Plant Helper forecast refresh failed", exc_info=True
+            )
+        if outdoor and self.air_collector is not None:
+            request = air_quality_request_for(latitude, longitude, True)
+            if request is not None:
+                try:
+                    self.air_snapshot = await self.air_collector.refresh(
+                        request, now
+                    )
+                except Exception:
+                    _LOGGER.debug(
+                        "Plant Helper air quality refresh failed",
+                        exc_info=True,
+                    )
+        for plant_uuid in list(self.plants.plants):
+            await self.evaluate(plant_uuid)
+
+    @callback
+    def _weather_tick(self, _now: datetime) -> None:
+        if self.hass is not None:
+            self.hass.async_create_task(
+                self._refresh_weather(), "Plant Helper weather refresh"
+            )
 
     def _read_source(self, entity_id: str | None) -> Any:
         if self.hass is None or not entity_id:
@@ -122,9 +219,9 @@ class PlantHelperRuntime:
         await self.register_listeners(plant_uuid, config)
 
     async def evaluate(
-        self, plant_uuid: str, _environment: Any = None
+        self, plant_uuid: str, environment: Any = None
     ) -> None:
-        """Produce stable user-facing states from current physical values."""
+        """Produce stable user-facing states from physical and weather context."""
         plant = self.plants.plants.get(plant_uuid)
         if plant is None or plant.removing or plant_uuid in self._blocked:
             return
@@ -132,43 +229,57 @@ class PlantHelperRuntime:
         state = plant.state
         moisture = state.get("moisture")
         profile = str(plant.config.get("profile", "balanced"))
-        low, high = _PROFILE_BANDS.get(profile, _PROFILE_BANDS["balanced"])
+        placement = str(plant.config.get("placement", "indoor"))
 
-        if moisture is None:
-            care_status = "waiting_for_data"
-            summary = "Waiting for a valid moisture reading"
-            reason = "moisture_unavailable"
-            attention = False
-            health = "unknown"
-        elif moisture < low:
-            care_status = "water_soon"
-            summary = "Soil moisture is below the selected care profile"
-            reason = "soil_dry"
-            attention = True
-            health = "needs_water"
-        elif moisture > high:
-            care_status = "too_wet"
-            summary = "Soil moisture is above the selected care profile"
-            reason = "soil_wet"
-            attention = True
-            health = "too_wet"
+        env = environment if environment is not None else self.current_environment(plant_uuid)
+        forecast = env.get("forecast") if env else None
+        air = env.get("air") if env else None
+        if placement == "outdoor":
+            try:
+                rain_limit = float(plant.config.get("rain_limit_mm") or 1.0)
+            except (TypeError, ValueError):
+                rain_limit = 1.0
+            interpretation = interpret_outdoor(
+                physical=state, forecast=forecast, air=air, rain_limit_mm=rain_limit
+            )
         else:
-            care_status = "normal"
-            summary = "Soil moisture is within the selected care profile"
-            reason = "moisture_in_range"
-            attention = False
-            health = "good"
+            interpretation = interpret_indoor(
+                physical=state, forecast=forecast, air=air
+            )
+        conditions = interpretation.conditions
+        rain_suppression = (
+            placement == "outdoor" and bool(conditions.get("rain_suppression"))
+        )
 
-        state["care_status"] = care_status
-        state["care_status_attributes"] = {
-            "summary": summary,
-            "reason": reason,
+        decision = evaluate_care(
+            moisture, profile, placement, rain_suppression=rain_suppression
+        )
+
+        care_attributes: dict[str, Any] = {
+            "summary": decision.summary,
+            "reason": decision.reason,
         }
-        state["health"] = health
-        state["health_attributes"] = {"summary": summary}
-        state["needs_attention"] = attention
+        if forecast is not None:
+            care_attributes["placement"] = placement
+            if placement == "outdoor":
+                care_attributes["rain_suppression"] = bool(
+                    conditions.get("rain_suppression")
+                )
+                care_attributes["drying_context"] = conditions.get("drying_context")
+                care_attributes["frost_hours"] = conditions.get("frost")
+                care_attributes["exposure"] = list(conditions.get("exposure", ()))
+            else:
+                care_attributes["external_daylight"] = conditions.get(
+                    "external_daylight"
+                )
+
+        state["care_status"] = decision.care_status
+        state["care_status_attributes"] = care_attributes
+        state["health"] = decision.health
+        state["health_attributes"] = {"summary": decision.summary}
+        state["needs_attention"] = decision.attention
         state["needs_attention_attributes"] = {
-            "reason": reason if attention else None
+            "reason": decision.reason if decision.attention else None
         }
         state["calibration"] = "source_sensor"
         state["calibration_attributes"] = {
@@ -281,7 +392,6 @@ class PlantHelperRuntime:
                 "genus",
                 "watering_category",
                 "sunlight_requirements",
-                "image_url",
                 "provenance",
             )
             if result.data.get(key) not in (None, "", [], {})
@@ -409,6 +519,14 @@ class PlantHelperRuntime:
 
     async def async_unload(self) -> None:
         """Release subscriptions, debounce tasks, and runtime references."""
+        if self.weather_unsub is not None:
+            self.weather_unsub()
+            self.weather_unsub = None
+        self.forecast_collector = None
+        self.air_collector = None
+        self.weather_client = None
+        self.forecast_data = None
+        self.air_snapshot = None
         if self.physical_subscriptions is not None:
             self.physical_subscriptions.unload()
         self.platform_callbacks.clear()

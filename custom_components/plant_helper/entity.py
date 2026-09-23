@@ -11,8 +11,7 @@ class PlantHelperEntity(Entity):
         self.plant_uuid=plant.plant_uuid;self._contract=description;self.key=description.key;self._plant=plant
         display_name=str(plant.config.get('display_name',plant.plant_uuid))
         key=description.key
-        self._attr_unique_id=f"{entry_id}_{plant.plant_uuid}_{key}"
-        assert self._attr_unique_id==unique_id(entry_id,plant.plant_uuid,key)
+        self._attr_unique_id=unique_id(entry_id,plant.plant_uuid,key)
         self._attr_suggested_object_id=suggested_entity_id(display_name,description.key)
         self._attr_name=description.name;self._attr_icon=description.icon
         self._attr_device_info={'identifiers':{(DOMAIN,plant.plant_uuid)},'name':display_name,'manufacturer':'Plant Helper','model':'Plant'}
