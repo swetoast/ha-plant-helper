@@ -104,7 +104,6 @@ Global settings, plants, learned state, and samples do not belong in `ConfigEntr
 ```text
 latitude
 longitude
-ozone_entity
 perenual_api_key
 perenual_access_level
 trefle_api_key
@@ -237,7 +236,6 @@ Clearing an optional field removes its stored value:
 ```text
 latitude
 longitude
-ozone_entity
 perenual_api_key
 trefle_api_key
 ```
@@ -770,7 +768,6 @@ A full config-entry reload is reserved for global changes that alter integration
 
 - Latitude
 - Longitude
-- Ozone entity
 - Perenual API key
 - Perenual access level
 - Trefle token
