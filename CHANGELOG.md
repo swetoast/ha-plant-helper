@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.34 - 2026-09-24
+
+- Fixed a thread-safety defect that raised a RuntimeError roughly once a minute and left a `coroutine 'PlantHelperRuntime.evaluate' was never awaited` warning in the log. The background temporal tick and the daily image-cache cleanup were plain synchronous functions handed to `async_track_time_interval`, so Home Assistant ran them in an executor thread, where `hass.async_create_task` is not allowed. Both are now decorated with `@callback` (matching the weather tick) so they run on the event loop. Besides ending the log spam this restores background re-evaluation: durations and drying were not advancing between sensor updates because every tick aborted before scheduling any work.
+- Species image fetch failures now log at warning level with the specific reason (for example `http_403`, `ssrf`, `redirect_limit`, `image_format`) instead of only at debug, so a missing species photo is diagnosable from the normal log without enabling debug logging.
+
 ## 0.0.33 - 2026-09-24
 
 - Fixed species photos silently never appearing. The image proxy rejected a download unless its HTTP `Content-Type` header was exactly `image/jpeg`, `image/png`, or `image/webp`. Image hosts (iNaturalist open-data on S3, provider thumbnail CDNs) routinely serve real photos as `application/octet-stream` or with no type at all, so a valid image was dropped and the `image_url` attribute never attached to the species sensor. The proxy now validates the actual decoded image format (magic bytes via Pillow) instead of trusting the header, which is both safer (the bytes are parsed) and compatible with mislabeled sources. Size, dimension, pixel, and decompression-bomb limits are unchanged.

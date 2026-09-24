@@ -226,6 +226,7 @@ class PlantHelperRuntime:
             hass, self._image_gc_tick, timedelta(hours=24)
         )
 
+    @callback
     def _image_gc_tick(self, _now: datetime) -> None:
         if self.hass is not None and self.image_proxy is not None:
             self.hass.async_create_task(
@@ -338,7 +339,7 @@ class PlantHelperRuntime:
         try:
             cached = await self.image_proxy.refresh(species_key, str(source))
         except Exception as err:
-            _LOGGER.debug("Species image unavailable for %s: %s", plant_uuid, err)
+            _LOGGER.warning("Species image could not be fetched for %s: %s", plant_uuid, err)
             return
         attributes["image_url"] = IMAGE_PATH.format(hash=cached.digest)
 
@@ -404,6 +405,7 @@ class PlantHelperRuntime:
                 self._refresh_weather(), "Plant Helper weather refresh"
             )
 
+    @callback
     def _temporal_tick(self, _now: datetime) -> None:
         if self.hass is None:
             return
