@@ -72,4 +72,4 @@ Helper from Settings > Devices & services.
 
 ## License
 
-No license file is included yet. Define distribution terms before public release.
+Released under the MIT License. See [LICENSE](LICENSE) for the full text.
