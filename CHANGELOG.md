@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.35 - 2026-09-24
+
+- Fixed species photos failing to decode (the image proxy logged `Species image could not be fetched ... : image`). The downloader read the HTTP body with a single `StreamReader.read(n)` call, which returns only the bytes currently buffered rather than the whole body, so any image delivered in more than one network chunk arrived truncated and Pillow refused to decode it. The downloader now accumulates chunks up to the size cap, so the complete image is read; oversized bodies still stop early and are refused by the length check. This was the actual cause of missing species images: the enrichment and the iNaturalist v1 photo URL were correct all along, but the fetched bytes were incomplete.
+
 ## 0.0.34 - 2026-09-24
 
 - Fixed a thread-safety defect that raised a RuntimeError roughly once a minute and left a `coroutine 'PlantHelperRuntime.evaluate' was never awaited` warning in the log. The background temporal tick and the daily image-cache cleanup were plain synchronous functions handed to `async_track_time_interval`, so Home Assistant ran them in an executor thread, where `hass.async_create_task` is not allowed. Both are now decorated with `@callback` (matching the weather tick) so they run on the event loop. Besides ending the log spam this restores background re-evaluation: durations and drying were not advancing between sensor updates because every tick aborted before scheduling any work.

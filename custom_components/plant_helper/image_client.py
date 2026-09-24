@@ -22,10 +22,20 @@ class ImageDownloader:
         async with self._session.get(
             url, timeout=_TIMEOUT, allow_redirects=False
         ) as response:
-            body = await response.content.read(MAX_DOWNLOAD + 1)
+            # StreamReader.read(n) returns only what is currently buffered (up to n),
+            # not the whole body, so a multi-chunk image arrives truncated and fails to
+            # decode. Accumulate chunks until EOF or the proxy size cap is exceeded; an
+            # oversized body stops early and is refused by the proxy's length check.
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.content.iter_chunked(65536):
+                chunks.append(chunk)
+                total += len(chunk)
+                if total > MAX_DOWNLOAD:
+                    break
             return DownloadResponse(
                 status=response.status,
                 headers=dict(response.headers),
-                body=body,
+                body=b"".join(chunks),
                 url=str(response.url),
             )
