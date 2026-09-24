@@ -166,14 +166,23 @@ def test_https_only_dns_private_and_redirect_ssrf(tmp_path):
  with pytest.raises(ImageProxyError):image_proxy_run(SpeciesImageProxy(tmp_path,fetch,lambda h:('127.0.0.1',)).refresh('a','https://images.example/a.jpg',NOW))
  async def redirect(u):return DownloadResponse(302,{'Location':'https://localhost/private'},b'',u)
  with pytest.raises(ImageProxyError):image_proxy_run(SpeciesImageProxy(tmp_path,redirect,lambda h:('127.0.0.1',) if h=='localhost' else public(h)).refresh('a','https://images.example/a.jpg',NOW))
-def test_content_type_size_dimensions_and_decompression_limits(tmp_path):
- with pytest.raises(ImageProxyError,match='content_type'):transform_thumbnail(image(),'text/html')
+def test_format_size_dimensions_and_decompression_limits(tmp_path):
+ # A real image is accepted regardless of a wrong or missing HTTP Content-Type...
+ ok,w,h=transform_thumbnail(image(),'text/html');assert ok[:4]==b'RIFF' and w<=512 and h<=512
+ assert transform_thumbnail(image(),None)
+ # ...but bytes that do not decode as an allowed image format are rejected.
+ with pytest.raises(ImageProxyError,match='image'):transform_thumbnail(b'not-a-real-image'*8,'image/jpeg')
  with pytest.raises(ImageProxyError,match='size'):transform_thumbnail(b'x'*(MAX_DOWNLOAD+1),'image/jpeg')
  with pytest.raises(ImageProxyError,match='dimensions'):transform_thumbnail(image((9000,1),'PNG'),'image/png')
  bomb=Image.MAX_IMAGE_PIXELS;Image.MAX_IMAGE_PIXELS=100
  try:
   with pytest.raises(ImageProxyError,match='image'):transform_thumbnail(image((20,20),'PNG'),'image/png')
  finally:Image.MAX_IMAGE_PIXELS=bomb
+def test_refresh_accepts_generic_or_missing_content_type(tmp_path):
+ # S3 / iNaturalist open-data frequently serve a real image as octet-stream.
+ p=SpeciesImageProxy(tmp_path,lambda u:asyncio.sleep(0,result=response(ctype='application/octet-stream')),public)
+ item=image_proxy_run(p.refresh('snake','https://images.example/a.jpg',NOW))
+ assert item.content_type=='image/webp' and item.path.exists()
 def test_static_thumbnail_content_addressed_cache_and_dedup(tmp_path):
  data=image();p=SpeciesImageProxy(tmp_path,lambda u:asyncio.sleep(0,result=response(data)),public);a=image_proxy_run(p.refresh('snake','https://images.example/a.jpg',NOW));b=image_proxy_run(p.refresh('other','https://images.example/b.jpg',NOW))
  assert a.digest==b.digest and a.width<=512 and a.height<=512 and len(list(tmp_path.glob('*.webp')))==1

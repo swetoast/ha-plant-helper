@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.33 - 2026-09-24
+
+- Fixed species photos silently never appearing. The image proxy rejected a download unless its HTTP `Content-Type` header was exactly `image/jpeg`, `image/png`, or `image/webp`. Image hosts (iNaturalist open-data on S3, provider thumbnail CDNs) routinely serve real photos as `application/octet-stream` or with no type at all, so a valid image was dropped and the `image_url` attribute never attached to the species sensor. The proxy now validates the actual decoded image format (magic bytes via Pillow) instead of trusting the header, which is both safer (the bytes are parsed) and compatible with mislabeled sources. Size, dimension, pixel, and decompression-bomb limits are unchanged.
+- When an image still cannot be fetched, the debug log now records the specific reason (for example `http_403`, `ssrf`, `image_format`, or `size`) instead of a generic failure, so the cause is diagnosable by enabling debug logging for `custom_components.plant_helper`.
+
 ## 0.0.32 - 2026-09-24
 
 - Config-flow bug fixes and hardening after a report that adding a plant looped back to the sensor step after matching a species.
@@ -7,6 +12,7 @@
 - Relaxed the moisture readiness gate on add and edit: a transiently unavailable sensor no longer blocks the operation (the plant simply waits for data, as the temporal engine already handles). A non-numeric or out-of-range reading still fails, but now with a clear message instead of a silent loop.
 - Fixed a separate data-loss bug: editing a plant wiped its species. The edit form has no species field, so the normalized config dropped species (and with it enrichment and the species photo) on every edit. The stored species is now preserved when the form does not supply one.
 - Hardened plant-set notifications so a single failing entity-platform callback can no longer abort the collection mutation (add, update, or remove) that triggered it; the failure is logged and the operation completes.
+- Corrected the README license section: it still claimed no license was included, but the MIT LICENSE file is present. It now points to LICENSE.
 
 ## 0.0.31 - 2026-09-23
 

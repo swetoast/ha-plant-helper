@@ -7,7 +7,7 @@ from typing import Awaitable,Callable,Iterable,Mapping
 from urllib.parse import urljoin,urlsplit
 from PIL import Image,ImageOps,UnidentifiedImageError
 
-ALLOWED_TYPES={'image/jpeg','image/png','image/webp'}
+ALLOWED_FORMATS={'JPEG','PNG','WEBP'}
 MAX_DOWNLOAD=5*1024*1024
 MAX_PIXELS=20_000_000
 MAX_DIMENSION=8192
@@ -41,11 +41,16 @@ def validate_url(url:str,resolve:Callable[[str],Iterable[str]])->str:
 def system_resolve(host:str)->tuple[str,...]:
  return tuple(sorted({item[4][0] for item in socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)}))
 
-def transform_thumbnail(body:bytes,content_type:str)->tuple[bytes,int,int]:
- if content_type.split(';',1)[0].strip().lower() not in ALLOWED_TYPES:raise ImageProxyError('content_type')
+def transform_thumbnail(body:bytes,content_type:str|None=None)->tuple[bytes,int,int]:
+ # The HTTP Content-Type is advisory only. Image hosts (S3, iNaturalist open-data,
+ # provider thumbnail CDNs) routinely serve real photos as application/octet-stream
+ # or with no type at all, so gating on the header silently drops valid images. The
+ # authoritative check is the decoded format below: the bytes are actually parsed,
+ # which is both safer and compatible with mislabeled sources.
  if not body or len(body)>MAX_DOWNLOAD:raise ImageProxyError('size')
  try:
   with Image.open(io.BytesIO(body)) as image:
+   if (image.format or '').upper() not in ALLOWED_FORMATS:raise ImageProxyError('image_format')
    width,height=image.size
    if width<1 or height<1 or width>MAX_DIMENSION or height>MAX_DIMENSION or width*height>MAX_PIXELS:raise ImageProxyError('dimensions')
    image.load()

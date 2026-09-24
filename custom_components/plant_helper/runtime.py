@@ -337,8 +337,8 @@ class PlantHelperRuntime:
 
         try:
             cached = await self.image_proxy.refresh(species_key, str(source))
-        except Exception:
-            _LOGGER.debug("Species image proxy refresh failed for %s", plant_uuid)
+        except Exception as err:
+            _LOGGER.debug("Species image unavailable for %s: %s", plant_uuid, err)
             return
         attributes["image_url"] = IMAGE_PATH.format(hash=cached.digest)
 
