@@ -103,12 +103,18 @@ def test_activation_failure_keeps_persisted_authority_and_schedules_reconciliati
  assert not result.entities_requested and not result.evaluated
  assert ("reconcile","e"*32) in calls.items
 
-@pytest.mark.parametrize("value,key",[(None,"moisture_not_ready"),("unknown","moisture_not_ready"),("unavailable","moisture_not_ready"),("bad","moisture_not_numeric"),(-1,"moisture_out_of_range"),(101,"moisture_out_of_range")])
-def test_moisture_readiness_rejects_before_uuid_persistence(value,key):
+@pytest.mark.parametrize("value,key",[("bad","moisture_not_numeric"),(-1,"moisture_out_of_range"),(101,"moisture_out_of_range")])
+def test_bad_moisture_rejects_before_uuid_persistence(value,key):
  backend,storage,runtime,calls=add_plant_setup()
  with pytest.raises(AddPlantError) as err:
   add_plant_run(async_add_plant(raw=add_plant_valid(),placement="indoor",storage=storage,runtime=runtime,moisture_reader=lambda _:value,hooks=calls.hooks(),uuid_factory=lambda:"f"*32))
  assert err.value.key==key and backend.save_calls==0 and runtime.plants=={} and calls.items==[]
+
+@pytest.mark.parametrize("value",[None,"unknown","unavailable"])
+def test_unavailable_moisture_does_not_block_add(value):
+ backend,storage,runtime,calls=add_plant_setup()
+ result=add_plant_run(async_add_plant(raw=add_plant_valid(),placement="indoor",storage=storage,runtime=runtime,moisture_reader=lambda _:value,hooks=calls.hooks(),uuid_factory=lambda:"f"*32))
+ assert result.plant_uuid=="f"*32 and runtime.plants["f"*32].state.get("moisture") is None
 
 def test_no_species_means_no_enrichment_call():
  backend,storage,runtime,calls=add_plant_setup()
@@ -239,6 +245,19 @@ def test_species_change_handles_identity_after_storage_and_schedules_enrichment(
 def test_species_alias_normalization_avoids_unnecessary_enrichment():
  assert classify_species_change(" Dracaena_trifasciata ","dracaena trifasciata").kind=="unchanged"
 
+def test_edit_raw_without_species_clears_it_so_flow_must_preserve():
+ # Documents the domain contract behind the options-flow fix: the edit form has
+ # no species field, so if the flow does not re-inject the stored species the
+ # normalized config drops it. The flow is responsible for preserving species.
+ b,st,rt,c=edit_plant_setup()
+ raw=edit_plant_replacement(); raw.pop("species")
+ edit_plant_run(async_edit_plant(plant_uuid="a"*32,expected_revision=1,raw=raw,placement="indoor",storage=st,runtime=rt,moisture_reader=lambda _:42,destination_baseline_complete=True,hooks=c.hooks()))
+ assert b.data["plants"]["a"*32].get("species") is None
+ # And when species is supplied it round-trips unchanged.
+ b2,st2,rt2,c2=edit_plant_setup()
+ edit_plant_run(async_edit_plant(plant_uuid="a"*32,expected_revision=1,raw=edit_plant_replacement(species="Dracaena trifasciata"),placement="indoor",storage=st2,runtime=rt2,moisture_reader=lambda _:42,destination_baseline_complete=True,hooks=c2.hooks()))
+ assert b2.data["plants"]["a"*32].get("species")=="Dracaena trifasciata"
+
 def test_activation_failure_schedules_reconciliation_after_persisted_revision():
  b,st,rt,c=edit_plant_setup(); c.fail="listeners"
  result=edit_plant_run(async_edit_plant(plant_uuid="a"*32,expected_revision=1,raw=edit_plant_replacement(),placement="indoor",storage=st,runtime=rt,moisture_reader=lambda _:50,destination_baseline_complete=True,hooks=c.hooks()))
@@ -246,7 +265,7 @@ def test_activation_failure_schedules_reconciliation_after_persisted_revision():
  assert not result.listeners_replaced and not result.evaluated
  assert c.items[-1]==("reconcile","a"*32)
 
-@pytest.mark.parametrize("value,key",[(None,"moisture_not_ready"),("bad","moisture_not_numeric"),(101,"moisture_out_of_range")])
+@pytest.mark.parametrize("value,key",[("bad","moisture_not_numeric"),(101,"moisture_out_of_range")])
 def test_new_moisture_source_must_be_valid_before_storage(value,key):
  b,st,rt,c=edit_plant_setup(); calls=b.save_calls
  with pytest.raises(EditPlantError) as err:

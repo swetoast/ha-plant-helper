@@ -1,52 +1,56 @@
 # Installation and configuration
 
-## Install manually
+## Install
 
-1. Stop Home Assistant or prepare to restart it after copying the files.
-2. Copy the complete `custom_components/plant_helper` directory to `<config>/custom_components/plant_helper`.
-3. Confirm that `manifest.json` is directly inside that directory.
-4. Restart Home Assistant.
-5. Open **Settings > Devices & services > Add integration**.
-6. Search for **Plant Helper** and complete setup.
-
-Do not copy the repository root into `custom_components`. Only the `plant_helper` integration directory belongs there.
+1. Copy the `custom_components/plant_helper` directory to
+   `<config>/custom_components/plant_helper`. Copy the integration directory
+   itself, not the repository root.
+2. Confirm `manifest.json` sits directly inside it.
+3. Restart Home Assistant.
+4. Settings > Devices & services > Add integration, search for Plant Helper, and
+   complete setup.
 
 ## Upgrade
 
-1. Keep Home Assistant's `.storage` directory unchanged.
-2. Replace the existing `custom_components/plant_helper` directory with the directory from the new release.
-3. Restart Home Assistant.
+Replace `custom_components/plant_helper` with the new release and restart. Leave
+`.storage` alone; your plants and learned data live there and are preserved.
 
-Plant configuration is stored by Home Assistant and the integration storage layer. Replacing integration source files does not intentionally remove configured plants.
+## Shared settings
 
-## Shared configuration
+Set once during setup, changed later with Reconfigure on the integration entry:
 
-- **Latitude override** and **Longitude override**: optional coordinates. Leave both empty to use the Home Assistant location.
-- **Ozone**: retrieved automatically from Open-Meteo for configured coordinates.
-- **Perenual API key**: optional species-enrichment credential.
-- **Perenual access level**: selects free or paid request behavior.
-- **Trefle API token**: optional species-enrichment credential.
-- **Update interval**: periodic local evaluation interval in seconds.
+- Latitude / Longitude override - optional. Leave empty to use the Home
+  Assistant location.
+- Perenual API key and access level - optional species-enrichment credential.
+- Trefle API token - optional species-enrichment credential.
+- Update interval - seconds between periodic local evaluations.
 
-Shared settings can be changed with **Reconfigure** from the integration entry menu.
+Ozone and forecast data come from Open-Meteo automatically for the configured
+coordinates.
 
 ## Manage plants
 
-Open the integration entry and select **Configure**.
+Open the integration entry and select Configure:
 
-- **Add plant** creates a plant with a display name, placement, optional species name, physical sensor mappings, and other available plant settings.
-- **Edit plant** updates an existing plant while preserving its plant UUID and entity identity.
-- **Remove plant** asks for confirmation before removing the plant's runtime state, entities, registry entries, device, and owned stored data.
+- Add plant - name, placement, optional species, and physical sensor mappings.
+- Edit plant - changes settings while keeping the plant's UUID and entities.
+- Remove plant - confirms, then removes the plant's entities, device, registry
+  entries, and stored data.
 
-Physical entity selectors may include soil moisture, soil temperature, humidity, illuminance, conductivity, battery where supported by the flow. Battery accepts numeric percentage sensors and categorical soil-sensor battery-state entities.
+Sensor selectors cover soil moisture, soil temperature, humidity, illuminance,
+and battery. Battery accepts a numeric percentage sensor or a categorical
+soil-sensor battery-state entity.
 
-## Optional species providers
+## Species providers
 
-Plant Helper can use Perenual, Trefle, and iNaturalist. Provider credentials are optional. Perenual free and paid access modes are handled separately. Provider failures are isolated from normal plant availability and local evaluation.
+Perenual, Trefle, and iNaturalist are all optional. Credentials are optional.
+Provider failures are isolated: they never affect plant availability or local
+evaluation.
 
 ## Uninstall
 
-1. Remove every plant through the Plant Helper options flow if the plant entities and devices should also be removed.
-2. Remove the Plant Helper integration entry from Home Assistant.
+1. Remove each plant through Configure if you also want its entities and devices
+   gone.
+2. Delete the Plant Helper integration entry.
 3. Delete `custom_components/plant_helper`.
 4. Restart Home Assistant.

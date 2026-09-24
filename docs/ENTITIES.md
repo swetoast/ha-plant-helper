@@ -1,50 +1,79 @@
-# Entity reference
+# Entities
 
-Plant Helper creates one device per plant. Unique IDs are based on the config entry, persistent plant UUID, and entity key. Renaming a plant does not intentionally replace its unique IDs.
+One device per plant. Unique IDs come from the config entry, the plant's
+persistent UUID, and the entity key, so renaming a plant keeps its IDs.
 
-## Sensors
+Each plant has up to nine sensors and one binary sensor. An entity is
+unavailable until it has usable data. Optional sensors (humidity, battery)
+appear only when a source is configured.
 
-### Status
+## Status
 
-A concise categorical care state such as a normal state or a direct care recommendation. Outdoor plants can report `watering_paused` when the soil is below the care profile but rain is expected soon; critically dry soil still recommends watering. Attributes are a user-facing summary and reason, and, when a forecast is available, weather context: placement, and for outdoor plants rain suppression, drying context, frost hours, and exposure, or external daylight for indoor plants.
+`sensor.<plant>_status` - the care state, judged from moisture history rather
+than a single reading:
 
-### Moisture
+- `normal`, `wet`, `drying` - within range or moving through it normally.
+- `recently_watered` - moisture rose sharply; a watering was detected.
+- `staying_wet`, `too_wet` - wet longer than expected. `too_wet` needs attention.
+- `approaching_dry`, `needs_water`, `too_dry` - dry or drying past the range.
+  `needs_water` and `too_dry` need attention.
+- `watering_paused` - outdoor plant below range but rain is expected soon.
+  Critically dry soil still recommends watering.
+- `waiting_for_data` - no usable moisture reading yet.
 
-Current plant moisture in percent. Device class: moisture. State class: measurement.
+Attributes:
 
-### Light
+- `summary`, `reason` - the verdict in plain language and as a machine key.
+- `since` - when the current state began.
+- `confidence` - `low` / `medium` / `high` data coverage. Escalations need at
+  least medium.
+- `drying_context` - `low` / `normal` / `high` expected drying speed.
+- `dormant` - whether the plant is treated as seasonally dormant.
+- `light_context`, `humidity_context` - `low` / `adequate` / `high`.
+- `placement` - `indoor` or `outdoor`.
+- Outdoor only: `rain_suppression`, `frost_hours`, `exposure`.
+- Indoor only: `external_daylight`.
 
-Current illuminance in lux. Device class: illuminance. State class: measurement.
+Attributes that do not apply to a plant are omitted.
 
-### Temperature
+## Health
 
-Current temperature in degrees Celsius. Device class: temperature. State class: measurement.
+`sensor.<plant>_health` - `good`, `watch`, `needs_water`, `too_wet`, `too_dry`,
+or `unknown`. Moisture drives it. Sustained low or high light or humidity raises
+it to `watch`, but only moisture raises needs-attention. Attribute: `summary`.
 
-### Health
+## Calibration
 
-A meaningful categorical plant-health state. The optional attribute is a short user-facing summary.
+`sensor.<plant>_calibration` - `learning` while the plant builds its baseline,
+`calibrated` once it is judged by its own learned moisture range. Calibration
+takes roughly two weeks of readings. Attribute: `summary`.
 
-### Calibration
+## Moisture, Light, Temperature, Humidity
 
-The current learning or calibration state. The optional attribute is calibration progress.
+Current readings. Moisture and humidity in percent, light in lux, temperature
+(soil) in degrees Celsius. Standard measurement device and state classes.
 
-### Species
+## Battery
 
-The resolved species context. The state is the resolved scientific name. Optional attributes are scientific name, common name, family, genus, watering category, and sunlight requirements, populated as the iNaturalist, Trefle, and Perenual providers return them. A local authenticated image URL is reserved for a future release. Provider names, raw responses, credentials, cache internals, and debug details are not exposed.
+`sensor.<plant>_battery` - the source battery level: `high`, `middle`, `low`, or
+a number from 0 to 100. Categorical values are kept as-is, not converted.
 
-## Binary sensor
+## Species
 
-### Needs attention
+`sensor.<plant>_species` - the resolved scientific name, or the query itself
+when no confident match is found. Attributes: `scientific_name`, `common_name`,
+`family`, `genus`, `watering_category`, `sunlight_requirements`, and `image_url`
+(a local authenticated thumbnail). Provider names, raw responses, and
+credentials are never exposed.
 
-Uses the Home Assistant problem device class. The sensor turns on only when the plant state indicates actionable attention is required. The optional attribute is a concise reason.
+## Needs attention
+
+`binary_sensor.<plant>_needs_attention` - problem device class. On only when the
+plant needs action (dry, too wet, or too dry). Attribute: `reason`.
 
 ## Availability
 
-- A plant being removed makes all of that plant's entities unavailable.
-- An entity without its required state is unavailable.
-- Missing optional provider data affects only the relevant entity.
-- Provider failures do not make the complete plant device unavailable.
-
-## Dynamic lifecycle
-
-Adding a plant creates its entities. Editing updates the existing entities. Removing a plant removes its entities and associated runtime references rather than leaving inactive duplicates.
+- An entity without its own data is unavailable.
+- Missing optional or provider data affects only that entity.
+- A provider failure never takes the plant offline.
+- Removing a plant removes its entities and device.

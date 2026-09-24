@@ -1,7 +1,10 @@
 from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
+import logging
 from typing import Any
+
+_LOGGER = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class RuntimePlant:
@@ -49,7 +52,13 @@ class RuntimeCollection:
         return unsubscribe
 
     def _notify(self, change: PlantSetChange) -> None:
-        for listener in tuple(self._listeners): listener(change)
+        # A failing subscriber (for example an entity platform) must not break the
+        # collection mutation that triggered the notification.
+        for listener in tuple(self._listeners):
+            try:
+                listener(change)
+            except Exception:
+                _LOGGER.exception("Plant set listener failed")
 
     def notify_updated(self, plant_uuid: str) -> None:
         if plant_uuid not in self._plants:

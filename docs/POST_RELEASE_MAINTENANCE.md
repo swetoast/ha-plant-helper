@@ -61,14 +61,6 @@ Security issues, credential exposure, destructive storage behavior, SSRF bypasse
 - Redact secrets from exceptions, logs, diagnostics, tests, and issue examples.
 - Do not expose provider names or raw provider payloads as normal entity attributes.
 
-## Patch 0.0.5 maintenance outcome
-
-This patch follows the maintenance policy and keeps the existing storage, plant UUID, configuration, entity names, entity keys, unique IDs, units, device classes, and state classes unchanged. The patch is limited to completing the runtime wiring, live source updates, evaluation, and cleanup paths required for the existing public behavior. Optional provider expansion remains outside this patch.
-
-## Patch 0.0.7 maintenance outcome
-
-This patch adds sanitized real-world provider fixtures and compatible adapter corrections. It preserves the existing storage schema, plant UUIDs, entity names, entity keys, unique IDs, units, device classes, state classes, and user configuration. Provider payloads remain isolated from the public entity contract.
-
 ## Release checklist
 
 1. Update the version in `custom_components/plant_helper/manifest.json`.

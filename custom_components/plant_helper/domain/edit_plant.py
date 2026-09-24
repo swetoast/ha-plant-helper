@@ -77,7 +77,6 @@ async def async_edit_plant(
         raise EditPlantError(err.key) from None
 
     moisture=normalize_physical_state(moisture_reader(replacement.soil_moisture),minimum=0,maximum=100)
-    if moisture.status=="unavailable": raise EditPlantError("moisture_not_ready")
     if moisture.status=="invalid": raise EditPlantError("moisture_not_numeric")
     if moisture.status=="out_of_range": raise EditPlantError("moisture_out_of_range")
 
@@ -90,7 +89,7 @@ async def async_edit_plant(
         raise EditPlantError("plant_changed") from None
 
     runtime_plant=runtime.update(plant_uuid,saved.record)
-    runtime_plant.state["moisture"]=moisture.value
+    if moisture.status=="valid": runtime_plant.state["moisture"]=moisture.value
     listeners=False; evaluated=False; enrichment=False
     try:
         await hooks.replace_listeners(plant_uuid,current_snapshot.record,saved.record); listeners=True

@@ -116,7 +116,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                 hooks=hooks,
             )
         except AddPlantError as err:
-            return self.async_show_form(step_id="add_plant",data_schema=self.add_suggested_values_to_schema(plant_schema(self._placement or "indoor"),self._pending_form_input),errors={err.key:"invalid"})
+            return self.async_show_form(step_id="add_plant",data_schema=self.add_suggested_values_to_schema(plant_schema(self._placement or "indoor"),self._pending_form_input),errors={"base":err.key})
         except Exception:
             _LOGGER.exception("Failed to add plant")
             return self.async_show_form(step_id="add_plant",data_schema=self.add_suggested_values_to_schema(plant_schema(self._placement or "indoor"),self._pending_form_input),errors={"base":"cannot_save_plant"})
@@ -168,6 +168,9 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
         errors={}
         if user_input is not None:
             self._pending_form_input=dict(user_input)
+            raw=dict(user_input)
+            if not raw.get("species") and plant.config.get("species"):
+                raw["species"]=plant.config.get("species")
             hooks=EditPlantHooks(
                 replace_listeners=runtime.replace_listeners,
                 evaluate=runtime.evaluate,
@@ -180,7 +183,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                 await async_edit_plant(
                     plant_uuid=uuid,
                     expected_revision=self._expected_revision,
-                    raw=user_input,
+                    raw=raw,
                     placement=self._placement or plant.config["placement"],
                     storage=runtime.require_storage(),
                     runtime=runtime.plants,
@@ -189,7 +192,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                     hooks=hooks,
                 )
             except EditPlantError as err:
-                errors["base" if err.key=="plant_changed" else err.key]=err.key
+                errors["base"]=err.key
             except Exception:
                 errors["base"]="cannot_save_plant"
             else:

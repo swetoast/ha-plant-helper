@@ -1,38 +1,51 @@
 # Troubleshooting
 
-## Plant Helper does not appear when adding an integration
+## Plant Helper is not in the integration list
 
-- Confirm the path is `<config>/custom_components/plant_helper/manifest.json`.
-- Restart Home Assistant after copying or replacing the integration.
-- Check Home Assistant logs for import or syntax errors.
+- Confirm `<config>/custom_components/plant_helper/manifest.json` exists.
+- Restart Home Assistant after copying or replacing files.
+- Check the logs for import or syntax errors.
 
 ## A measurement entity is unavailable
 
-An entity remains unavailable until its own usable state exists. Check that the selected physical entity exists, has a numeric state where required, and uses the expected measurement type. An unavailable optional measurement should not make unrelated entities unavailable.
+An entity stays unavailable until it has a usable state. Confirm the selected
+source entity exists and reports a numeric value. An unavailable optional
+sensor does not affect the others.
+
+## Calibration says "learning"
+
+Expected. A plant judges against a generic profile until it has learned its own
+range, which takes about two weeks of readings. It flips to `calibrated` on its
+own. Moving a plant or changing its species restarts learning.
 
 ## Species data is missing
 
-- Species enrichment is optional.
-- Confirm the species name is specific enough for exact or strong matching.
-- Verify configured Perenual or Trefle credentials and the selected Perenual access level.
-- Temporary provider failures, rate limits, or authentication suspension do not stop local plant monitoring.
+- Enrichment is optional.
+- Use a species name specific enough to match.
+- Check Perenual or Trefle credentials and the Perenual access level.
+- Provider outages, rate limits, and auth suspensions do not stop local
+  monitoring.
 
-## A species image is missing
+## A species photo is missing
 
-Images must use HTTPS and resolve only to public network addresses. Redirects are checked again. Unsupported content types, oversized downloads, excessive dimensions, decompression limits, or failed image decoding are rejected. When refresh fails, the last valid cached image is retained when available.
+Photos must be HTTPS and resolve to a public address; redirects are re-checked.
+Wrong content types, oversized downloads, huge dimensions, and undecodable
+images are rejected. A failed refresh keeps the last cached photo if there is
+one, otherwise the plant shows none.
 
-## A plant cannot be removed
+## A plant will not remove
 
-Retry from **Configure > Remove plant** and complete the confirmation step. Removal uses revision checks to avoid deleting a plant that changed during the flow. If the plant was edited in another flow, reopen the removal flow to use the current revision.
-
-## Configuration changed in another flow
-
-Close the older flow and reopen it. Storage revisions prevent stale add, edit, and removal submissions from overwriting newer changes.
+Retry from Configure > Remove plant and complete the confirmation. Removal uses
+revision checks to avoid deleting a plant that changed mid-flow; if it was edited
+elsewhere, reopen the removal flow.
 
 ## Entities remain after removal
 
-Reload or restart Home Assistant, then check the entity and device registries. The normal removal path deletes loaded entities, registry entries, the plant device, runtime ownership, and stored plant state.
+Reload or restart Home Assistant, then check the entity and device registries.
+Normal removal deletes the entities, registry entries, device, and stored state.
 
 ## Reporting a problem
 
-Include the Home Assistant version, Plant Helper version, relevant Home Assistant log lines, the affected entity type, and the steps that reproduce the problem. Remove credentials and personal location information before sharing logs.
+Include the Home Assistant version, Plant Helper version, relevant log lines, the
+affected entity, and steps to reproduce. Strip credentials and location before
+sharing logs.

@@ -1,79 +1,75 @@
 # Plant Helper
 
-Plant Helper is a Home Assistant custom integration for monitoring indoor and outdoor plants. It combines configured physical sensors with placement, weather, air-quality, learning, and optional species information to produce a compact set of useful plant entities.
+A Home Assistant integration that watches your plants and says what they need in
+plain language. One device per plant. It reads your existing soil, light,
+humidity, and temperature sensors and turns them into a small set of useful
+entities.
 
-## Features
+Moisture is judged from recent history, not a single reading, so a brief spike
+no longer trips a false alarm. Each plant learns its own normal range over time,
+outdoor plants factor in the weather, and dormant plants are left alone about
+wet soil instead of being nagged.
 
-- One Home Assistant device per plant.
-- Status, moisture, light, temperature, health, calibration, and species sensors.
-- A problem binary sensor for plants that need attention.
-- Indoor and outdoor placement behavior.
-- Event-driven physical sensor updates.
-- Optional species enrichment through Perenual, Trefle, and iNaturalist.
-- Secure, authenticated species-image thumbnails.
-- Dynamic add, edit, and remove flows without manually editing YAML.
-- Minimal entity attributes without provider or debug clutter.
+## What it does
+
+- One device per plant: status, moisture, light, soil temperature, humidity,
+  battery, health, calibration, and species sensors, plus a needs-attention
+  binary sensor.
+- Trend-based moisture care. Watering, drying, too wet, and too dry are read
+  from the recent history, with a confidence gate so sparse data never drives an
+  alarm.
+- Per-plant learning. A plant learns its comfortable moisture band from its own
+  watering cycles and is then judged against that instead of a generic profile.
+- Light and humidity tracked the same way, surfaced on the health sensor.
+- Weather aware, outdoor. Rain pauses a watering recommendation, frost and
+  exposure show as context, and dormant plants tolerate wet soil longer.
+- Optional species enrichment from Perenual, Trefle, and iNaturalist, including
+  a cached, authenticated species photo.
+- Add, edit, and remove plants from the UI. No YAML.
 
 ## Requirements
 
-- Home Assistant with support for config-entry based custom integrations.
-- Physical Home Assistant sensor entities are optional, but provide the most useful measurements.
-- Internet access is optional. It is used by the Open-Meteo forecast and air-quality features and by the optional species providers. Without it, plants fall back to physical-sensor-only care.
+- Home Assistant with config-entry custom integrations.
+- Physical sensor entities are optional but give the most useful readings.
+- Internet is optional. It powers the Open-Meteo forecast and air quality and
+  the optional species providers. Without it, plants run on physical sensors
+  alone.
 - Perenual and Trefle credentials are optional.
 
-## Installation
+## Install
 
-1. Copy `custom_components/plant_helper` into the `custom_components` directory in the Home Assistant configuration directory.
+1. Copy `custom_components/plant_helper` into `<config>/custom_components`.
 2. Restart Home Assistant.
-3. Open **Settings > Devices & services**.
-4. Select **Add integration** and search for **Plant Helper**.
-5. Complete the shared configuration form.
-6. Open the integration's **Configure** menu to add the first plant.
+3. Settings > Devices & services > Add integration, search for Plant Helper.
+4. Complete the shared form, then open Configure to add your first plant.
 
-See [Installation and configuration](docs/INSTALLATION.md) for upgrades, configuration fields, and plant management.
+Upgrades and configuration fields: [Installation](docs/INSTALLATION.md).
 
 ## Entities
 
-Humidity and battery source values are exposed when configured. Battery preserves either `high`, `middle`, or `low`, or a numeric value from 0 through 100. Calibration reports `source_sensor` to confirm that Plant Helper uses the selected sensor reading and does not require a separate Plant Helper calibration step.
+Each plant exposes up to nine sensors and one binary sensor. An entity stays
+unavailable until it has data; missing optional data does not affect the rest.
+Full reference: [Entities](docs/ENTITIES.md).
 
+## Species data and photos
 
-Each plant can expose seven sensors and one binary sensor. Entities remain unavailable until data for that specific entity exists. Missing optional data does not make unrelated plant entities unavailable.
+Providers are optional and isolated: a provider failure never takes a plant
+offline. Species photos are downloaded server-side, validated, converted to
+WebP, cached, and served from an authenticated local endpoint, so the frontend
+never loads a raw provider URL.
 
-See [Entity reference](docs/ENTITIES.md).
+## More
 
-## Actions and services
+- [Actions and services](docs/SERVICES.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Maintenance](docs/POST_RELEASE_MAINTENANCE.md)
 
-Plant management is performed through the integration configuration and options flows. This release does not register Home Assistant service actions. See [Actions and services](docs/SERVICES.md).
+## HACS
 
-## Species data and images
-
-Species providers are optional. Provider failures do not make the plant unavailable. Species images are not published as entity attributes in this release. The local image pipeline (HTTPS-only download, validation, static WebP conversion, content-hash storage, and an authenticated Home Assistant endpoint) is present in the source but not yet wired into the runtime, so no raw provider image URL is exposed.
-
-## Troubleshooting
-
-See [Troubleshooting](docs/TROUBLESHOOTING.md) for installation, unavailable entity, provider, image, and plant-removal guidance.
-
-## Development verification
-
-The release source includes automated tests for configuration flows, storage, concurrency, runtime lifecycle, physical events, learning, placement, forecast, air quality, species enrichment, image security, entity contracts, registry behavior, privacy, translations, and packaging.
+Repository: `https://github.com/swetoast/ha-plant-helper`. Add it in HACS as a
+custom repository with category Integration, install, restart, then add Plant
+Helper from Settings > Devices & services.
 
 ## License
 
-No license file is included in this release. Distribution and reuse terms must be defined by the project owner before public distribution.
-
-## HACS installation
-
-The repository metadata is configured for `https://github.com/swetoast/ha-plant-helper`.
-
-After the repository is published:
-
-1. Open HACS.
-2. Open **Integrations**.
-3. Add the GitHub repository as a custom repository with category **Integration**.
-4. Select **Plant Helper** and install it.
-5. Restart Home Assistant.
-6. Add Plant Helper from **Settings > Devices & services**.
-
-## Maintenance
-
-See the [post-release maintenance plan](docs/POST_RELEASE_MAINTENANCE.md) for release policy, compatibility checks, provider maintenance, security priorities, and the release checklist.
+No license file is included yet. Define distribution terms before public release.

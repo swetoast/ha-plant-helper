@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.32 - 2026-09-24
+
+- Config-flow bug fixes and hardening after a report that adding a plant looped back to the sensor step after matching a species.
+- Fixed the root cause of that loop: add-plant validation errors were shown as `errors={error_key: "invalid"}`, which used the error key as a form field name and the literal `"invalid"` as the message. `"invalid"` only exists under `config.error`, not `options.error`, so a real failure (for example a moisture sensor that was momentarily unavailable) rendered no visible error and silently re-displayed the sensor form. Errors are now attached to `base` with their real translation key, so the actual reason is shown. The edit flow had the same mis-keying and is fixed the same way.
+- Relaxed the moisture readiness gate on add and edit: a transiently unavailable sensor no longer blocks the operation (the plant simply waits for data, as the temporal engine already handles). A non-numeric or out-of-range reading still fails, but now with a clear message instead of a silent loop.
+- Fixed a separate data-loss bug: editing a plant wiped its species. The edit form has no species field, so the normalized config dropped species (and with it enrichment and the species photo) on every edit. The stored species is now preserved when the form does not supply one.
+- Hardened plant-set notifications so a single failing entity-platform callback can no longer abort the collection mutation (add, update, or remove) that triggered it; the failure is logged and the operation completes.
+
+## 0.0.31 - 2026-09-23
+
+- Documentation pass. Rewrote the user-facing docs (README, ENTITIES, INSTALLATION, SERVICES, TROUBLESHOOTING) to be concise and accurate: they still described pre-temporal behavior and were wrong on several points. Corrected the status vocabulary and its attributes (confidence, drying_context, light_context, humidity_context, dormant, since), the calibration entity (now learning / calibrated, not source_sensor), the wired species photo, and the up-to-nine-sensor entity set. No code change.
+- Removed stale cruft from the maintainer docs: the fixed 0.0.1 tag reference and the per-patch "maintenance outcome" notes that had accumulated in the forward-looking maintenance plan.
+- Left the internal design docs and the dated lifecycle audit as historical records rather than rewriting past snapshots.
+
 ## 0.0.30 - 2026-09-23
 
 - Seasonal dormancy (F4): a dormant plant now tolerates wet soil longer instead of being nagged. Dormancy is read from signals already computed per plant (outdoor `growth_season`, indoor `season` / `day_length`) and applied as a multiplier on the drying coefficient, so a resting plant's tolerated wet period lengthens through the existing coefficient machinery rather than a parallel path. The new `dormant` attribute on `sensor.<plant>_status` shows when a plant is being judged as dormant, and `drying_context` reflects the slower expected drying.

@@ -54,7 +54,8 @@ async def async_add_plant(
         raise AddPlantError(err.key) from None
 
     moisture=normalize_physical_state(moisture_reader(config.soil_moisture),minimum=0,maximum=100)
-    if moisture.status=="unavailable": raise AddPlantError("moisture_not_ready")
+    # A transiently unavailable sensor does not block the add; the plant waits
+    # for data. A non-numeric or out-of-range reading is a real misconfiguration.
     if moisture.status=="invalid": raise AddPlantError("moisture_not_numeric")
     if moisture.status=="out_of_range": raise AddPlantError("moisture_out_of_range")
 
@@ -66,7 +67,7 @@ async def async_add_plant(
     try:
         await hooks.register_listeners(plant_uuid,saved.record); listeners=True
         await hooks.request_entities(plant_uuid); entities=True
-        runtime_plant.state["moisture"]=moisture.value
+        if moisture.status=="valid": runtime_plant.state["moisture"]=moisture.value
         await hooks.evaluate(plant_uuid); evaluated=True
     except Exception:
         try:
