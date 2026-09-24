@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.36 - 2026-09-24
+
+- Added a dedicated `image.<plant>` entity for the species photo. It serves the already-cached, sanitized WebP through Home Assistant's own image proxy, so the photo renders natively as the entity picture and updates automatically when a new photo is fetched. The entity is unavailable until a photo has been resolved for that plant, and is removed with the plant. This adds the IMAGE platform alongside the existing sensor and binary_sensor platforms.
+- The species sensor's `image_url` attribute is unchanged and still points at the same cached image, so existing custom cards keep working; the new entity and the attribute are two views of one cached photo, not a second download.
+
 ## 0.0.35 - 2026-09-24
 
 - Fixed species photos failing to decode (the image proxy logged `Species image could not be fetched ... : image`). The downloader read the HTTP body with a single `StreamReader.read(n)` call, which returns only the bytes currently buffered rather than the whole body, so any image delivered in more than one network chunk arrived truncated and Pillow refused to decode it. The downloader now accumulates chunks up to the size cap, so the complete image is read; oversized bodies still stop early and are refused by the length check. This was the actual cause of missing species images: the enrichment and the iNaturalist v1 photo URL were correct all along, but the fetched bytes were incomplete.

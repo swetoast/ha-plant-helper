@@ -1,7 +1,7 @@
 {
   "domain": "plant_helper",
   "name": "Plant Helper",
-  "version": "0.0.35",
+  "version": "0.0.36",
   "config_flow": true,
   "requirements": [],
   "codeowners": [

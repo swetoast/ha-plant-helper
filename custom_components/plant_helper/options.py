@@ -126,7 +126,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
     async def _async_request_entities(self, plant_uuid: str) -> None:
         """Ask every loaded entity platform to reconcile this committed plant."""
         runtime = self.config_entry.runtime_data
-        for platform in ("sensor", "binary_sensor"):
+        for platform in ("sensor", "binary_sensor", "image"):
             callback = runtime.platform_callbacks.get(platform)
             if callback is not None:
                 callback(plant_uuid)

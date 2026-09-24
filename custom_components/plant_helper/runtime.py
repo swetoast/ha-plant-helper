@@ -107,6 +107,7 @@ class PlantHelperRuntime:
     temporal_unsub: Any = None
     image_proxy: Any = None
     image_gc_unsub: Any = None
+    species_images: dict[str, Any] = field(default_factory=dict)
     learning: Any = None
     _blocked: set[str] = field(default_factory=set)
 
@@ -342,6 +343,7 @@ class PlantHelperRuntime:
             _LOGGER.warning("Species image could not be fetched for %s: %s", plant_uuid, err)
             return
         attributes["image_url"] = IMAGE_PATH.format(hash=cached.digest)
+        self.species_images[plant_uuid] = cached
 
     def _coordinates(self) -> tuple[float | None, float | None]:
         latitude = self.weather_options.get("latitude")
@@ -804,6 +806,7 @@ class PlantHelperRuntime:
         self.entities.pop(plant_uuid, None)
         self.temporal_history.pop(plant_uuid, None)
         self.temporal_state.pop(plant_uuid, None)
+        self.species_images.pop(plant_uuid, None)
         self._blocked.discard(plant_uuid)
 
     def removal_hooks(self) -> RemoveHooks:

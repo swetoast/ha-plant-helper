@@ -10,7 +10,7 @@ from homeassistant.helpers.storage import Store
 from .const import DOMAIN
 from .runtime import PlantHelperRuntime
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.IMAGE]
 
 type PlantHelperConfigEntry = ConfigEntry[PlantHelperRuntime]
 

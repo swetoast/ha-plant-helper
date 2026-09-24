@@ -3,7 +3,7 @@
 One device per plant. Unique IDs come from the config entry, the plant's
 persistent UUID, and the entity key, so renaming a plant keeps its IDs.
 
-Each plant has up to nine sensors and one binary sensor. An entity is
+Each plant has up to nine sensors, one binary sensor, and one image entity. An entity is
 unavailable until it has usable data. Optional sensors (humidity, battery)
 appear only when a source is configured.
 
@@ -65,6 +65,11 @@ when no confident match is found. Attributes: `scientific_name`, `common_name`,
 `family`, `genus`, `watering_category`, `sunlight_requirements`, and `image_url`
 (a local authenticated thumbnail). Provider names, raw responses, and
 credentials are never exposed.
+
+`image.<plant>` - the species photo, when one was found. Served from the local
+WebP cache through Home Assistant's own image proxy, so it renders natively as
+the entity picture. Unavailable until a photo has been fetched. It is the same
+cached image linked from the `image_url` attribute above.
 
 ## Needs attention
 

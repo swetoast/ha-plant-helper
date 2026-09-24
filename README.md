@@ -47,7 +47,7 @@ Upgrades and configuration fields: [Installation](docs/INSTALLATION.md).
 
 ## Entities
 
-Each plant exposes up to nine sensors and one binary sensor. An entity stays
+Each plant exposes up to nine sensors, one binary sensor, and one image entity. An entity stays
 unavailable until it has data; missing optional data does not affect the rest.
 Full reference: [Entities](docs/ENTITIES.md).
 
@@ -56,7 +56,9 @@ Full reference: [Entities](docs/ENTITIES.md).
 Providers are optional and isolated: a provider failure never takes a plant
 offline. Species photos are downloaded server-side, validated, converted to
 WebP, cached, and served from an authenticated local endpoint, so the frontend
-never loads a raw provider URL.
+never loads a raw provider URL. The photo is exposed as `image.<plant>`, which
+Home Assistant renders natively as the entity picture, and is also linked from
+the species sensor's `image_url` attribute for use in custom cards.
 
 ## More
 
