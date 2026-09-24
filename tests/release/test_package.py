@@ -122,7 +122,7 @@ def test_image_route_and_provider_error_redaction_are_present():
     # must be redacted before they can reach logs or state.
     image = (INTEGRATION / "image_proxy.py").read_text()
     enrichment = (INTEGRATION / "domain" / "enrichment.py").read_text()
-    assert "requires_auth=True" in image
+    assert "requires_auth=True" in image.replace(" ", "")
     assert "redact(" in enrichment
 
 

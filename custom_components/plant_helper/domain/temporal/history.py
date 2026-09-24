@@ -193,3 +193,30 @@ class ObservationHistory:
             if moment is None or o.observed_at >= moment
         ]
         return max(values) if values else None
+
+    def rolling_mean(
+        self,
+        now: datetime,
+        attr: str,
+        valid_attr: str,
+        *,
+        window_hours: float,
+        min_samples: int = 3,
+    ) -> float | None:
+        """Mean of a numeric field (light, humidity) over its valid readings.
+
+        Generic over the observation field so light and humidity share one code
+        path. Returns None when too few valid samples fall in the window, so a
+        sparse signal never drives a verdict.
+        """
+        cutoff = now - timedelta(hours=window_hours)
+        values = [
+            float(getattr(obs, attr))
+            for obs in self._obs
+            if obs.observed_at >= cutoff
+            and getattr(obs, valid_attr)
+            and getattr(obs, attr) is not None
+        ]
+        if len(values) < min_samples:
+            return None
+        return sum(values) / len(values)

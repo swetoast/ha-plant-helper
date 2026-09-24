@@ -15,7 +15,7 @@ class EntityContract:
  attributes:tuple[str,...]=()
 
 SENSORS=(
- EntityContract('sensor','care_status','Status',icon='mdi:sprout',attributes=('summary','reason','placement','rain_suppression','drying_context','frost_hours','exposure','external_daylight')),
+ EntityContract('sensor','care_status','Status',icon='mdi:sprout',attributes=('summary','reason','since','confidence','drying_context','light_context','humidity_context','dormant','placement','rain_suppression','frost_hours','exposure','external_daylight')),
  EntityContract('sensor','moisture','Moisture','%',device_class='moisture',state_class='measurement',icon='mdi:water-percent'),
  EntityContract('sensor','light','Light','lx',device_class='illuminance',state_class='measurement',icon='mdi:brightness-5'),
  EntityContract('sensor','temperature','Temperature','°C',device_class='temperature',state_class='measurement',icon='mdi:thermometer'),

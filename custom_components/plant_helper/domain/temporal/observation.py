@@ -20,6 +20,10 @@ class PlantObservation:
     soil_temperature: float | None
     moisture_valid: bool
     soil_temperature_valid: bool
+    light: float | None = None
+    humidity: float | None = None
+    light_valid: bool = False
+    humidity_valid: bool = False
 
 
 @dataclass(frozen=True, slots=True)

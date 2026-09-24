@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Mapping
 
+from .drying import adjusted_wet_limit, drying_coefficient, drying_context
 from .history import ObservationHistory
 from .status import (
     APPROACHING_DRY,
@@ -88,6 +89,8 @@ class MoistureDecision:
     summary: str
     reason: str
     since: datetime | None
+    confidence: str
+    drying_context: str
 
 
 def evaluate_moisture(
@@ -96,13 +99,21 @@ def evaluate_moisture(
     now: datetime,
     profile: str,
     environment: Mapping | None = None,
+    band: tuple[float, float] | None = None,
 ) -> tuple[MoistureDecision, TemporalMoistureState]:
-    low, high = PROFILE_BANDS.get(profile, PROFILE_BANDS["balanced"])
+    if band is not None:
+        low, high = band
+    else:
+        low, high = PROFILE_BANDS.get(profile, PROFILE_BANDS["balanced"])
     env = environment or {}
     placement = str(env.get("placement", "indoor"))
     rain_suppression = bool(env.get("rain_suppression"))
 
     confidence = history.confidence(now)
+    coefficient = drying_coefficient(env)
+    wet_limit_hours = adjusted_wet_limit(WET_DURATION_LIMIT_HOURS, coefficient)
+    context = drying_context(coefficient)
+
     latest = history.latest_valid()
     if latest is None:
         decision = MoistureDecision(
@@ -112,6 +123,8 @@ def evaluate_moisture(
             "Waiting for a valid moisture reading",
             "moisture_unavailable",
             None,
+            confidence,
+            context,
         )
         state = TemporalMoistureState(
             WAITING_FOR_DATA,
@@ -143,19 +156,22 @@ def evaluate_moisture(
         confident=confident,
         watering_at=watering_at,
         last_watering=last_watering,
+        wet_limit_hours=wet_limit_hours,
         placement=placement,
         rain_suppression=rain_suppression,
         prior=prior,
     )
 
-    decision = MoistureDecision(status, health, attention, summary, reason, since)
+    decision = MoistureDecision(
+        status, health, attention, summary, reason, since, confidence, context
+    )
     state = TemporalMoistureState(
         status,
         since,
         last_watering,
         peak,
         slope,
-        None,
+        wet_limit_hours,
         confidence,
     )
     return decision, state
@@ -173,6 +189,7 @@ def _classify(
     confident,
     watering_at,
     last_watering,
+    wet_limit_hours,
     placement,
     rain_suppression,
     prior,
@@ -204,7 +221,7 @@ def _classify(
                 "drying_out",
                 since,
             )
-        if elapsed >= timedelta(hours=WET_DURATION_LIMIT_HOURS) and confident:
+        if elapsed >= timedelta(hours=wet_limit_hours) and confident:
             return (
                 TOO_WET,
                 HEALTH_TOO_WET,

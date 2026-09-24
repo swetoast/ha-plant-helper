@@ -68,3 +68,25 @@ def worst_of(statuses: Iterable[str]) -> str:
     if not ordered:
         return NORMAL
     return min(ordered, key=lambda status: _RANK[status])
+
+
+# Health values that are a moisture alarm or a missing primary signal; these
+# always win over any secondary (light / humidity) reading.
+_MOISTURE_PRIMARY = frozenset(
+    {HEALTH_NEEDS_WATER, HEALTH_TOO_WET, HEALTH_TOO_DRY, HEALTH_UNKNOWN}
+)
+
+
+def merge_health(moisture_health: str, *contexts: str | None) -> str:
+    """Fold light / humidity adequacy into health without overriding moisture.
+
+    A moisture alarm (or a missing moisture reading) is returned unchanged, so
+    secondary signals never mask or invent the primary verdict. Otherwise a
+    sustained inadequate secondary signal lifts health to 'watch'. Secondary
+    signals never raise needs_attention; that stays moisture-only.
+    """
+    if moisture_health in _MOISTURE_PRIMARY:
+        return moisture_health
+    if any(context in ("low", "high") for context in contexts if context):
+        return HEALTH_WATCH
+    return moisture_health

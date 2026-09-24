@@ -1,5 +1,7 @@
 # Temporal Soil Engine - Implementation Plan
 
+> Status: P0-P5 shipped in 0.0.22-0.0.24. Deferred items in the section below remain open.
+
 ## Relationship to the other documents
 
 `temporal_sensor_roadmap.md` is the specification. `execution_roadmap.md`

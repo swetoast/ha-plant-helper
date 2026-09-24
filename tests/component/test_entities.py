@@ -136,3 +136,32 @@ def test_categorical_battery_state_is_preserved_in_runtime():
     asyncio.run(scenario())
     assert runtime.plants["plant"].state["battery"] == "middle"
     assert evaluations == [("plant", {})]
+
+
+# ---- P5: status entity carries universal value for both placements ----
+def test_care_status_exposes_universal_signals_for_both_placements():
+    allowed = BY_KEY['care_status'].attributes
+    # the value-for-both core is always allowed
+    for name in ('summary', 'reason', 'since', 'confidence', 'drying_context', 'placement'):
+        assert name in allowed
+
+    indoor = {'care_status_attributes': {
+        'summary': 'Soil moisture is within the selected care profile',
+        'reason': 'moisture_in_range', 'since': '2026-01-15T12:00:00+00:00',
+        'confidence': 'medium', 'drying_context': 'normal', 'placement': 'indoor',
+        'external_daylight': 120.0,
+        'rain_suppression': None, 'frost_hours': None, 'exposure': None}}
+    result = attributes_for(BY_KEY['care_status'], indoor)
+    assert result['confidence'] == 'medium' and result['drying_context'] == 'normal'
+    assert result['external_daylight'] == 120.0
+    assert 'rain_suppression' not in result and 'frost_hours' not in result  # None dropped
+
+    outdoor = {'care_status_attributes': {
+        'summary': 'Soil is below the profile, but rain is expected soon; watering is paused',
+        'reason': 'rain_expected', 'since': '2026-01-15T12:00:00+00:00',
+        'confidence': 'high', 'drying_context': 'high', 'placement': 'outdoor',
+        'rain_suppression': True, 'frost_hours': 2, 'exposure': ['frost'],
+        'external_daylight': None}}
+    result = attributes_for(BY_KEY['care_status'], outdoor)
+    assert result['rain_suppression'] is True and result['frost_hours'] == 2
+    assert result['exposure'] == ['frost'] and 'external_daylight' not in result
