@@ -105,7 +105,8 @@ async def async_edit_plant(
             # Persistence already succeeded. Startup restoration remains authoritative.
             pass
 
-    if replacement.species and species_change.kind!="unchanged":
+    sources_changed=current.species_sources!=replacement.species_sources
+    if replacement.species and (species_change.kind!="unchanged" or sources_changed):
         try:
             await hooks.schedule_enrichment(plant_uuid,replacement.species); enrichment=True
         except Exception:

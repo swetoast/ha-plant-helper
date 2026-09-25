@@ -26,6 +26,32 @@ def redact(value:Any,secrets:tuple[str,...]=())->str:
 
 def _first(value:Any)->Any:return value[0] if isinstance(value,list) and value else value
 
+PAYWALL_IMAGE='upgrade_access'
+
+def _perenual_restricted(item:Mapping[str,Any])->bool:
+ """Perenual swaps in an upgrade_access placeholder image for records the key cannot open."""
+ image=item.get('default_image') if isinstance(item.get('default_image'),Mapping) else {}
+ return any(PAYWALL_IMAGE in str(image.get(key) or '') for key in ('regular_url','original_url','medium_url','thumbnail'))
+
+def _flag(value:Any)->bool|None:
+ return value if isinstance(value,bool) else None
+
+def _watering_interval(benchmark:Any)->str|None:
+ """Perenual's {"value": "5-7", "unit": "days"} as "every 5-7 days"."""
+ if not isinstance(benchmark,Mapping):return None
+ value=_clean(str(benchmark.get('value')).strip('"')) if benchmark.get('value') not in (None,'') else None
+ unit=_clean(benchmark.get('unit')) or 'days'
+ return f"every {value} {unit}" if value else None
+
+def _clean(value:Any)->Any:
+ """Drop Perenual's paywall placeholders ("Upgrade Plans To ...") and empties."""
+ if isinstance(value,str):
+  return None if 'upgrade plan' in value.casefold() or not value.strip() else value
+ if isinstance(value,list):
+  items=[item for item in (_clean(v) for v in value) if item not in (None,'')]
+  return items or None
+ return value
+
 def parse_trefle_care(data:Mapping[str,Any])->dict[str,Any]:
  """Extract the care-relevant fields from a Trefle species detail record."""
  growth=data.get('growth') if isinstance(data.get('growth'),Mapping) else {}
@@ -50,20 +76,33 @@ def parse_trefle_care(data:Mapping[str,Any])->dict[str,Any]:
  return {key:value for key,value in fields.items() if value not in (None,'',[],{})}
 class PerenualAdapter:
  name='perenual'
- def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],credential:str=''):self.request=request;self.credential=credential
+ def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],credential:str='',detail_request:Callable[[Any],Awaitable[Mapping[str,Any]]]|None=None):self.request=request;self.credential=credential;self.detail_request=detail_request
+ def _raise_for(self,status:int,payload:Any)->None:
+  if status<400:return
+  message=str(payload)
+  kind='plan' if status==429 and 'upgrade plan' in message.casefold() else 'rate' if status==429 else 'auth' if status in {401,403} else 'provider'
+  raise ProviderError(kind,status,redact(message,(self.credential,) if self.credential else ()))
+ async def record(self,species_id:Any)->dict[str,Any]:
+  """One species by ID from the details endpoint (watering and sunlight live only here)."""
+  if self.detail_request is None:raise ProviderError('provider',message='no detail endpoint')
+  raw=await self.detail_request(species_id)
+  payload=raw.get('body',raw)
+  self._raise_for(int(raw.get('http_status',raw.get('status',200))),payload)
+  if not isinstance(payload,Mapping):return {}
+  out={'id':payload.get('id'),'scientific_name':_clean(_first(payload.get('scientific_name'))),'common_name':_clean(payload.get('common_name')),'family':_clean(payload.get('family')),'genus':_clean(payload.get('genus')),'synonyms':_clean(payload.get('other_name')) or [],'watering_category':_clean(payload.get('watering')),'watering_interval':_watering_interval(payload.get('watering_general_benchmark')),'sunlight_requirements':_clean(payload.get('sunlight')),'care_level':_clean(payload.get('care_level')),'growth_rate':_clean(payload.get('growth_rate')),'indoor':_flag(payload.get('indoor')),'drought_tolerant':_flag(payload.get('drought_tolerant')),'poisonous_to_pets':_flag(payload.get('poisonous_to_pets')),'poisonous_to_humans':_flag(payload.get('poisonous_to_humans'))}
+  # Only the care-relevant core record is kept. Deliberately dropped: images
+  # (signed URLs that expire within a day), the hardiness-map and care-guide
+  # URLs (Perenual embeds the API key in them), and the Supreme-plan "x" fields.
+  return {key:value for key,value in out.items() if value not in (None,'',[],{})}
  async def search(self,query:str)->list[dict[str,Any]]:
   raw=await self.request(query)
-  status=int(raw.get('http_status',raw.get('status',200)))
   payload=raw.get('body',raw)
-  if status>=400:
-   message=str(payload)
-   kind='plan' if status==429 and 'upgrade plan' in message.casefold() else 'rate' if status==429 else 'auth' if status in {401,403} else 'provider'
-   raise ProviderError(kind,status,redact(message,(self.credential,) if self.credential else ()))
+  self._raise_for(int(raw.get('http_status',raw.get('status',200))),payload)
   if not isinstance(payload,Mapping):return []
   items=payload.get('data',payload.get('results'))
   if isinstance(items,Mapping):items=[items]
   elif not isinstance(items,list):items=[payload] if payload.get('scientific_name') else []
-  return [{'scientific_name':_first(x.get('scientific_name')),'common_name':x.get('common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('synonyms',[]),'watering_category':x.get('watering'),'sunlight_requirements':x.get('sunlight'),'image_url':(x.get('default_image') or {}).get('regular_url')} for x in items]
+  return [{'id':x.get('id'),'scientific_name':_clean(_first(x.get('scientific_name'))),'common_name':_clean(x.get('common_name')),'family':_clean(x.get('family')),'genus':_clean(x.get('genus')),'synonyms':_clean(x.get('other_name') or x.get('synonyms')) or [],'watering_category':_clean(x.get('watering')),'sunlight_requirements':_clean(x.get('sunlight')),'restricted':_perenual_restricted(x)} for x in items if isinstance(x,Mapping)]
 class TrefleAdapter:
  name='trefle'
  def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],detail_request:Callable[[Any],Awaitable[Mapping[str,Any]]]|None=None,credential:str=''):self.request=request;self.detail_request=detail_request;self.credential=credential
@@ -75,7 +114,20 @@ class TrefleAdapter:
   items=payload.get('data',[]) if isinstance(payload,Mapping) else []
   if isinstance(items,Mapping):items=[items]
   elif not isinstance(items,list):items=[]
-  return [{'id':x.get('id'),'scientific_name':x.get('scientific_name'),'common_name':x.get('common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('synonyms',[]),'image_url':x.get('image_url')} for x in items]
+  return [{'id':x.get('id'),'scientific_name':x.get('scientific_name'),'common_name':x.get('common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('synonyms',[]),'image_url':x.get('image_url'),'rank':x.get('rank'),'status':x.get('status'),'complete_data':x.get('complete_data')} for x in items if isinstance(x,Mapping)]
+ async def record(self,species_id:Any)->dict[str,Any]:
+  """One species by ID: taxonomy plus the growth and care record."""
+  if self.detail_request is None:raise ProviderError('provider',message='no detail endpoint')
+  raw=await self.detail_request(species_id)
+  status=int(raw.get('http_status',raw.get('status',200)))
+  if status>=400:raise ProviderError('rate' if status==429 else 'auth' if status in {401,403} else 'provider',status)
+  payload=raw.get('body',raw)
+  data=payload.get('data') if isinstance(payload,Mapping) else None
+  if not isinstance(data,Mapping):return {}
+  synonyms=[s.get('name') if isinstance(s,Mapping) else s for s in data.get('synonyms') or []]
+  out={'id':data.get('id'),'scientific_name':data.get('scientific_name'),'common_name':data.get('common_name'),'family':data.get('family'),'genus':data.get('genus'),'synonyms':[s for s in synonyms if s],'image_url':data.get('image_url')}
+  out.update(parse_trefle_care(data))
+  return {key:value for key,value in out.items() if value not in (None,'',[],{})}
  async def details(self,species_id:Any)->dict[str,Any]:
   if species_id in (None,'') or self.detail_request is None:return {}
   raw=await self.detail_request(species_id)
@@ -250,3 +302,119 @@ class SpeciesEnrichment:
   else:return EnrichmentResult(key,'unavailable',{},tuple(),False)
   stored={'status':status,'data':data,'providers':sorted(provider_results),'expires_at':(now+ttl).isoformat()};self.cache[key]=stored;await self.storage.async_set_species_cache(key,stored)
   return EnrichmentResult(key,status,data,tuple(sorted(provider_results)),False)
+
+
+# ---- per-provider matching -------------------------------------------------
+# The user picks one record per provider (or skips it) while adding or
+# re-matching a plant; enrichment then fetches exactly those records by ID.
+# No names are re-matched at runtime, so one provider's miss or outage can never
+# disturb another's data.
+
+PERENUAL_FREE_MAX_ID = 3000  # Perenual's free plan serves details for IDs 1-3000
+
+
+def looks_scientific(name: Any) -> bool:
+ """A Latin binomial or finer ("Genus species ..."), not a common name."""
+ parts=str(name or '').split()
+ return len(parts)>=2 and parts[0][:1].isupper() and parts[0].isalpha() and parts[1][:1].islower()
+
+
+def is_exact_candidate(candidate: Mapping[str, Any], names: list[str]) -> bool:
+ """True when the record's scientific name or a scientific synonym is one of ``names``.
+
+ Common names are deliberately ignored: they are shared across species (Perenual
+ lists Sansevieria patens as "snake plant"), so they must never preselect a record.
+ """
+ wanted={normalize_species_key(str(n)) for n in names if looks_scientific(n)}
+ own=[candidate.get('scientific_name'),*(candidate.get('synonyms') or [])]
+ return bool(wanted & {normalize_species_key(str(n)) for n in own if looks_scientific(n)})
+
+
+def rank_candidates(candidates: list[dict[str, Any]], names: list[str]) -> list[dict[str, Any]]:
+ """Exact name or synonym matches first, then species rank; one entry per ID."""
+ seen=set();unique=[]
+ for candidate in candidates:
+  key=candidate.get('id')
+  if key is None or key in seen:continue
+  seen.add(key);unique.append(candidate)
+ return sorted(unique,key=lambda c:(not is_exact_candidate(c,names),c.get('rank') not in (None,'species')))
+
+
+def is_restricted(candidate: Mapping[str, Any], *, perenual_free: bool) -> bool:
+ """Whether a Perenual record's care data is out of reach for this key."""
+ if candidate.get('restricted'):
+  return True
+ try:
+  return perenual_free and int(candidate.get('id'))>PERENUAL_FREE_MAX_ID
+ except (TypeError,ValueError):
+  return False
+
+
+def describe_candidate(provider: str, candidate: Mapping[str, Any], *, perenual_free: bool = False) -> str:
+ """One-line label saying what choosing this record would contribute."""
+ scientific=str(candidate.get('scientific_name') or 'Unknown species')
+ common=candidate.get('common_name')
+ if provider=='inaturalist':
+  matched=candidate.get('matched_term')
+  label=f"{common} - {scientific}" if common else scientific
+  return f"{label} (matched: {matched})" if matched and matched not in (common,scientific) else label
+ if provider=='trefle':
+  meta=[str(v) for v in (candidate.get('rank'),candidate.get('family')) if v]
+  note='complete growth data' if candidate.get('complete_data') else 'taxonomy, little or no growth data'
+  return f"{scientific} ({', '.join(meta)}) - {note}" if meta else f"{scientific} - {note}"
+ label=f"{common} - {scientific}" if common else scientific
+ restricted=is_restricted(candidate,perenual_free=perenual_free)
+ return f"{label} - needs a paid Perenual plan for care data" if restricted else f"{label} - watering and sunlight data"
+
+
+class SourceEnrichment:
+ """Enrich a plant from the provider records the user chose, fetched by ID.
+
+ Each fetched record is cached for CARE_TTL (Perenual's free plan allows about
+ 100 requests a day, and Home Assistant restarts often during setup). A failed
+ fetch falls back to the stale cached record, and a record the Perenual plan
+ does not cover is remembered for NEGATIVE_TTL instead of retried each start.
+ """
+ def __init__(self,*,trefle:TrefleAdapter|None=None,perenual:PerenualAdapter|None=None,storage:PlantHelperStorage|None=None):
+  self.adapters={'trefle':trefle,'perenual':perenual};self.storage=storage;self.cache:dict[str,dict[str,Any]]={}
+ async def load(self)->None:
+  if self.storage is None:return
+  snapshot=await self.storage.async_snapshot()
+  self.cache={key:dict(value) for key,value in snapshot.data['species_cache'].items() if ':' in key}
+ async def _record(self,provider:str,species_id:Any,now:datetime)->dict[str,Any]|None:
+  key=f'{provider}:{species_id}';entry=self.cache.get(key)
+  if entry is not None and _unexpired(entry,now):
+   return dict(entry.get('data') or {}) if entry.get('status')=='ok' else None
+  stale=dict(entry.get('data') or {}) if entry is not None and entry.get('status')=='ok' else None
+  adapter=self.adapters.get(provider)
+  if adapter is None:return stale
+  try:
+   data=await adapter.record(species_id)
+   stored={'status':'ok','data':data,'expires_at':(now+CARE_TTL).isoformat()}
+  except ProviderError as err:
+   if err.kind!='plan':return stale
+   stored={'status':'plan','data':{},'expires_at':(now+NEGATIVE_TTL).isoformat()}
+  self.cache[key]=stored
+  if self.storage is not None:await self.storage.async_set_species_cache(key,stored)
+  return dict(stored['data']) if stored['status']=='ok' else None
+ async def enrich(self,sources:Mapping[str,Any],*,now:datetime|None=None)->EnrichmentResult:
+  now=now or datetime.now(timezone.utc);results:dict[str,dict[str,Any]]={}
+  chosen=sources.get('inaturalist')
+  if isinstance(chosen,Mapping):
+   name=str(chosen.get('name') or '')
+   results['inaturalist']={key:value for key,value in {'scientific_name':name,'common_name':chosen.get('common_name'),'image_url':chosen.get('image_url'),'genus':name.split(' ',1)[0] if ' ' in name else None}.items() if value}
+  for provider in ('trefle','perenual'):
+   chosen=sources.get(provider)
+   if isinstance(chosen,Mapping):
+    record=await self._record(provider,chosen.get('id'),now)
+    if record:results[provider]=record
+  data=merge_provider_fields(results) if results else {}
+  key=normalize_species_key(str(data.get('scientific_name') or ''))
+  return EnrichmentResult(key,'matched' if results else 'not_found',data,tuple(results),False)
+
+
+def _unexpired(entry:Mapping[str,Any],now:datetime)->bool:
+ try:expires=datetime.fromisoformat(str(entry.get('expires_at')))
+ except ValueError:return False
+ if expires.tzinfo is None:expires=expires.replace(tzinfo=timezone.utc)
+ return now<expires

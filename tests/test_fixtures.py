@@ -82,14 +82,15 @@ def test_perenual_free_details_response_is_accepted_as_one_candidate():
     adapter = PerenualAdapter(lambda _query: asyncio.sleep(0, result=fixture))
     candidates = external_provider_fixtures_run(adapter.search("Abies alba"))
     assert candidates == [{
+        "id": 1,
         "scientific_name": "Abies alba",
         "common_name": "European Silver Fir",
         "family": "Pinaceae",
         "genus": "Abies",
-        "synonyms": [],
+        "synonyms": ["Common Silver Fir"],
         "watering_category": "Frequent",
         "sunlight_requirements": ["full sun"],
-        "image_url": "https://images.example.invalid/perenual/abies_alba.jpg",
+        "restricted": False,
     }]
 
 

@@ -1,0 +1,86 @@
+{
+ "_about": "Live Trefle response, GET /api/v1/species/dracaena-trifasciata (2026-09-25), trimmed to the fields the adapter reads (images, distributions and sources removed; every value kept as returned).",
+ "http_status": 200,
+ "body": {
+  "data": {
+   "id": 375325,
+   "common_name": null,
+   "slug": "dracaena-trifasciata",
+   "scientific_name": "Dracaena trifasciata",
+   "status": "accepted",
+   "rank": "species",
+   "complete_data": false,
+   "image_url": "https://d2seqvvyy3b8p2.cloudfront.net/e9383de6ce03e5586a1c1be907d8c7b1.jpg",
+   "genus": "Dracaena",
+   "family": "Asparagaceae",
+   "duration": null,
+   "edible": null,
+   "synonyms": [
+    {
+     "id": 845816,
+     "name": "Sansevieria trifasciata",
+     "author": "Prain"
+    }
+   ],
+   "specifications": {
+    "ligneous_type": null,
+    "growth_form": null,
+    "growth_habit": null,
+    "growth_rate": null,
+    "average_height": {
+     "cm": null
+    },
+    "maximum_height": {
+     "cm": null
+    },
+    "nitrogen_fixation": null,
+    "shape_and_orientation": null,
+    "toxicity": null
+   },
+   "growth": {
+    "description": null,
+    "sowing": null,
+    "days_to_harvest": null,
+    "row_spacing": {
+     "cm": null
+    },
+    "spread": {
+     "cm": null
+    },
+    "ph_maximum": null,
+    "ph_minimum": null,
+    "light": null,
+    "atmospheric_humidity": null,
+    "growth_months": null,
+    "bloom_months": null,
+    "fruit_months": null,
+    "minimum_precipitation": {
+     "mm": null
+    },
+    "maximum_precipitation": {
+     "mm": null
+    },
+    "minimum_root_depth": {
+     "cm": null
+    },
+    "minimum_temperature": {
+     "deg_f": null,
+     "deg_c": null
+    },
+    "maximum_temperature": {
+     "deg_f": null,
+     "deg_c": null
+    },
+    "soil_nutriments": null,
+    "soil_salinity": null,
+    "soil_texture": null,
+    "soil_humidity": null
+   }
+  },
+  "meta": {
+   "images_count": 3,
+   "sources_count": 4,
+   "synonyms_count": 1
+  }
+ }
+}

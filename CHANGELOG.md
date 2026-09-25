@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.0.46 - 2026-09-25
+
+Perenual free and paid tiers, and only the useful part of each provider.
+
+Established from live Perenual responses on a free key: search returns every
+record, but records the key cannot open carry an "upgrade access" placeholder
+image; species details work for IDs up to 3000 and return HTTP 429 "Please
+Upgrade Plan" above that; and even an open free record replaces the
+Supreme-only fields (watering volume, depth and period, sunlight hours,
+temperature tolerance) with "Upgrade Plan To Supreme" text.
+
+- The Perenual plan setting now decides what the Perenual step offers. Free:
+  only records the key can open; when a plant exists only as a paid record the
+  step says so and offers Skip (the snake plant, record 7171, is paid-only).
+  Paid (Premium or Supreme): every record, with a warning when the results show
+  the key is actually on the free plan.
+- Perenual records keep only the care-relevant core: watering, watering interval,
+  sunlight, care level, growth rate, indoor, drought tolerant, and toxicity to
+  pets and humans (the last five new on the species sensor). Deliberately
+  dropped: images (signed URLs expiring within a day), the hardiness-map and
+  care-guide URLs (Perenual embeds the API key in them), and the Supreme-only
+  fields, whose real format has not been seen.
+- Real free-tier details (record 1469) and the real paywall response (record
+  7171) are test fixtures, with the embedded API key redacted.
+
+## 0.0.45 - 2026-09-25
+
+Per-provider matching checked against live Perenual responses.
+
+- Perenual has the snake plant only under its older name (record 7171,
+  Sansevieria trifasciata; "Dracaena trifasciata" returns nothing). The Perenual
+  step already searches the chosen name, its synonyms and the plant name, and
+  now provably finds it on the second search and stops there to spare quota.
+- Records a key cannot open are detected per record: Perenual replaces their
+  image with an "upgrade access" placeholder. Such records are labelled as
+  needing a paid plan and are never preselected. This works even when the
+  access-level setting is wrong.
+- Perenual images are no longer used anywhere. Every image URL Perenual returns
+  is signed and expires within a day (and restricted records only carry the
+  placeholder), so a cached URL would go stale; photos come from iNaturalist or
+  Trefle.
+- Exact matching compares scientific names only. Common names are shared
+  across species (Perenual lists Sansevieria patens as "snake plant"), so a
+  common-name hit could have preselected the wrong plant.
+- Live Perenual search responses (free plan) added as fixtures; the flow test
+  now runs on them.
+
+## 0.0.44 - 2026-09-25
+
+Species enrichment rebuilt around per-provider matching.
+
+- Why it did not work. The species you picked while adding a plant was thrown
+  away: enrichment re-searched iNaturalist by name at every start and then
+  matched Trefle and Perenual by name as well, silently dropping any provider
+  whose name matching missed. Perenual could never supply watering or sunlight
+  at all, because those fields exist only on its species details endpoint and
+  the integration only ever called the species-list search.
+- Per-provider matching. Adding a plant now walks one step per configured
+  provider (iNaturalist, then Trefle, then Perenual), each listing that
+  provider's records with a Skip option and a line saying what the record would
+  contribute: whether Trefle has growth data for it, and whether a Perenual
+  record needs a paid plan for care data. Later steps search with the chosen
+  record's name and synonyms, so iNaturalist's older name (Sansevieria
+  trifasciata) still finds Trefle's accepted species (Dracaena trifasciata). The
+  chosen record IDs are stored on the plant as `species_sources`.
+- Enrichment by ID. Each chosen record is fetched directly (Trefle
+  `/species/{id}`, Perenual `/species/details/{id}`) and merged; nothing is
+  re-matched at runtime, and a skipped or failing provider cannot disturb the
+  others. Fetched records are cached for six months so frequent restarts do not
+  spend Perenual's small free quota; a failed fetch falls back to the cached
+  record, and a record the Perenual plan does not cover is remembered for two
+  weeks instead of retried each start. Perenual's "Upgrade Plans" placeholder
+  values are treated as missing data, never shown.
+- New options menu entry, Re-match species data, to redo or skip any provider
+  for an existing plant. Plants added before this release keep the older
+  name-based lookup until re-matched once. Ordinary edits keep the chosen
+  records.
+- Tests use the live Trefle search and detail responses and a stubbed Home
+  Assistant flow that drives the real options flow end to end.
+- Correction to 0.0.41: `sensor.<plant>_calculated_moisture` and
+  `sensor.<plant>_drying_modifier` were never Plant Helper entities; they come
+  from another integration and can be removed under Settings > Entities. The
+  retired-entity pruning added then is correct but only ever touches Plant
+  Helper's own entries.
+
 ## 0.0.43 - 2026-09-25
 
 Calibrated against live data, and learned baselines now drive judgments.

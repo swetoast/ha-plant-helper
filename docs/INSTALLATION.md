@@ -21,7 +21,9 @@ Set once during setup, changed later with Reconfigure on the integration entry:
 
 - Latitude / Longitude override - optional. Leave empty to use the Home
   Assistant location.
-- Perenual API key and access level - optional species-enrichment credential.
+- Perenual API key and plan - optional species-enrichment credential. Set the
+  plan to free unless the key is on Premium or Supreme: on free, only the
+  records the key can open (IDs up to 3000) are offered when matching.
 - Trefle API token - optional species-enrichment credential.
 - Update interval - seconds between periodic local evaluations.
 

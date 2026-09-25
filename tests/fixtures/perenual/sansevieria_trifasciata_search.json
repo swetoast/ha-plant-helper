@@ -1,0 +1,175 @@
+{
+ "_about": "Live Perenual response, GET /api/v2/species-list?q=Sansevieria trifasciata with a free-plan key (2026-09-25). Signed image query strings removed; everything else as returned. Records above ID 3000 carry the upgrade_access.jpg paywall placeholder image.",
+ "http_status": 200,
+ "body": {
+  "data": [
+   {
+    "id": 7171,
+    "common_name": "viper's bowstring hemp",
+    "scientific_name": [
+     "Sansevieria trifasciata"
+    ],
+    "other_name": [
+     "mother-in-law's tongue"
+    ],
+    "family": "Asparagaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": null,
+    "variety": null,
+    "species_epithet": "trifasciata",
+    "genus": "Sansevieria",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   },
+   {
+    "id": 7172,
+    "common_name": "mother-in-law's tongue",
+    "scientific_name": [
+     "Sansevieria trifasciata 'Bantel's Sensation'"
+    ],
+    "other_name": [
+     "mother-in-law's tongue"
+    ],
+    "family": "Asparagaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": "Bantel",
+    "variety": null,
+    "species_epithet": "trifasciata",
+    "genus": "Sansevieria",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   },
+   {
+    "id": 7173,
+    "common_name": "mother-in-law's tongue",
+    "scientific_name": [
+     "Sansevieria trifasciata 'Black Coral'"
+    ],
+    "other_name": [
+     "mother-in-law's tongue"
+    ],
+    "family": "Asparagaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": "Black Coral",
+    "variety": null,
+    "species_epithet": "trifasciata",
+    "genus": "Sansevieria",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   },
+   {
+    "id": 7174,
+    "common_name": "mother-in-law's tongue",
+    "scientific_name": [
+     "Sansevieria trifasciata 'Black Robusta'"
+    ],
+    "other_name": [
+     "mother-in-law's tongue"
+    ],
+    "family": "Asparagaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": "Black Robusta",
+    "variety": null,
+    "species_epithet": "trifasciata",
+    "genus": "Sansevieria",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   },
+   {
+    "id": 7175,
+    "common_name": "mother-in-law's tongue",
+    "scientific_name": [
+     "Sansevieria trifasciata 'Black Star'"
+    ],
+    "other_name": [
+     "mother-in-law's tongue"
+    ],
+    "family": "Asparagaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": "Black Star",
+    "variety": null,
+    "species_epithet": "trifasciata",
+    "genus": "Sansevieria",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   },
+   {
+    "id": 7176,
+    "common_name": "mother-in-law's tongue",
+    "scientific_name": [
+     "Sansevieria trifasciata 'Dwarf Laurentii'"
+    ],
+    "other_name": [
+     "mother-in-law's tongue"
+    ],
+    "family": "Asparagaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": "Dwarf Laurentii",
+    "variety": null,
+    "species_epithet": "trifasciata",
+    "genus": "Sansevieria",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   },
+   {
+    "id": 7177,
+    "common_name": "mother-in-law's tongue",
+    "scientific_name": [
+     "Sansevieria trifasciata 'Gold Flame'"
+    ],
+    "other_name": [
+     "mother-in-law's tongue"
+    ],
+    "family": "Asparagaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": "Gold Flame",
+    "variety": null,
+    "species_epithet": "trifasciata",
+    "genus": "Sansevieria",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   }
+  ],
+  "to": 7,
+  "per_page": 30,
+  "current_page": 1,
+  "from": 1,
+  "last_page": 1,
+  "total": 7
+ }
+}

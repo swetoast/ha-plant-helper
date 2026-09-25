@@ -23,7 +23,7 @@ SENSORS=(
  EntityContract('sensor','battery','Battery',icon='mdi:battery'),
  EntityContract('sensor','health','Health',icon='mdi:leaf',attributes=('summary',)),
  EntityContract('sensor','calibration','Calibration',icon='mdi:tune',attributes=('summary',)),
- EntityContract('sensor','species_context','Species',icon='mdi:flower',attributes=('scientific_name','common_name','family','genus','watering_category','sunlight_requirements','image_url','light_requirement','humidity_requirement','soil_moisture_requirement','ph_minimum','ph_maximum','minimum_temperature_c','maximum_temperature_c','growth_habit','growth_rate','toxicity','average_height_cm','duration','edible')),
+ EntityContract('sensor','species_context','Species',icon='mdi:flower',attributes=('scientific_name','common_name','family','genus','watering_category','sunlight_requirements','image_url','light_requirement','humidity_requirement','soil_moisture_requirement','ph_minimum','ph_maximum','minimum_temperature_c','maximum_temperature_c','growth_habit','growth_rate','toxicity','average_height_cm','duration','edible','watering_interval','care_level','indoor','drought_tolerant','poisonous_to_pets','poisonous_to_humans')),
 )
 BINARY_SENSORS=(EntityContract('binary_sensor','needs_attention','Needs attention',device_class='problem',icon='mdi:alert-circle-outline',attributes=('reason',)),)
 BY_KEY={item.key:item for item in (*SENSORS,*BINARY_SENSORS)}

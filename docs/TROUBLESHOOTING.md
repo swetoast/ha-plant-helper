@@ -40,11 +40,27 @@ level. It lifts on its own as light returns.
 
 ## Species data is missing
 
-- Enrichment is optional.
-- Use a species name specific enough to match.
-- Check Perenual or Trefle credentials and the Perenual access level.
-- Provider outages, rate limits, and auth suspensions do not stop local
-  monitoring.
+Species data comes from the record you chose for each provider when the plant
+was added. To change or fill it in, open the integration's options and choose
+**Re-match species data**: pick the plant, optionally enter a different name to
+search for, then choose (or skip) a record from iNaturalist, Trefle, and
+Perenual in turn. Each entry says what it would contribute.
+
+- A provider only appears when its API key is configured; iNaturalist needs none.
+- Trefle often has taxonomy but no growth data for common houseplants; the
+  Trefle step says so for each record, so you can skip it.
+- Perenual supplies watering, sunlight, care level, pet and human toxicity,
+  and whether a plant suits indoors. The free plan opens only records with ID
+  3000 or lower, so on free the Perenual step offers only those; when a plant
+  exists only as a paid record the step says so and offers Skip. Many
+  houseplants sit above that range (the snake plant is record 7171, filed under
+  its older name Sansevieria trifasciata), so on free they get no Perenual data.
+- If the plan is set to paid but Perenual returns locked records, the step
+  warns that the key looks like a free one.
+- Plants added before per-provider matching still use the older name-based
+  lookup until they are re-matched once.
+- Fetched records are cached for six months, so restarts do not spend provider
+  quota. Outages, rate limits, and rejected keys never stop local monitoring.
 
 ## A species photo is missing
 

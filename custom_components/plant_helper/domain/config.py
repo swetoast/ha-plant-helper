@@ -71,6 +71,11 @@ class PlantConfig:
     battery: str | None = None
     custom_multiplier: float | None = None
     rain_limit_mm: float | None = None
+    # The species record chosen per provider while adding or re-matching the
+    # plant: {"id": ..., "name": ...} (plus display fields), or "skip". Stored so
+    # enrichment fetches exactly those records by ID instead of re-matching
+    # names at runtime.
+    species_sources: dict[str, Any] | None = None
 
     @classmethod
     def normalize(cls, raw: Mapping[str, Any], *, plant_uuid: str, revision: int=1) -> "PlantConfig":
@@ -94,7 +99,35 @@ class PlantConfig:
             _optional_entity(raw.get("soil_temperature"),"soil_temperature"),
             _optional_entity(raw.get("humidity_sensor"),"humidity_sensor"),
             _optional_entity(raw.get("lux"),"lux"),
-            _optional_entity(raw.get("battery"),"battery"),multiplier,rain)
+            _optional_entity(raw.get("battery"),"battery"),multiplier,rain,
+            _species_sources(raw.get("species_sources")))
+
+SOURCE_PROVIDERS = ("inaturalist", "trefle", "perenual")
+_SCALAR = (str, int, float, bool)
+
+
+def _species_sources(value: Any) -> dict[str, Any] | None:
+    """Validate the per-provider species choices; malformed input is rejected."""
+    if value is None or value == {}:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValidationError("species")
+    out: dict[str, Any] = {}
+    for provider, choice in value.items():
+        if provider not in SOURCE_PROVIDERS:
+            raise ValidationError("species")
+        if choice == "skip":
+            out[provider] = "skip"
+            continue
+        if not isinstance(choice, Mapping) or choice.get("id") in (None, ""):
+            raise ValidationError("species")
+        out[provider] = {
+            str(key): item
+            for key, item in choice.items()
+            if item is None or isinstance(item, _SCALAR)
+        }
+    return out or None
+
 
 def new_plant_uuid() -> str:
     return uuid.uuid4().hex

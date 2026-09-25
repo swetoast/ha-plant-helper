@@ -115,15 +115,19 @@ a number from 0 to 100. Categorical values are kept as-is, not converted.
 
 ## Species
 
-`sensor.<plant>_species` - the resolved scientific name, or the query itself
-when no confident match is found. Attributes: `scientific_name`, `common_name`,
+`sensor.<plant>_species` - the scientific name of the species you chose when
+adding or re-matching the plant (Trefle's accepted name when a Trefle record was
+chosen). Each attribute comes from the provider records you picked. Attributes: `scientific_name`, `common_name`,
 `family`, `genus`, `watering_category`, `sunlight_requirements`, `image_url`
 (a local authenticated thumbnail), and, when Trefle has them, growth and care
 data pulled from Trefle's species detail: `light_requirement`,
 `humidity_requirement`, `soil_moisture_requirement` (0-10 scales), `ph_minimum`,
 `ph_maximum`, `minimum_temperature_c`, `maximum_temperature_c`, `growth_habit`,
-`growth_rate`, `toxicity`, `average_height_cm`, `duration`, and `edible`. Fields
-Trefle does not have for a species are simply absent. Provider names, raw
+`growth_rate`, `toxicity`, `average_height_cm`, `duration`, and `edible`. From
+Perenual: `watering_category`, `watering_interval` (for example "every 5-7
+days"), `sunlight_requirements`, `care_level`, `indoor`, `drought_tolerant`,
+`poisonous_to_pets`, and `poisonous_to_humans`. Fields a provider does not have
+for a species are simply absent. Provider names, raw
 responses, and credentials are never exposed.
 
 `image.<plant>` - the species photo, when one was found. Served from the local

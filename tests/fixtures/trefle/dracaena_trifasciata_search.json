@@ -1,0 +1,71 @@
+{
+ "_about": "Live Trefle response, GET /api/v1/species/search?q=Dracaena trifasciata (2026-09-25).",
+ "http_status": 200,
+ "body": {
+  "data": [
+   {
+    "id": 375325,
+    "common_name": null,
+    "slug": "dracaena-trifasciata",
+    "scientific_name": "Dracaena trifasciata",
+    "year": 2017,
+    "bibliography": "Mabberley's Pl.-Book, ed. 4: 1101 (2017)",
+    "author": "(Prain) Mabb.",
+    "status": "accepted",
+    "rank": "species",
+    "family_common_name": null,
+    "genus_id": 10057,
+    "completion_ratio": 4,
+    "complete_data": false,
+    "image_url": "https://d2seqvvyy3b8p2.cloudfront.net/e9383de6ce03e5586a1c1be907d8c7b1.jpg",
+    "synonyms": [
+     "Sansevieria trifasciata"
+    ],
+    "genus": "Dracaena",
+    "family": "Asparagaceae",
+    "links": {
+     "self": "/api/v1/species/dracaena-trifasciata",
+     "plant": "/api/v1/plants/dracaena-trifasciata",
+     "genus": "/api/v1/genus/dracaena"
+    }
+   },
+   {
+    "id": 453823,
+    "common_name": null,
+    "slug": "dracaena-trifasciata-subsp-trifasciata",
+    "scientific_name": "Dracaena trifasciata subsp. trifasciata",
+    "year": null,
+    "bibliography": "Unknown",
+    "author": null,
+    "status": "accepted",
+    "rank": "ssp",
+    "family_common_name": null,
+    "genus_id": 10057,
+    "completion_ratio": 2,
+    "complete_data": false,
+    "image_url": null,
+    "synonyms": [
+     "Sansevieria craigii",
+     "Sansevieria trifasciata var. laurentii",
+     "Sansevieria zeylanica var. laurentii",
+     "Sansevieria aureovariegata",
+     "Sansevieria laurentii",
+     "Sansevieria jacquinii"
+    ],
+    "genus": "Dracaena",
+    "family": "Asparagaceae",
+    "links": {
+     "self": "/api/v1/species/dracaena-trifasciata-subsp-trifasciata",
+     "plant": "/api/v1/plants/dracaena-trifasciata",
+     "genus": "/api/v1/genus/dracaena"
+    }
+   }
+  ],
+  "links": {
+   "self": "/api/v1/species/search?q=Dracaena+trifasciata"
+  },
+  "meta": {
+   "total": 2
+  }
+ }
+}

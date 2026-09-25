@@ -1,0 +1,78 @@
+{
+ "_about": "Live Perenual response, GET /api/v2/species-list?q=snake plant with a free-plan key (2026-09-25). Signed image query strings removed; everything else as returned. Records above ID 3000 carry the upgrade_access.jpg paywall placeholder image.",
+ "http_status": 200,
+ "body": {
+  "data": [
+   {
+    "id": 1469,
+    "common_name": "rattlesnake plant",
+    "scientific_name": [
+     "Calathea lancifolia",
+     "Goeppertia insignis"
+    ],
+    "other_name": [],
+    "family": "Marantaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": null,
+    "variety": null,
+    "species_epithet": "lancifolia",
+    "genus": "Calathea",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/species_image/1469_calathea_lancifolia/regular/3676781257_2e8730f471_b.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/species_image/1469_calathea_lancifolia/regular/3676781257_2e8730f471_b.jpg"
+    }
+   },
+   {
+    "id": 3247,
+    "common_name": "rattlesnake plantain",
+    "scientific_name": [
+     "Goodyera pubescens"
+    ],
+    "other_name": [],
+    "family": "Orchidaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": null,
+    "variety": null,
+    "species_epithet": "pubescens",
+    "genus": "Goodyera",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   },
+   {
+    "id": 7168,
+    "common_name": "snake plant",
+    "scientific_name": [
+     "Sansevieria patens"
+    ],
+    "other_name": [],
+    "family": "Asparagaceae",
+    "hybrid": null,
+    "authority": null,
+    "subspecies": null,
+    "cultivar": null,
+    "variety": null,
+    "species_epithet": "patens",
+    "genus": "Sansevieria",
+    "default_image": {
+     "license_name": "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+     "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg",
+     "original_url": "https://s3.us-central-1.wasabisys.com/perenual/image/upgrade_access.jpg"
+    }
+   }
+  ],
+  "to": 3,
+  "per_page": 30,
+  "current_page": 1,
+  "from": 1,
+  "last_page": 1,
+  "total": 3
+ }
+}

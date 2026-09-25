@@ -1,0 +1,13 @@
+{
+ "_about": "Live Perenual response, GET /api/v2/species-list?q=Dracaena trifasciata with a free-plan key (2026-09-25). Signed image query strings removed; everything else as returned. Records above ID 3000 carry the upgrade_access.jpg paywall placeholder image.",
+ "http_status": 200,
+ "body": {
+  "data": [],
+  "to": null,
+  "per_page": 30,
+  "current_page": 1,
+  "from": null,
+  "last_page": 1,
+  "total": 0
+ }
+}

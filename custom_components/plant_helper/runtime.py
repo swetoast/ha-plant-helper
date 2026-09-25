@@ -63,6 +63,7 @@ from .domain.enrichment import (
     INaturalistAdapter,
     PerenualAdapter,
     ProviderError,
+    SourceEnrichment,
     TrefleAdapter,
     select_exact_common_name_candidate,
 )
@@ -130,6 +131,11 @@ class PlantHelperRuntime:
     physical_processor: PlantPhysicalProcessor | None = None
     physical_subscriptions: PhysicalSubscriptions | None = None
     species_enrichment: ChainedSpeciesEnrichment | None = None
+    # Per-provider matching: adapters the flow searches (only configured
+    # providers), the by-ID enrichment, and whether Perenual is on the free plan.
+    provider_adapters: dict[str, Any] = field(default_factory=dict)
+    source_enrichment: SourceEnrichment | None = None
+    perenual_free: bool = True
     species_context: dict[str, tuple[str, dict[str, Any]]] = field(default_factory=dict)
     weather_client: Any = None
     forecast_collector: ForecastCollector | None = None
@@ -842,17 +848,56 @@ class PlantHelperRuntime:
                 {"q": query, "key": perenual_key},
             )
 
-        self.species_enrichment = ChainedSpeciesEnrichment(
-            INaturalistAdapter(inaturalist_request),
-            TrefleAdapter(trefle_request, trefle_details, credential=trefle_key),
-            PerenualAdapter(perenual_request, perenual_key),
+        async def perenual_details(species_id: Any) -> Mapping[str, Any]:
+            return await request_json(
+                f"https://perenual.com/api/v2/species/details/{species_id}",
+                {"key": perenual_key},
+            )
+
+        inaturalist = INaturalistAdapter(inaturalist_request)
+        trefle = TrefleAdapter(trefle_request, trefle_details, credential=trefle_key)
+        perenual = PerenualAdapter(
+            perenual_request, perenual_key, detail_request=perenual_details
         )
+        self.species_enrichment = ChainedSpeciesEnrichment(inaturalist, trefle, perenual)
+        self.provider_adapters = {"inaturalist": inaturalist}
+        if trefle_key:
+            self.provider_adapters["trefle"] = trefle
+        if perenual_key:
+            self.provider_adapters["perenual"] = perenual
+        self.perenual_free = str(options.get("perenual_access_level", "free")) != "paid"
+        self.source_enrichment = SourceEnrichment(
+            trefle=trefle if trefle_key else None,
+            perenual=perenual if perenual_key else None,
+            storage=self.storage,
+        )
+        try:
+            await self.source_enrichment.load()
+        except Exception:
+            _LOGGER.debug("Species record cache could not be loaded", exc_info=True)
 
     async def schedule_enrichment(self, plant_uuid: str, species: str) -> None:
-        """Resolve a common name through the configured provider chain."""
+        """Enrich a plant from its chosen provider records, or the legacy chain.
+
+        A plant added or re-matched with per-provider matching carries
+        ``species_sources``: each provider's chosen record is fetched by ID and
+        nothing is re-matched. Plants from before that keep the name-matching
+        chain until they are re-matched.
+        """
         plant = self.plants.plants.get(plant_uuid)
+        if plant is None or not species.strip():
+            return
+        sources = plant.config.get("species_sources")
+        if sources and self.source_enrichment is not None:
+            try:
+                result = await self.source_enrichment.enrich(sources)
+            except Exception:
+                _LOGGER.exception("Species enrichment failed for %s", plant_uuid)
+                return
+            await self._publish_species(plant_uuid, species, result)
+            return
         chain = self.species_enrichment
-        if plant is None or chain is None or not species.strip():
+        if chain is None:
             return
         try:
             candidates = await chain.discover(species)
@@ -875,7 +920,12 @@ class PlantHelperRuntime:
         except Exception:
             _LOGGER.exception("Species enrichment failed for %s", plant_uuid)
             return
-        plant.state["species_context"] = result.data.get("scientific_name", species)
+        await self._publish_species(plant_uuid, species, result)
+
+    async def _publish_species(self, plant_uuid: str, species: str, result: Any) -> None:
+        plant = self.plants.plants.get(plant_uuid)
+        if plant is None:
+            return
         attributes = {
             key: result.data[key]
             for key in (
@@ -898,6 +948,12 @@ class PlantHelperRuntime:
                 "average_height_cm",
                 "duration",
                 "edible",
+                "watering_interval",
+                "care_level",
+                "indoor",
+                "drought_tolerant",
+                "poisonous_to_pets",
+                "poisonous_to_humans",
                 "provenance",
             )
             if result.data.get(key) not in (None, "", [], {})

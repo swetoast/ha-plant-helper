@@ -16,7 +16,7 @@
           "latitude": "Leave empty to use Home Assistant latitude.",
           "longitude": "Leave empty to use Home Assistant longitude.",
           "perenual_api_key": "Optional credential stored in config-entry options.",
-          "perenual_access_level": "Select free or paid request behavior.",
+          "perenual_access_level": "Free: only Perenual records your key can open (IDs up to 3000) are offered. Paid (Premium or Supreme): every record is offered.",
           "trefle_api_key": "Optional credential stored in config-entry options.",
           "update_interval": "Periodic local evaluation interval in seconds."
         }
@@ -36,7 +36,7 @@
           "latitude": "Leave empty to use Home Assistant latitude.",
           "longitude": "Leave empty to use Home Assistant longitude.",
           "perenual_api_key": "Optional credential stored in config-entry options.",
-          "perenual_access_level": "Select free or paid request behavior.",
+          "perenual_access_level": "Free: only Perenual records your key can open (IDs up to 3000) are offered. Paid (Premium or Supreme): every record is offered.",
           "trefle_api_key": "Optional credential stored in config-entry options.",
           "update_interval": "Periodic local evaluation interval in seconds."
         }
@@ -59,6 +59,7 @@
         "menu_options": {
           "add": "Add a plant",
           "edit": "Edit a plant",
+          "species": "Re-match species data",
           "remove": "Remove a plant"
         }
       },
@@ -121,17 +122,41 @@
           "plant_uuid": "Plant"
         }
       },
-      "select_species": {
-        "title": "Choose the plant species",
-        "description": "More than one plant matches the common name. Choose the correct species.",
+      "species_inaturalist": {
+        "title": "Species (iNaturalist)",
+        "description": "Plants matching \"{query}\". The choice sets the species name and photo. {status}",
         "data": {
-          "candidate": "Matching plant"
+          "candidate": "Species"
+        }
+      },
+      "species_trefle": {
+        "title": "Growth data (Trefle)",
+        "description": "Trefle records for \"{query}\". Each entry says whether Trefle has growth data for it. Skip if none is the right plant or it adds nothing. {status}",
+        "data": {
+          "candidate": "Trefle record"
+        }
+      },
+      "species_perenual": {
+        "title": "Care data (Perenual)",
+        "description": "Perenual records for \"{query}\". Perenual supplies watering and sunlight. Skip if none is the right plant. {status}",
+        "data": {
+          "candidate": "Perenual record"
+        }
+      },
+      "species": {
+        "title": "Re-match species data",
+        "description": "Choose the plant, and optionally a name to search for instead of the plant name. Each provider is matched in turn and can be skipped.",
+        "data": {
+          "plant_uuid": "Plant",
+          "search": "Search for"
         }
       }
     },
     "abort": {
       "plant_not_found": "The selected plant no longer exists.",
-      "no_plants": "There are no plants to remove."
+      "no_plants": "There are no plants to remove.",
+      "cannot_save_plant": "The plant could not be saved.",
+      "plant_changed": "The plant changed while this form was open. Try again."
     },
     "error": {
       "cannot_remove_plant": "The plant removal could not be completed. Cleanup will retry.",

@@ -1,0 +1,132 @@
+{
+ "_about": "Live Perenual response, GET /api/v2/species/details/1469 with a free-plan key (2026-09-25). The API key embedded in hardiness_location and care_guides is redacted, signed image query strings removed, and the description shortened; all other values as returned.",
+ "http_status": 200,
+ "body": {
+  "id": 1469,
+  "common_name": "rattlesnake plant",
+  "scientific_name": [
+   "Calathea lancifolia",
+   "Goeppertia insignis"
+  ],
+  "other_name": [],
+  "family": "Marantaceae",
+  "hybrid": null,
+  "authority": null,
+  "subspecies": null,
+  "cultivar": null,
+  "variety": null,
+  "species_epithet": "lancifolia",
+  "genus": "Calathea",
+  "origin": [
+   "Brazil"
+  ],
+  "type": "Herb",
+  "dimensions": [
+   {
+    "type": null,
+    "min_value": 0.75,
+    "max_value": 1.5,
+    "unit": "feet"
+   }
+  ],
+  "cycle": "Herbaceous Perennial",
+  "attracts": [],
+  "propagation": [
+   "Division",
+   "Stem Propagation",
+   "Leaf Cutting",
+   "Air Layering Propagation"
+  ],
+  "hardiness": {
+   "min": "11",
+   "max": "12"
+  },
+  "hardiness_location": {
+   "full_url": "https://perenual.com/api/hardiness-map?species_id=1469&size=og&key=REDACTED",
+   "full_iframe": "<iframe src='https://perenual.com/api/hardiness-map?species_id=1469&size=og&key=REDACTED'></iframe>"
+  },
+  "watering": "Average",
+  "watering_general_benchmark": {
+   "value": null,
+   "unit": "days"
+  },
+  "plant_anatomy": [
+   {
+    "part": "leaves",
+    "color": [
+     "green"
+    ]
+   },
+   {
+    "part": "stem",
+    "color": [
+     "green"
+    ]
+   }
+  ],
+  "sunlight": [
+   "part shade",
+   "part sun/part shade"
+  ],
+  "pruning_month": [
+   "March",
+   "April",
+   "May",
+   "June",
+   "July",
+   "August",
+   "September",
+   "March",
+   "April",
+   "May",
+   "June",
+   "July",
+   "September",
+   "October",
+   "November",
+   "October"
+  ],
+  "pruning_count": [],
+  "seeds": false,
+  "maintenance": "Moderate",
+  "care_guides": "http://perenual.com/api/species-care-guide-list?species_id=1469&key=REDACTED",
+  "soil": [],
+  "growth_rate": "Low",
+  "drought_tolerant": false,
+  "salt_tolerant": false,
+  "thorny": false,
+  "invasive": false,
+  "tropical": true,
+  "indoor": true,
+  "care_level": "Medium",
+  "pest_susceptibility": [],
+  "flowers": true,
+  "flowering_season": null,
+  "cones": false,
+  "fruits": false,
+  "edible_fruit": false,
+  "harvest_season": null,
+  "leaf": true,
+  "edible_leaf": false,
+  "cuisine": false,
+  "medicinal": false,
+  "poisonous_to_humans": false,
+  "poisonous_to_pets": false,
+  "description": "Calathea lancifolia, commonly known as rattlesnake plant, is an amazing houseplant that has extra-ordinary foliage. [trimmed]",
+  "default_image": {
+   "license": 4,
+   "license_name": "Attribution License",
+   "regular_url": "https://s3.us-central-1.wasabisys.com/perenual/species_image/1469_calathea_lancifolia/regular/3676781257_2e8730f471_b.jpg"
+  },
+  "other_images": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xWateringQuality": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xWateringPeriod": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xWateringAvgVolumeRequirement": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xWateringDepthRequirement": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xWateringBasedTemperature": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xWateringPhLevel": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xSunlightDuration": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xTemperatureTolence": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry",
+  "xPlantSpacingRequirement": "Upgrade Plan To Supreme For Access https://perenual.com/subscription-api-pricing. Im sorry"
+ }
+}

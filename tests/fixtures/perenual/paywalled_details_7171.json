@@ -1,0 +1,5 @@
+{
+ "_about": "Live Perenual response, GET /api/v2/species/details/7171 with a free-plan key (2026-09-25): a record above the free range. The trailing emoji is replaced with ASCII.",
+ "http_status": 429,
+ "body": "Please Upgrade Plan - https://perenual.com/subscription-api-pricing. Sorry"
+}

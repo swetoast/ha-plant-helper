@@ -28,8 +28,10 @@ wet soil instead of being nagged.
 - Seasonal dormancy detected from a month of light and temperature history.
 - Weather aware, outdoor. Rain pauses a watering recommendation, frost and
   exposure show as context, and dormant plants tolerate wet soil longer.
-- Optional species enrichment from Perenual, Trefle, and iNaturalist, including
-  a cached, authenticated species photo.
+- Optional species enrichment from iNaturalist, Trefle, and Perenual. You pick
+  the right record from each provider (or skip it) when adding a plant, and can
+  re-match later; each chosen record is then fetched by ID and cached, with a
+  local, authenticated species photo.
 - Add, edit, and remove plants from the UI. No YAML.
 
 ## Requirements
