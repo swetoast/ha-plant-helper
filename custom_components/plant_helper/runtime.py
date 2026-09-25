@@ -638,18 +638,20 @@ class PlantHelperRuntime:
                         body: Any = await response.json(content_type=None)
                     except Exception as err:
                         raise ProviderError("provider", response.status, "non-json response") from err
-                    return {"http_status": response.status, "body": body, "headers": dict(response.headers)}
+                    return {"http_status": response.status, "body": body, "headers": {str(key).lower(): value for key, value in response.headers.items()}}
             except ProviderError:
                 raise
             except Exception as err:
                 raise ProviderError("network", message=str(err)) from err
 
         def observe_trefle(raw: Mapping[str, Any]) -> Mapping[str, Any]:
+            # Header names are normalized to lowercase in request_json because HTTP/2
+            # (which Trefle serves) lowercases them; a cased lookup would never match.
             headers = raw.get("headers", {})
             gate.observe(
                 int(raw.get("http_status", 200)),
-                headers.get("RateLimit-Remaining"),
-                headers.get("RateLimit-Reset"),
+                headers.get("ratelimit-remaining"),
+                headers.get("ratelimit-reset"),
                 time.time(),
             )
             return raw

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.38 - 2026-09-25
+
+- Fixed the Trefle rate-limit self-regulation shipped in 0.0.37, which never actually engaged. Response headers were looked up with capitalized keys (`RateLimit-Remaining`, `RateLimit-Reset`), but Trefle serves HTTP/2, which lowercases all header names, so the lookup always missed and the gate could only react to a real 429 instead of backing off before one. Response header keys are now normalized to lowercase, so the gate reads `ratelimit-remaining`/`ratelimit-reset` and self-regulates as intended. Confirmed against a live Trefle response (`ratelimit-remaining: 56`). The image proxy already read its headers case-insensitively and was unaffected.
+- Verified (no code change needed) that the Trefle species-detail field paths the care parser reads - `growth.light`, `growth.atmospheric_humidity`, `growth.soil_humidity`, `growth.ph_minimum`/`ph_maximum`, `growth.minimum_temperature.deg_c`/`maximum_temperature.deg_c`, `specifications.growth_habit`/`growth_rate`/`toxicity`/`average_height.cm`, and top-level `duration`/`edible` - match the live detail response shape.
+
 ## 0.0.37 - 2026-09-24
 
 - Richer Trefle enrichment. After iNaturalist confirms a species, the chain now follows the Trefle match to its species detail endpoint and pulls the growth and care record: `light_requirement`, `humidity_requirement`, `soil_moisture_requirement` (Trefle 0-10 scales), `ph_minimum`, `ph_maximum`, `minimum_temperature_c`, `maximum_temperature_c`, `growth_habit`, `growth_rate`, `toxicity`, `average_height_cm`, `duration`, and `edible`. These appear as attributes on the species sensor; fields Trefle lacks for a species are omitted. The Trefle search response only carries taxonomy and an image, so the detail fetch is what makes this data available.
