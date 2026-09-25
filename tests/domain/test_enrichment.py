@@ -128,13 +128,28 @@ def test_inaturalist_derives_genus_from_binomial_when_taxonomy_absent():
 # ---- from test_enrichment_provider_path_017.py ----
 def enrichment_provider_path_017_run(coro): return asyncio.run(coro)
 
-def test_confirmed_alias_is_canonicalized():
+def test_synonym_canonicalizes_to_accepted_name_via_trefle():
+ # iNaturalist's active name here is the older synonym; Trefle supplies the
+ # accepted name and lists the synonym, so the chain canonicalizes generally -
+ # no per-species special case.
+ async def ina(q): return {"results":[{"id":67710,"name":"Sansevieria trifasciata","preferred_common_name":"Snake Plant","matched_term":"Snake Plant"}]}
+ async def trefle(q): return {"data":[{"id":375325,"scientific_name":"Dracaena trifasciata","synonyms":["Sansevieria trifasciata"],"family":"Asparagaceae","genus":"Dracaena"}]}
+ async def empty(q): return {"data":[]}
+ chain=ChainedSpeciesEnrichment(INaturalistAdapter(ina),TrefleAdapter(trefle),PerenualAdapter(empty,""))
+ candidates=enrichment_provider_path_017_run(chain.discover("Snake Plant"))
+ result=enrichment_provider_path_017_run(chain.enrich_selected("Snake Plant",candidates[0]))
+ assert result.data["scientific_name"]=="Dracaena trifasciata"
+ assert result.data["family"]=="Asparagaceae" and result.data["common_name"]=="Snake Plant"
+
+def test_without_a_resolving_provider_inaturalist_name_is_kept_not_faked():
+ # No provider can supply an accepted name, so the chain keeps what iNaturalist
+ # returned instead of inventing one - consistent behaviour for every species.
  async def ina(q): return {"results":[{"id":67710,"name":"Sansevieria trifasciata","preferred_common_name":"Snake Plant","matched_term":"Snake Plant"}]}
  async def empty(q): return {"data":[]}
  chain=ChainedSpeciesEnrichment(INaturalistAdapter(ina),TrefleAdapter(empty,""),PerenualAdapter(empty,""))
  candidates=enrichment_provider_path_017_run(chain.discover("Snake Plant"))
  result=enrichment_provider_path_017_run(chain.enrich_selected("Snake Plant",candidates[0]))
- assert result.data["scientific_name"]=="Dracaena trifasciata"
+ assert result.data["scientific_name"]=="Sansevieria trifasciata"
  assert result.data["common_name"]=="Snake Plant"
 
 def test_provider_single_flight():

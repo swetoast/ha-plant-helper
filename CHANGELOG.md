@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.40 - 2026-09-25
+
+- Removed the hardcoded snake-plant name canonicalization. `enrich_selected` special-cased Dracaena/Sansevieria trifasciata: it injected both names as aliases and then force-overwrote the resolved scientific name to "Dracaena trifasciata" even when no provider could actually resolve it. This was the only per-species logic in the codebase and it behaved inconsistently - one species got a faked accepted name while every other synonym-named plant kept the name iNaturalist returned. Canonicalization now happens generally through the provider chain: iNaturalist may return an older synonym as its active name, Trefle returns the accepted name and lists the synonym, and the chain matches them and adopts Trefle's accepted name. Plants enriched with Trefle configured (the snake plant included) are unchanged; without a resolving provider the name iNaturalist returned is kept as-is rather than invented for one species.
+
 ## 0.0.39 - 2026-09-25
 
 - Enrichment now reliably completes when adding a plant. On add, the flow discovers candidates and the user picks one, but `schedule_enrichment` then re-resolved the stored scientific name through iNaturalist and required exactly one candidate to match across scientific name, common name, or matched term. When iNaturalist returned the species alongside an infraspecific taxon (subspecies or variety) that shared the same matched term, that re-match went "ambiguous" and skipped enrichment even though a valid species had been selected. The matcher now prefers an exact scientific-name hit, so a precise binomial resolves to its own taxon and the Trefle/Perenual chain runs.

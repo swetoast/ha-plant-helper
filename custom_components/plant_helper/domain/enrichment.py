@@ -133,8 +133,6 @@ class ChainedSpeciesEnrichment:
   scientific=str(selected.get('scientific_name','')).strip()
   if not scientific:raise ValueError('selected candidate requires scientific_name')
   aliases=[scientific,*[str(v) for v in selected.get('synonyms',[]) if v]]
-  confirmed_snake_alias=normalize_species_key(scientific) in {'dracaena trifasciata','sansevieria trifasciata'}
-  if confirmed_snake_alias:aliases.extend(['Dracaena trifasciata','Sansevieria trifasciata'])
   identity=ResolvedIdentity(scientific,str(selected.get('common_name') or common_name),tuple(dict.fromkeys(aliases)),provider_id=selected.get('provider_id'))
   # iNaturalist is the confirmed base; Trefle and Perenual only enhance it, so a
   # provider failure (rate limit, auth, network) skips that provider rather than
@@ -152,8 +150,6 @@ class ChainedSpeciesEnrichment:
     trefle_care=await self.trefle.details(trefle_match.get('id'))
    except ProviderError:
     trefle_care={}
-  if confirmed_snake_alias:
-   identity=ResolvedIdentity('Dracaena trifasciata',identity.common_name,identity.aliases,identity.family,identity.genus,identity.provider_id)
   perenual_match=None
   try:
    queries=tuple(dict.fromkeys([identity.scientific_name,*identity.aliases,common_name]))
