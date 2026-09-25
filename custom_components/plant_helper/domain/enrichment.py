@@ -25,6 +25,29 @@ def redact(value:Any,secrets:tuple[str,...]=())->str:
  return text
 
 def _first(value:Any)->Any:return value[0] if isinstance(value,list) and value else value
+
+def parse_trefle_care(data:Mapping[str,Any])->dict[str,Any]:
+ """Extract the care-relevant fields from a Trefle species detail record."""
+ growth=data.get('growth') if isinstance(data.get('growth'),Mapping) else {}
+ spec=data.get('specifications') if isinstance(data.get('specifications'),Mapping) else {}
+ def _deg_c(value:Any)->Any:return value.get('deg_c') if isinstance(value,Mapping) else None
+ def _cm(value:Any)->Any:return value.get('cm') if isinstance(value,Mapping) else None
+ fields={
+  'light_requirement':growth.get('light'),
+  'humidity_requirement':growth.get('atmospheric_humidity'),
+  'soil_moisture_requirement':growth.get('soil_humidity'),
+  'ph_minimum':growth.get('ph_minimum'),
+  'ph_maximum':growth.get('ph_maximum'),
+  'minimum_temperature_c':_deg_c(growth.get('minimum_temperature')),
+  'maximum_temperature_c':_deg_c(growth.get('maximum_temperature')),
+  'growth_habit':spec.get('growth_habit'),
+  'growth_rate':spec.get('growth_rate'),
+  'toxicity':spec.get('toxicity'),
+  'average_height_cm':_cm(spec.get('average_height')),
+  'duration':data.get('duration'),
+  'edible':data.get('edible'),
+ }
+ return {key:value for key,value in fields.items() if value not in (None,'',[],{})}
 class PerenualAdapter:
  name='perenual'
  def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],credential:str=''):self.request=request;self.credential=credential
@@ -43,7 +66,7 @@ class PerenualAdapter:
   return [{'scientific_name':_first(x.get('scientific_name')),'common_name':x.get('common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('synonyms',[]),'watering_category':x.get('watering'),'sunlight_requirements':x.get('sunlight'),'image_url':(x.get('default_image') or {}).get('regular_url')} for x in items]
 class TrefleAdapter:
  name='trefle'
- def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],credential:str=''):self.request=request;self.credential=credential
+ def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],detail_request:Callable[[Any],Awaitable[Mapping[str,Any]]]|None=None,credential:str=''):self.request=request;self.detail_request=detail_request;self.credential=credential
  async def search(self,query:str)->list[dict[str,Any]]:
   raw=await self.request(query)
   status=int(raw.get('http_status',raw.get('status',200)))
@@ -52,7 +75,15 @@ class TrefleAdapter:
   items=payload.get('data',[]) if isinstance(payload,Mapping) else []
   if isinstance(items,Mapping):items=[items]
   elif not isinstance(items,list):items=[]
-  return [{'scientific_name':x.get('scientific_name'),'common_name':x.get('common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('synonyms',[]),'image_url':x.get('image_url')} for x in items]
+  return [{'id':x.get('id'),'scientific_name':x.get('scientific_name'),'common_name':x.get('common_name'),'family':x.get('family'),'genus':x.get('genus'),'synonyms':x.get('synonyms',[]),'image_url':x.get('image_url')} for x in items]
+ async def details(self,species_id:Any)->dict[str,Any]:
+  if species_id in (None,'') or self.detail_request is None:return {}
+  raw=await self.detail_request(species_id)
+  status=int(raw.get('http_status',raw.get('status',200)))
+  if status>=400:raise ProviderError('rate' if status==429 else 'auth' if status in {401,403} else 'provider',status)
+  payload=raw.get('body',raw)
+  data=payload.get('data') if isinstance(payload,Mapping) else None
+  return parse_trefle_care(data) if isinstance(data,Mapping) else {}
 class INaturalistAdapter:
  name='inaturalist'
  def __init__(self,request:Callable[[str],Awaitable[Mapping[str,Any]]],credential:str=''):self.request=request;self.credential=credential
@@ -103,21 +134,35 @@ class ChainedSpeciesEnrichment:
   confirmed_snake_alias=normalize_species_key(scientific) in {'dracaena trifasciata','sansevieria trifasciata'}
   if confirmed_snake_alias:aliases.extend(['Dracaena trifasciata','Sansevieria trifasciata'])
   identity=ResolvedIdentity(scientific,str(selected.get('common_name') or common_name),tuple(dict.fromkeys(aliases)),provider_id=selected.get('provider_id'))
-  trefle_candidates=await self._search(self.trefle,identity.scientific_name)
-  trefle_match=next((candidate for candidate in trefle_candidates if _identity_match(identity.aliases,candidate)),None)
+  # iNaturalist is the confirmed base; Trefle and Perenual only enhance it, so a
+  # provider failure (rate limit, auth, network) skips that provider rather than
+  # discarding the whole match.
+  trefle_match=None;trefle_care={}
+  try:
+   trefle_candidates=await self._search(self.trefle,identity.scientific_name)
+   trefle_match=next((candidate for candidate in trefle_candidates if _identity_match(identity.aliases,candidate)),None)
+  except ProviderError:
+   trefle_match=None
   if trefle_match:
    aliases=tuple(dict.fromkeys([*identity.aliases,str(trefle_match.get('scientific_name') or ''),*[str(v) for v in trefle_match.get('synonyms',[]) if v]]))
    identity=ResolvedIdentity(str(trefle_match.get('scientific_name') or identity.scientific_name),identity.common_name,tuple(v for v in aliases if v),trefle_match.get('family'),trefle_match.get('genus'),identity.provider_id)
+   try:
+    trefle_care=await self.trefle.details(trefle_match.get('id'))
+   except ProviderError:
+    trefle_care={}
   if confirmed_snake_alias:
    identity=ResolvedIdentity('Dracaena trifasciata',identity.common_name,identity.aliases,identity.family,identity.genus,identity.provider_id)
   perenual_match=None
-  queries=tuple(dict.fromkeys([identity.scientific_name,*identity.aliases,common_name]))
-  for query in queries:
-   candidates=await self._search(self.perenual,query)
-   perenual_match=next((candidate for candidate in candidates if _identity_match((*identity.aliases,identity.scientific_name,common_name),candidate)),None)
-   if perenual_match:break
+  try:
+   queries=tuple(dict.fromkeys([identity.scientific_name,*identity.aliases,common_name]))
+   for query in queries:
+    candidates=await self._search(self.perenual,query)
+    perenual_match=next((candidate for candidate in candidates if _identity_match((*identity.aliases,identity.scientific_name,common_name),candidate)),None)
+    if perenual_match:break
+  except ProviderError:
+   perenual_match=None
   results={'inaturalist':dict(selected)}
-  if trefle_match:results['trefle']=trefle_match
+  if trefle_match:results['trefle']={**trefle_match,**trefle_care}
   if perenual_match:results['perenual']=perenual_match
   data=merge_provider_fields(results)
   data['scientific_name']=identity.scientific_name

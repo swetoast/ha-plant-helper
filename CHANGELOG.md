@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.37 - 2026-09-24
+
+- Richer Trefle enrichment. After iNaturalist confirms a species, the chain now follows the Trefle match to its species detail endpoint and pulls the growth and care record: `light_requirement`, `humidity_requirement`, `soil_moisture_requirement` (Trefle 0-10 scales), `ph_minimum`, `ph_maximum`, `minimum_temperature_c`, `maximum_temperature_c`, `growth_habit`, `growth_rate`, `toxicity`, `average_height_cm`, `duration`, and `edible`. These appear as attributes on the species sensor; fields Trefle lacks for a species are omitted. The Trefle search response only carries taxonomy and an image, so the detail fetch is what makes this data available.
+- Rate-limit self-regulation for Trefle. Every Trefle response's `RateLimit-Remaining` and `RateLimit-Reset` headers are read through a small gate that stops issuing Trefle requests once the window is spent and resumes at the reported reset time, so bursts (for example re-enriching many plants on startup) back off before hitting Trefle's 60-requests-per-minute limit instead of absorbing 429s.
+- Resilient chaining. A Trefle or Perenual failure (rate limit, auth, or network) during enrichment now skips only that provider instead of discarding the whole result, so the confirmed iNaturalist identity, taxonomy, and photo survive a secondary provider outage.
+
 ## 0.0.36 - 2026-09-24
 
 - Added a dedicated `image.<plant>` entity for the species photo. It serves the already-cached, sanitized WebP through Home Assistant's own image proxy, so the photo renders natively as the entity picture and updates automatically when a new photo is fetched. The entity is unavailable until a photo has been resolved for that plant, and is removed with the plant. This adds the IMAGE platform alongside the existing sensor and binary_sensor platforms.

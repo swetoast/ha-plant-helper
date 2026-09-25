@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import logging
+import time
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -13,6 +14,7 @@ from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
 from .domain.runtime import RuntimeCollection
+from .domain.rate_limit import RateLimitGate
 from .domain.interpretation import interpret_indoor, interpret_outdoor
 from .domain.temporal.history import ObservationHistory
 from .domain.temporal.humidity import (
@@ -110,6 +112,7 @@ class PlantHelperRuntime:
     species_images: dict[str, Any] = field(default_factory=dict)
     learning: Any = None
     _blocked: set[str] = field(default_factory=set)
+    _trefle_gate: RateLimitGate = field(default_factory=RateLimitGate)
 
     async def async_initialize(self, backend: StorageBackend) -> None:
         """Load persistent storage before platforms are forwarded."""
@@ -626,6 +629,7 @@ class PlantHelperRuntime:
         session = async_get_clientsession(hass)
         perenual_key = str(options.get("perenual_api_key", "")).strip()
         trefle_key = str(options.get("trefle_api_key", "")).strip()
+        gate = self._trefle_gate
 
         async def request_json(url: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
             try:
@@ -634,11 +638,21 @@ class PlantHelperRuntime:
                         body: Any = await response.json(content_type=None)
                     except Exception as err:
                         raise ProviderError("provider", response.status, "non-json response") from err
-                    return {"http_status": response.status, "body": body}
+                    return {"http_status": response.status, "body": body, "headers": dict(response.headers)}
             except ProviderError:
                 raise
             except Exception as err:
                 raise ProviderError("network", message=str(err)) from err
+
+        def observe_trefle(raw: Mapping[str, Any]) -> Mapping[str, Any]:
+            headers = raw.get("headers", {})
+            gate.observe(
+                int(raw.get("http_status", 200)),
+                headers.get("RateLimit-Remaining"),
+                headers.get("RateLimit-Reset"),
+                time.time(),
+            )
+            return raw
 
         async def inaturalist_request(query: str) -> Mapping[str, Any]:
             return await request_json(
@@ -647,11 +661,23 @@ class PlantHelperRuntime:
             )
 
         async def trefle_request(query: str) -> Mapping[str, Any]:
-            if not trefle_key:
+            if not trefle_key or not gate.allow(time.time()):
                 return {"data": []}
-            return await request_json(
-                "https://trefle.io/api/v1/species/search",
-                {"q": query, "limit": 10, "token": trefle_key},
+            return observe_trefle(
+                await request_json(
+                    "https://trefle.io/api/v1/species/search",
+                    {"q": query, "limit": 10, "token": trefle_key},
+                )
+            )
+
+        async def trefle_details(species_id: Any) -> Mapping[str, Any]:
+            if not trefle_key or not gate.allow(time.time()):
+                return {"data": None}
+            return observe_trefle(
+                await request_json(
+                    f"https://trefle.io/api/v1/species/{species_id}",
+                    {"token": trefle_key},
+                )
             )
 
         async def perenual_request(query: str) -> Mapping[str, Any]:
@@ -664,7 +690,7 @@ class PlantHelperRuntime:
 
         self.species_enrichment = ChainedSpeciesEnrichment(
             INaturalistAdapter(inaturalist_request),
-            TrefleAdapter(trefle_request, trefle_key),
+            TrefleAdapter(trefle_request, trefle_details, credential=trefle_key),
             PerenualAdapter(perenual_request, perenual_key),
         )
 
@@ -705,6 +731,19 @@ class PlantHelperRuntime:
                 "genus",
                 "watering_category",
                 "sunlight_requirements",
+                "light_requirement",
+                "humidity_requirement",
+                "soil_moisture_requirement",
+                "ph_minimum",
+                "ph_maximum",
+                "minimum_temperature_c",
+                "maximum_temperature_c",
+                "growth_habit",
+                "growth_rate",
+                "toxicity",
+                "average_height_cm",
+                "duration",
+                "edible",
                 "provenance",
             )
             if result.data.get(key) not in (None, "", [], {})

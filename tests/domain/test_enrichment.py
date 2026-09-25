@@ -153,6 +153,56 @@ def test_field_owners_and_provenance():
     assert merged["provenance"]["image_url"]=="inaturalist"
 
 
+def test_trefle_care_parser_extracts_growth_and_specifications_and_drops_nulls():
+    care=parse_trefle_care({
+        'growth':{'light':7,'atmospheric_humidity':5,'soil_humidity':4,'ph_minimum':6.0,'ph_maximum':7.5,'minimum_temperature':{'deg_c':10,'deg_f':50},'maximum_temperature':{'deg_c':30,'deg_f':86},'growth_months':None},
+        'specifications':{'growth_habit':'Herb','growth_rate':'Slow','toxicity':'low','average_height':{'cm':90},'maximum_height':{'cm':None}},
+        'duration':['perennial'],'edible':False,
+    })
+    assert care['light_requirement']==7 and care['humidity_requirement']==5 and care['soil_moisture_requirement']==4
+    assert care['ph_minimum']==6.0 and care['ph_maximum']==7.5
+    assert care['minimum_temperature_c']==10 and care['maximum_temperature_c']==30
+    assert care['growth_habit']=='Herb' and care['growth_rate']=='Slow' and care['toxicity']=='low' and care['average_height_cm']==90
+    assert care['duration']==['perennial'] and care['edible'] is False
+    assert 'growth_months' not in care
+
+def test_enrich_selected_chains_to_trefle_detail_for_care_fields():
+    async def trefle_search(q):
+        return {'data':[{'id':375325,'scientific_name':'Dracaena trifasciata','synonyms':['Sansevieria trifasciata'],'family':'Asparagaceae','genus':'Dracaena','image_url':'t.jpg'}]}
+    detail_calls=[]
+    async def trefle_detail(species_id):
+        detail_calls.append(species_id)
+        return {'data':{'growth':{'light':7,'soil_humidity':4},'specifications':{'toxicity':'low'}}}
+    async def perenual(q):return {'data':[]}
+    chain=ChainedSpeciesEnrichment(INaturalistAdapter(lambda q:asyncio.sleep(0,result={})),TrefleAdapter(trefle_search,trefle_detail),PerenualAdapter(perenual))
+    selected={'scientific_name':'Dracaena trifasciata','common_name':'Snake Plant','synonyms':['Sansevieria trifasciata']}
+    result=enrichment_run(chain.enrich_selected('Snake Plant',selected))
+    assert detail_calls==[375325]
+    assert result.data['light_requirement']==7 and result.data['soil_moisture_requirement']==4 and result.data['toxicity']=='low'
+    assert result.data['scientific_name']=='Dracaena trifasciata' and result.data['family']=='Asparagaceae'
+
+def test_provider_failure_does_not_discard_inaturalist_match():
+    async def trefle_search(q):raise ProviderError('rate',429)
+    async def perenual(q):raise ProviderError('provider',500)
+    chain=ChainedSpeciesEnrichment(INaturalistAdapter(lambda q:asyncio.sleep(0,result={})),TrefleAdapter(trefle_search),PerenualAdapter(perenual))
+    selected={'scientific_name':'Dracaena trifasciata','common_name':'Snake Plant'}
+    result=enrichment_run(chain.enrich_selected('Snake Plant',selected))
+    assert result.status=='matched'
+    assert result.data['scientific_name']=='Dracaena trifasciata' and result.data['common_name']=='Snake Plant'
+
+def test_rate_limit_gate_self_regulates_on_remaining_and_429():
+    from domain.rate_limit import RateLimitGate
+    gate=RateLimitGate()
+    assert gate.allow(1000.0)
+    gate.observe(200,'5','2000',1000.0); assert gate.allow(1000.0)
+    gate.observe(200,'0','1060',1000.0)
+    assert not gate.allow(1000.0) and not gate.allow(1059.0) and gate.allow(1060.0)
+    recovered=RateLimitGate(); recovered.observe(429,'0','5000',1000.0); assert not recovered.allow(1000.0)
+    recovered.observe(200,'10','6000',1000.0); assert recovered.allow(1000.0)
+    cooldown=RateLimitGate(cooldown_seconds=30.0); cooldown.observe(429,None,None,1000.0)
+    assert not cooldown.allow(1029.0) and cooldown.allow(1030.0)
+
+
 # ---- from test_image_proxy.py ----
 NOW=datetime(2026,1,1,tzinfo=timezone.utc)
 def image_proxy_run(c):return asyncio.run(c)

@@ -29,6 +29,19 @@ FIELD_OWNERS={
     "watering_category":("perenual","trefle"),
     "sunlight_requirements":("perenual","trefle"),
     "image_url":("inaturalist","perenual","trefle"),
+    "light_requirement":("trefle",),
+    "humidity_requirement":("trefle",),
+    "soil_moisture_requirement":("trefle",),
+    "ph_minimum":("trefle",),
+    "ph_maximum":("trefle",),
+    "minimum_temperature_c":("trefle",),
+    "maximum_temperature_c":("trefle",),
+    "growth_habit":("trefle",),
+    "growth_rate":("trefle",),
+    "toxicity":("trefle",),
+    "average_height_cm":("trefle",),
+    "duration":("trefle",),
+    "edible":("trefle",),
 }
 
 def merge_provider_fields(results: Mapping[str,Mapping[str,Any]]) -> dict[str,Any]:

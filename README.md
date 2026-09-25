@@ -54,7 +54,11 @@ Full reference: [Entities](docs/ENTITIES.md).
 ## Species data and photos
 
 Providers are optional and isolated: a provider failure never takes a plant
-offline. Species photos are downloaded server-side, validated, converted to
+offline. Once iNaturalist confirms a match, Trefle is queried for taxonomy and
+then for its growth/care record (light, humidity, soil-moisture, pH and
+temperature ranges, toxicity, height, duration and more), self-regulating
+against Trefle's published rate limit so it backs off before exhausting the
+window rather than absorbing 429s. Species photos are downloaded server-side, validated, converted to
 WebP, cached, and served from an authenticated local endpoint, so the frontend
 never loads a raw provider URL. The photo is exposed as `image.<plant>`, which
 Home Assistant renders natively as the entity picture, and is also linked from

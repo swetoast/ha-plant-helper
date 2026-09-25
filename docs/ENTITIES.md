@@ -62,9 +62,14 @@ a number from 0 to 100. Categorical values are kept as-is, not converted.
 
 `sensor.<plant>_species` - the resolved scientific name, or the query itself
 when no confident match is found. Attributes: `scientific_name`, `common_name`,
-`family`, `genus`, `watering_category`, `sunlight_requirements`, and `image_url`
-(a local authenticated thumbnail). Provider names, raw responses, and
-credentials are never exposed.
+`family`, `genus`, `watering_category`, `sunlight_requirements`, `image_url`
+(a local authenticated thumbnail), and, when Trefle has them, growth and care
+data pulled from Trefle's species detail: `light_requirement`,
+`humidity_requirement`, `soil_moisture_requirement` (0-10 scales), `ph_minimum`,
+`ph_maximum`, `minimum_temperature_c`, `maximum_temperature_c`, `growth_habit`,
+`growth_rate`, `toxicity`, `average_height_cm`, `duration`, and `edible`. Fields
+Trefle does not have for a species are simply absent. Provider names, raw
+responses, and credentials are never exposed.
 
 `image.<plant>` - the species photo, when one was found. Served from the local
 WebP cache through Home Assistant's own image proxy, so it renders natively as
