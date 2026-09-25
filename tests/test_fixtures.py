@@ -168,7 +168,7 @@ def test_inaturalist_dracaena_synonym_resolves_to_current_sansevieria_taxon():
         "scientific_name": "Sansevieria trifasciata",
         "common_name": "Snake Plant",
         "family": None,
-        "genus": None,
+        "genus": "Sansevieria",
         "synonyms": ["Dracaena trifasciata"],
         "image_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/488135905/medium.jpeg",
         "provider_id": 67710,

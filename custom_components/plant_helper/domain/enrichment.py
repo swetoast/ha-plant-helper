@@ -101,7 +101,9 @@ class INaturalistAdapter:
    synonyms=list(item.get('names',[])) if isinstance(item.get('names',[]),list) else []
    matched=item.get('matched_term')
    if matched and normalize_species_key(str(matched)) not in {normalize_species_key(str(value)) for value in synonyms}:synonyms.append(matched)
-   candidates.append({'scientific_name':item.get('name'),'common_name':item.get('preferred_common_name'),'family':item.get('family'),'genus':item.get('genus'),'synonyms':synonyms,'image_url':(item.get('default_photo') or {}).get('medium_url'),'provider_id':item.get('id'),'matched_term':matched})
+   name=str(item.get('name') or '')
+   genus=item.get('genus') or (name.split(' ',1)[0] if item.get('rank')=='species' and ' ' in name else None)
+   candidates.append({'scientific_name':item.get('name'),'common_name':item.get('preferred_common_name'),'family':item.get('family'),'genus':genus,'synonyms':synonyms,'image_url':(item.get('default_photo') or {}).get('medium_url'),'provider_id':item.get('id'),'matched_term':matched})
   return candidates
 
 @dataclass(frozen=True,slots=True)
@@ -179,6 +181,11 @@ def _identity_match(aliases:tuple[str,...],candidate:Mapping[str,Any])->bool:
 
 def select_exact_common_name_candidate(query:str,candidates:list[dict[str,Any]])->dict[str,Any]|None:
  normalized=normalize_species_key(query)
+ # A precise scientific-name query - for example the binomial the user already
+ # selected while adding the plant - resolves to its own taxon even when an
+ # infraspecific taxon (subspecies, variety) also carries the queried term.
+ by_scientific=[candidate for candidate in candidates if normalize_species_key(str(candidate.get('scientific_name','')))==normalized]
+ if len(by_scientific)==1:return by_scientific[0]
  exact=[candidate for candidate in candidates if normalized in {normalize_species_key(str(candidate.get('scientific_name',''))),normalize_species_key(str(candidate.get('common_name',''))),normalize_species_key(str(candidate.get('matched_term','')))}]
  return exact[0] if len(exact)==1 else None
 

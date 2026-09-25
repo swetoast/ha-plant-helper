@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.39 - 2026-09-25
+
+- Enrichment now reliably completes when adding a plant. On add, the flow discovers candidates and the user picks one, but `schedule_enrichment` then re-resolved the stored scientific name through iNaturalist and required exactly one candidate to match across scientific name, common name, or matched term. When iNaturalist returned the species alongside an infraspecific taxon (subspecies or variety) that shared the same matched term, that re-match went "ambiguous" and skipped enrichment even though a valid species had been selected. The matcher now prefers an exact scientific-name hit, so a precise binomial resolves to its own taxon and the Trefle/Perenual chain runs.
+- iNaturalist supplies the genus out of the box. Its autocomplete response carries no family or genus fields, so a keyless install previously got neither; the genus is now derived from the species binomial (family still requires Trefle). When a Trefle key is present, Trefle's genus still takes precedence.
+- Audit confirmation, no change needed: API keys entered in the config flow are written to the entry options, which is exactly where the enrichment chain reads them, so keys on a fresh install reach the providers on first setup.
+
 ## 0.0.38 - 2026-09-25
 
 - Fixed the Trefle rate-limit self-regulation shipped in 0.0.37, which never actually engaged. Response headers were looked up with capitalized keys (`RateLimit-Remaining`, `RateLimit-Reset`), but Trefle serves HTTP/2, which lowercases all header names, so the lookup always missed and the gate could only react to a real 429 instead of backing off before one. Response header keys are now normalized to lowercase, so the gate reads `ratelimit-remaining`/`ratelimit-reset` and self-regulates as intended. Confirmed against a live Trefle response (`ratelimit-remaining: 56`). The image proxy already read its headers case-insensitively and was unaffected.

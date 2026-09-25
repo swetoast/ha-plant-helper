@@ -107,6 +107,23 @@ def test_exact_candidate_selection_accepts_scientific_name_query():
  candidates=[{'scientific_name':'Sansevieria trifasciata','common_name':'Snake Plant','matched_term':'Sansevieria trifasciata'}]
  assert select_exact_common_name_candidate('Sansevieria trifasciata',candidates)==candidates[0]
 
+def test_scientific_name_query_resolves_despite_infraspecific_ambiguity():
+ # iNaturalist/Trefle return the species alongside an infraspecific taxon that
+ # carries the same matched term; the precise binomial the add flow stored must
+ # still resolve to its own taxon so enrichment runs instead of going ambiguous.
+ candidates=[
+  {'scientific_name':'Dracaena trifasciata','common_name':'Snake Plant','matched_term':'Dracaena trifasciata'},
+  {'scientific_name':'Dracaena trifasciata subsp. trifasciata','common_name':None,'matched_term':'Dracaena trifasciata'},
+ ]
+ assert select_exact_common_name_candidate('Dracaena trifasciata',candidates)['scientific_name']=='Dracaena trifasciata'
+
+def test_inaturalist_derives_genus_from_binomial_when_taxonomy_absent():
+ # iNaturalist autocomplete carries no family/genus fields, so a keyless install
+ # still gets the genus from the species binomial (family needs Trefle).
+ async def req(q):return {'results':[{'name':'Dracaena trifasciata','rank':'species','preferred_common_name':'Snake Plant','default_photo':{'medium_url':'m.jpg'},'id':1}]}
+ candidates=enrichment_run(INaturalistAdapter(req).search('snake plant'))
+ assert candidates[0]['genus']=='Dracaena' and candidates[0]['family'] is None and candidates[0]['scientific_name']=='Dracaena trifasciata'
+
 
 # ---- from test_enrichment_provider_path_017.py ----
 def enrichment_provider_path_017_run(coro): return asyncio.run(coro)
