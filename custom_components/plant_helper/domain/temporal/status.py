@@ -1,9 +1,9 @@
-"""Single source of truth for the temporal engine's status vocabulary.
+"""Status, health and attention vocabulary, and the combined precedence.
 
-The moisture engine already returns one status per evaluation; this module
-keeps the string constants, the health mapping, the attention set, and the
-deterministic precedence ordering in one place so later slices (light,
-temperature, multi-signal precedence) never diverge from it.
+Pure. Every signal engine (moisture, temperature, light, sensor health) reports
+one candidate status; the combined engine picks the one a user needs to see with
+worst_of(), using the deterministic precedence from roadmap Phase 5. Health is
+the longer-term verdict and uses the roadmap's four states only.
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from typing import Iterable
 WAITING_FOR_DATA = "waiting_for_data"
 NORMAL = "normal"
 RECENTLY_WATERED = "recently_watered"
+PARTIAL_WATERING = "partial_watering"
 WET = "wet"
 STAYING_WET = "staying_wet"
 TOO_WET = "too_wet"
@@ -21,72 +22,71 @@ APPROACHING_DRY = "approaching_dry"
 NEEDS_WATER = "needs_water"
 TOO_DRY = "too_dry"
 WATERING_PAUSED = "watering_paused"
+TOO_COLD = "too_cold"
+TOO_HOT = "too_hot"
+INSUFFICIENT_LIGHT = "insufficient_light"
 SENSOR_PROBLEM = "sensor_problem"
 
-# Health strings written to sensor.<plant>_health. Coarser than status.
+# Health strings written to sensor.<plant>_health (roadmap section 13).
 HEALTH_UNKNOWN = "unknown"
 HEALTH_GOOD = "good"
 HEALTH_WATCH = "watch"
-HEALTH_NEEDS_WATER = "needs_water"
-HEALTH_TOO_WET = "too_wet"
-HEALTH_TOO_DRY = "too_dry"
+HEALTH_STRESSED = "stressed"
 
-# Statuses that raise binary_sensor.<plant>_needs_attention.
-ATTENTION_STATUSES = frozenset({TOO_WET, NEEDS_WATER, TOO_DRY, SENSOR_PROBLEM})
-
-# Deterministic precedence, most urgent first. When several signals compete in
-# later slices, worst_of() picks the status a user needs to see.
+# Deterministic precedence, most urgent first (roadmap Phase 5). The moisture
+# statuses are mutually exclusive with each other, so their relative order only
+# matters against the temperature, light and sensor statuses.
 STATUS_PRECEDENCE = (
     SENSOR_PROBLEM,
-    TOO_DRY,
     NEEDS_WATER,
+    TOO_DRY,
+    WATERING_PAUSED,
     TOO_WET,
     STAYING_WET,
-    WATERING_PAUSED,
-    APPROACHING_DRY,
-    DRYING,
-    WET,
     RECENTLY_WATERED,
+    PARTIAL_WATERING,
+    DRYING,
+    APPROACHING_DRY,
+    TOO_COLD,
+    TOO_HOT,
+    INSUFFICIENT_LIGHT,
+    WET,
     NORMAL,
     WAITING_FOR_DATA,
 )
-
 _RANK = {status: index for index, status in enumerate(STATUS_PRECEDENCE)}
 
+_HEALTH_RANK = {
+    HEALTH_GOOD: 0,
+    HEALTH_WATCH: 1,
+    HEALTH_STRESSED: 2,
+}
 
-def raises_attention(status: str) -> bool:
-    """True when the status should set needs_attention."""
-    return status in ATTENTION_STATUSES
+# Reasons that turn binary_sensor.<plant>_needs_attention on (roadmap Phase 5).
+# Only sustained, actionable conditions belong here.
+ATTENTION_REASONS = frozenset(
+    {
+        "soil_dry",
+        "persistently_dry",
+        "persistently_wet",
+        "prolonged_temperature_stress",
+        "several_days_insufficient_light",
+        "sensor_problem",
+    }
+)
 
 
-def worst_of(statuses: Iterable[str]) -> str:
-    """Return the highest-precedence (most urgent) status in the set.
-
-    Unknown statuses rank last so a typo never masks a real signal.
-    """
+def worst_of(statuses: Iterable[str | None]) -> str:
+    """Return the most urgent known status; unknown strings rank last."""
     ordered = [status for status in statuses if status in _RANK]
     if not ordered:
         return NORMAL
     return min(ordered, key=lambda status: _RANK[status])
 
 
-# Health values that are a moisture alarm or a missing primary signal; these
-# always win over any secondary (light / humidity) reading.
-_MOISTURE_PRIMARY = frozenset(
-    {HEALTH_NEEDS_WATER, HEALTH_TOO_WET, HEALTH_TOO_DRY, HEALTH_UNKNOWN}
-)
-
-
-def merge_health(moisture_health: str, *contexts: str | None) -> str:
-    """Fold light / humidity adequacy into health without overriding moisture.
-
-    A moisture alarm (or a missing moisture reading) is returned unchanged, so
-    secondary signals never mask or invent the primary verdict. Otherwise a
-    sustained inadequate secondary signal lifts health to 'watch'. Secondary
-    signals never raise needs_attention; that stays moisture-only.
-    """
-    if moisture_health in _MOISTURE_PRIMARY:
-        return moisture_health
-    if any(context in ("low", "high") for context in contexts if context):
-        return HEALTH_WATCH
-    return moisture_health
+def worst_health(values: Iterable[str | None]) -> str:
+    """Combine health verdicts; unknown only wins when nothing else is known."""
+    known = [value for value in values if value in _HEALTH_RANK]
+    if not known:
+        return HEALTH_UNKNOWN
+    return max(known, key=lambda value: _HEALTH_RANK[value])

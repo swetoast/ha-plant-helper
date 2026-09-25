@@ -1,10 +1,16 @@
 """Rolling observation history for one plant. Pure, no I/O, no clock.
 
-Responsibilities: deduplicate near-identical samples, keep a bounded rolling
-window, and answer the temporal questions the engine asks (latest valid value,
-moisture slope, coverage confidence, watering detection, and how long moisture
-has stayed above or below a threshold). Every method takes the caller's ``now``
-so the same history replays identically in any environment.
+Responsibilities: deduplicate samples without losing analytical value, keep a
+bounded rolling window, and answer the temporal questions the engines ask
+(latest valid value, moisture slope, coverage confidence, watering detection,
+run durations, point series and time-weighted segments). Every method takes the
+caller's ``now`` so the same history replays identically in any environment.
+
+Deduplication follows roadmap Phase 1: a sample is dropped only when nothing
+material changed on ANY signal, or when it arrives too soon after the previous
+one to add value. Validity flips, daylight transitions and sharp moisture rises
+are always kept, and a heartbeat sample is kept every HEARTBEAT_MINUTES so a
+steady plant still accumulates coverage.
 """
 from __future__ import annotations
 
@@ -14,13 +20,17 @@ from .observation import PlantObservation
 
 # Rolling-window retention and hard cap on stored observations.
 RETENTION_HOURS = 48.0
-MAX_OBSERVATIONS = 500
+MAX_OBSERVATIONS = 700
 
-# Deduplication: drop a sample only when it barely moved, arrived soon after the
-# previous one, and did not change validity. Validity flips and sharp rises are
-# always kept so watering and sensor dropouts are never smoothed away.
-DEDUP_DELTA = 0.5
-DEDUP_WINDOW_MINUTES = 10.0
+# Deduplication tuning.
+MIN_SPACING_MINUTES = 5.0
+HEARTBEAT_MINUTES = 30.0
+SHARP_RISE = 2.5
+MOISTURE_DELTA = 0.5
+TEMPERATURE_DELTA = 0.3
+HUMIDITY_DELTA = 2.0
+LIGHT_DELTA_LUX = 10.0
+LIGHT_DELTA_RATIO = 0.15
 
 # Confidence thresholds over the trailing 24 hours.
 CONFIDENCE_WINDOW_HOURS = 24.0
@@ -28,12 +38,80 @@ HIGH_COVERAGE_HOURS = 18.0
 MEDIUM_COVERAGE_HOURS = 8.0
 MAX_GAP_RATIO = 0.25
 
-# Watering detection defaults.
-WATERING_RISE = 5.0
-WATERING_WINDOW_MINUTES = 90.0
+# Watering detection defaults. Live recorder data showed probe noise and the
+# day/night swing reaching 5-6 points within 90 minutes, and slow soaks that
+# rise under 5 points in 90 minutes but 18 over a few hours. So the window is
+# six hours and the rise threshold scales with each sensor's own daily swing
+# (moisture.watering_rise_threshold); this default applies until that is known.
+WATERING_RISE = 8.0
+WATERING_WINDOW_MINUTES = 360.0
 
 # Slope window for trend detection.
 SLOPE_WINDOW_HOURS = 6.0
+
+_VALIDITY = (
+    "moisture_valid",
+    "soil_temperature_valid",
+    "light_valid",
+    "humidity_valid",
+)
+
+
+def _changed(prev: PlantObservation, obs: PlantObservation) -> bool:
+    """True when any valid signal moved by a material amount."""
+    def moved(attr: str, valid: str, delta: float) -> bool:
+        if not getattr(obs, valid):
+            return False
+        return abs(float(getattr(obs, attr)) - float(getattr(prev, attr))) >= delta
+
+    if moved("moisture", "moisture_valid", MOISTURE_DELTA):
+        return True
+    if moved("soil_temperature", "soil_temperature_valid", TEMPERATURE_DELTA):
+        return True
+    if moved("humidity", "humidity_valid", HUMIDITY_DELTA):
+        return True
+    if obs.light_valid:
+        a, b = float(prev.light), float(obs.light)
+        if abs(a - b) >= max(LIGHT_DELTA_LUX, LIGHT_DELTA_RATIO * max(a, b)):
+            return True
+    return False
+
+
+# A later rise only counts as a new watering once the soil has dried back at
+# least this far from its peak since the previous one; a soak that is still
+# climbing (bottom watering can take most of a day) is the same watering.
+REFILL_DRYDOWN = 3.0
+
+
+def same_watering(
+    detected: datetime | None,
+    previous: datetime | None,
+    history: "ObservationHistory | None" = None,
+) -> datetime | None:
+    """Collapse a watering episode into one event.
+
+    During a slow soak the lowest reading in the detection window keeps rising
+    as the window slides, so the detected crossing moves forward with every
+    reading. A detection belongs to the previously recorded watering when it
+    falls within the detection window of it, or when the soil has not dried back
+    by REFILL_DRYDOWN since; only a genuinely separate watering is a new event.
+    """
+    if detected is None:
+        return previous
+    if previous is None or detected <= previous:
+        return previous or detected
+    if detected - previous < timedelta(minutes=WATERING_WINDOW_MINUTES):
+        return previous
+    if history is not None:
+        peak = None
+        for t, value in history.points("moisture", "moisture_valid", previous):
+            if t > detected:
+                break
+            peak = value if peak is None else max(peak, value)
+            if peak - value >= REFILL_DRYDOWN:
+                return detected
+        return previous
+    return detected
 
 
 class ObservationHistory:
@@ -67,15 +145,23 @@ class ObservationHistory:
         return True
 
     def _is_duplicate(self, prev: PlantObservation, obs: PlantObservation) -> bool:
-        if prev.moisture_valid != obs.moisture_valid:
+        for valid in _VALIDITY:
+            if getattr(prev, valid) != getattr(obs, valid):
+                return False
+        if prev.is_daylight != obs.is_daylight:
+            return False
+        if (
+            prev.moisture_valid
+            and obs.moisture_valid
+            and float(obs.moisture) - float(prev.moisture) >= SHARP_RISE
+        ):
             return False
         gap_minutes = (obs.observed_at - prev.observed_at).total_seconds() / 60.0
-        if gap_minutes >= DEDUP_WINDOW_MINUTES:
-            return False
-        if not (prev.moisture_valid and obs.moisture_valid):
+        if gap_minutes < MIN_SPACING_MINUTES:
             return True
-        delta = abs((obs.moisture or 0.0) - (prev.moisture or 0.0))
-        return delta < DEDUP_DELTA
+        if gap_minutes >= HEARTBEAT_MINUTES:
+            return False
+        return not _changed(prev, obs)
 
     def _prune(self, now: datetime) -> None:
         cutoff = now - self._retention
@@ -93,12 +179,27 @@ class ObservationHistory:
         return None
 
     def moisture_slope(
-        self, now: datetime, *, window_hours: float = SLOPE_WINDOW_HOURS
+        self,
+        now: datetime,
+        *,
+        window_hours: float = SLOPE_WINDOW_HOURS,
+        since: datetime | None = None,
+        min_span_hours: float = 0.0,
     ) -> float | None:
-        """Least-squares moisture slope in percent per hour, or None."""
+        """Least-squares moisture slope in percent per hour, or None.
+
+        ``since`` starts the window no earlier than that moment (for example the
+        last watering, so the watering spike does not mask the decline after
+        it). ``min_span_hours`` requires the points to cover at least that long,
+        which keeps whole-percent sensors from producing a slope out of noise.
+        """
         cutoff = now - timedelta(hours=window_hours)
+        if since is not None and since > cutoff:
+            cutoff = since
         pts = [(o.observed_at, o.moisture) for o in self.valid() if o.observed_at >= cutoff]
         if len(pts) < 2:
+            return None
+        if (pts[-1][0] - pts[0][0]).total_seconds() / 3600.0 < min_span_hours:
             return None
         origin = pts[0][0]
         xs = [(t - origin).total_seconds() / 3600.0 for t, _ in pts]
@@ -229,3 +330,46 @@ class ObservationHistory:
         if len(values) < min_samples:
             return None
         return sum(values) / len(values)
+
+    def points(
+        self, attr: str, valid_attr: str, since: datetime | None = None
+    ) -> list[tuple[datetime, float]]:
+        """Valid (time, value) pairs for one signal, oldest first."""
+        return [
+            (obs.observed_at, float(getattr(obs, attr)))
+            for obs in self._obs
+            if getattr(obs, valid_attr)
+            and getattr(obs, attr) is not None
+            and (since is None or obs.observed_at >= since)
+        ]
+
+    def segments(
+        self,
+        attr: str,
+        valid_attr: str,
+        start: datetime,
+        end: datetime,
+        *,
+        max_hold_hours: float,
+    ) -> list[tuple[datetime, datetime, float | None, bool | None]]:
+        """Time-weighted pieces (t0, t1, value, is_daylight) covering [start, end].
+
+        Each observation holds its value until the next observation, for at most
+        ``max_hold_hours``; beyond that the time is uncovered (not returned).
+        An invalid reading yields a piece with value None, so callers can count
+        it as a gap rather than a zero.
+        """
+        hold = timedelta(hours=max_hold_hours)
+        pieces: list[tuple[datetime, datetime, float | None, bool | None]] = []
+        obs = self._obs
+        for index, current in enumerate(obs):
+            t0 = current.observed_at
+            t1 = obs[index + 1].observed_at if index + 1 < len(obs) else end
+            t1 = min(t1, t0 + hold)
+            a, b = max(t0, start), min(t1, end)
+            if b <= a:
+                continue
+            valid = getattr(current, valid_attr) and getattr(current, attr) is not None
+            value = float(getattr(current, attr)) if valid else None
+            pieces.append((a, b, value, current.is_daylight))
+        return pieces

@@ -1,5 +1,121 @@
 # Changelog
 
+## 0.0.43 - 2026-09-25
+
+Calibrated against live data, and learned baselines now drive judgments.
+Two weeks of real Home Assistant recorder history from two Zigbee soil sensors
+were replayed through the engine; that replay is now a regression test
+(`tests/domain/test_live_replay.py`). Before these fixes the snake plant, going
+through two perfectly normal watering cycles, raised `too_wet` attention for
+about 40 hours and sat in Health `watch` 45% of the time, and the second plant
+was in `watch` 29% of the time for healthy 70-76% air humidity. After them the
+snake plant raises no alerts and is `good` 97% of the time, and the second plant
+raises exactly its two genuine dry spells.
+
+- Drying detection. Soil counted as drying only at 0.5%/h (12 points a day)
+  over 6 hours; real pots dry 1-10 points a day and report whole percentages, so
+  a steadily drying pot read as stalled and escalated to `too_wet`. Drying is now
+  a decline of 0.05%/h or more over up to 48 hours, measured from the last
+  watering; two daily cycles average out the probe's ~8 point day/night swing.
+- Watering detection. The fixed 5 points in 90 minutes caught the probe's
+  day/night swing as waterings (for example 03:18 on Sep 18) and missed slow
+  soaks that rose 18 points over several hours. The rise threshold now scales
+  with each probe's own noise (1.5x its median daily range, 5-20 points) over a
+  six-hour window, and a soak counts as one watering until the soil dries back
+  by 3 points. False waterings had been restarting the trend, flashing
+  `recently_watered`, and feeding the learner fake cycles (it learned 9 and 10
+  cycles where there were 2).
+- `recently_watered` now holds for its window from the recorded watering, and a
+  watering ends the previous dry run. Previously a reading that dipped a point
+  during a soak bounced the status back to `needs_water` with the old dry run.
+- Band edges have 2 points of hysteresis and a dry spell must last 30 minutes
+  before it raises attention, so a sensor wobbling on the edge no longer flickers
+  needs-attention.
+- The staying-wet point scales with the dynamic wet limit instead of a fixed 24
+  hours.
+- Indoor air counts as humid above 80% (was 70%) and very humid above 90%.
+- Learned baselines now feed judgments (roadmap Phase 6): time back to range
+  sets the pot's own wet allowance; typical rise and peak judge partial
+  watering; the learned light norm (per month once known) relaxes the low-light
+  threshold so a dark season does not keep a healthy plant flagged; a missing
+  habitual grow light is flagged; learned temperature and humidity ranges widen
+  the mild bands (never the extremes). The default low-light day is 2500 lx-h,
+  which separated dim from normal days in the live data.
+- Learning fixes found by the replay: a soak no longer counts as several
+  waterings; the typical rise is the cycle's full rise (peak minus the trough
+  before the watering), not the rise at the moment of detection; and the span
+  before the first watering ever seen is not learned as a post-watering peak.
+- Real Open-Meteo indoor daylight response added as a test fixture.
+
+## 0.0.42 - 2026-09-25
+
+Implements the temporal sensor roadmap (`docs/design/temporal_sensor_roadmap.md`)
+in full: Phases 1-7 plus the appendix mechanics.
+
+BREAKING: `sensor.<plant>_health` now uses the roadmap's four states only:
+`good`, `watch`, `stressed`, `unknown`. The values `needs_water`, `too_wet` and
+`too_dry` are gone from Health (they remain Status values). Automations that
+matched those on Health need updating. Too-wet soil reads Health `watch`;
+prolonged dryness reads `stressed`.
+
+- History foundation (Phase 1). Observations now carry the daylight state in
+  force when they were taken. Deduplication considers every signal instead of
+  moisture only; previously a light, temperature or humidity change was dropped
+  whenever moisture had not moved in the last ten minutes. A heartbeat sample is
+  kept every 30 minutes and validity and day/night transitions are always kept.
+  The background tick now records observations, as the roadmap requires, so a
+  plant with steady moisture keeps coverage instead of drifting to low
+  confidence. One compact summary per local day is kept for 30 days.
+- Daylight (sections 3 and 8). Sunrise and sunset come from Open-Meteo, then a
+  cached forecast up to 48 hours old, then Home Assistant's own sun position,
+  then an uncertainty hold. Indoor plants now request sunrise and sunset too.
+  Unknown daylight is never treated as night. Air quality has no input.
+- Temperature and humidity duration (Phase 3). Continuous time out of range,
+  24-hour totals, recovery, rate of change and gaps. Temperature conditions:
+  normal, cool, cold, warm, hot, rapid_change, prolonged_cold, prolonged_heat;
+  bands are placement-relative. Humidity conditions: normal, dry_air,
+  humid_air, prolonged_dry_air, prolonged_humidity. Combined conditions
+  cold_wet_condition, accelerated_drying and slow_drying_humid_condition shape
+  summaries and health, using the vapor pressure deficit.
+- Gated light exposure (Phase 4). Light is judged as lux-hours during daylight,
+  not a 24-hour average: previously night readings dragged a well-lit plant
+  below the low-light threshold. Night light counts as supplemental only after
+  15 continuous minutes, at 60% weight, and a session belongs to the day it
+  started even across midnight. Days are classified against Open-Meteo
+  radiation (overcast, shaded, supplemental, optimal, adequate, low). Three low
+  days raise `insufficient_light` and needs-attention; overcast days are
+  forgiven for up to three days; two bright days in a dim spot read as shaded.
+  With unknown daylight no light alert can fire.
+- Drying coefficient (Phase 2). The wet-duration allowance now follows the
+  roadmap's weighted blend of soil trend, temperature, vapor dryness, light and
+  bounded outdoor radiation (never more than 15%). The previous evapotranspiration
+  branch read the wrong forecast key and never ran. New `sensor_problem`: no
+  valid moisture reading for six hours, or a frozen device.
+- Soil that is topped up before it ever dries back into range now keeps
+  accumulating wet duration. Previously each dip read as "drying" and the next
+  watering restarted the wet run, so repeated overwatering never escalated.
+- Combined interpretation (Phase 5). One engine combines every signal with the
+  roadmap's status precedence, adding `too_cold`, `too_hot`,
+  `insufficient_light`, `sensor_problem` and `partial_watering`. Needs-attention
+  reasons: soil_dry, persistently_dry, persistently_wet,
+  prolonged_temperature_stress, several_days_insufficient_light, sensor_problem.
+  New status attribute `temperature_context`.
+- Learned baselines (Phase 6). Learning continues after calibration: typical
+  watering rise and peak, drying slope, time back to range, normal light and
+  supplemental pattern, temperature and humidity ranges, and monthly variation.
+  Learned bands are bounded by the care profile, abnormal states are not
+  learned, and a placement change now preserves the other placement's baseline
+  instead of wiping both.
+- Appendix. Dormancy is now evidence-based (a month of low light plus a slightly
+  cooler week, or an outdoor plant outside its growing season); it extends the
+  wet allowance up to three times and lowers the needs-water threshold.
+  Partial watering is detected against the learned typical peak. Soil drying
+  far slower than this plant's learned rate is flagged.
+- Time-fast-forward tests (Phase 7). All 25 roadmap scenarios run against the
+  real engine in `tests/domain/test_timeline.py`, plus the appendix mechanics.
+- The temporal store is written only when something durable changes, instead of
+  after every one-minute tick.
+
 ## 0.0.41 - 2026-09-25
 
 Full-codebase audit. Fixes only; no new features.

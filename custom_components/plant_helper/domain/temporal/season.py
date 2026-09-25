@@ -1,60 +1,61 @@
-"""Seasonal dormancy as a multiplier on the expected drying rate.
+"""Evidence-based seasonal dormancy (roadmap appendix: wintering).
 
-Pure. A dormant plant uses less water and dries more slowly, so wet soil is more
-normal and should be tolerated longer before it reads too_wet. That is exactly a
-lower drying coefficient, so dormancy is expressed as a multiplier (< 1 when
-dormant) that drying.py folds into the coefficient. The coefficient's own clamp
-bounds the effect, so a season can never fully silence a genuinely waterlogged
-plant. Overwatering is the real dormancy-season risk, so this deliberately
-relaxes only the wet side; a genuinely dry plant still reads needs_water.
+Pure. A plant is treated as dormant when the last 30 days show both low light
+and a slight cooling: at least DORMANCY_MIN_DAYS of judged light days whose mean
+effective exposure is below the profile's threshold, and a recent week that is
+cooler than the weeks before it (or simply a cool room). Without a temperature
+sensor the light evidence alone decides. An outdoor plant is also dormant when
+Open-Meteo reports it is outside the growing season.
 
-Signals come from the interpretation layer already computed per plant: outdoor
-``growth_season`` (bool), indoor ``season`` / ``day_length``. Every constant is a
-starting value to tune against fixtures.
+Dormancy lengthens the tolerated wet period (see drying.py), lowers the
+needs_water threshold by NEEDS_WATER_RELAX so a resting plant is not prompted at
+its summer rhythm, and adds reason ``seasonal_dormancy`` to calm statuses.
 """
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Sequence
 
-DORMANT_MULTIPLIER = 0.7  # deep dormancy: markedly slower drying
-SHOULDER_MULTIPLIER = 0.85  # autumn / shortening days
-DORMANCY_DAYLIGHT_HOURS = 10.0  # below this day length reads as dormant
+from .daily import DailySummary
 
-
-def dormancy_multiplier(signals: Mapping | None) -> float:
-    """Return a drying multiplier: 1.0 in active growth, lower when dormant."""
-    if not signals:
-        return 1.0
-
-    growth = signals.get("growth_season")
-    if growth is not None:  # outdoor: a definite seasonal signal
-        return DORMANT_MULTIPLIER if growth is False else 1.0
-
-    season = signals.get("season")
-    if isinstance(season, str):
-        name = season.lower()
-        if name == "winter":
-            return DORMANT_MULTIPLIER
-        if name in ("autumn", "fall"):
-            return SHOULDER_MULTIPLIER
-        if name in ("spring", "summer"):
-            return 1.0
-
-    day_length = _as_float(signals.get("day_length"))
-    if day_length is not None and day_length < DORMANCY_DAYLIGHT_HOURS:
-        return DORMANT_MULTIPLIER
-
-    return 1.0
+DORMANCY_MIN_DAYS = 14
+DORMANCY_WINDOW_DAYS = 30
+DORMANCY_LIGHT_LUX_HOURS = {
+    "dry": 2500.0,
+    "balanced": 4000.0,
+    "moist": 5000.0,
+    "custom": 4000.0,
+}
+RECENT_DAYS = 7
+TEMPERATURE_DROP = 0.5
+COOL_ROOM = 20.0
+NEEDS_WATER_RELAX = 0.75
 
 
-def is_dormant(signals: Mapping | None) -> bool:
-    return dormancy_multiplier(signals) < 1.0
+def assess_dormancy(
+    days: Sequence[DailySummary],
+    *,
+    profile: str,
+    placement: str,
+    growth_season: bool | None = None,
+) -> bool:
+    if placement == "outdoor" and growth_season is False:
+        return True
+    window = list(days)[-DORMANCY_WINDOW_DAYS:]
+    judged = [d.light for d in window if d.light is not None and d.light.judged]
+    if len(judged) < DORMANCY_MIN_DAYS:
+        return False
+    mean_light = sum(d.effective_light_exposure for d in judged) / len(judged)
+    threshold = DORMANCY_LIGHT_LUX_HOURS.get(profile, DORMANCY_LIGHT_LUX_HOURS["balanced"])
+    if mean_light >= threshold:
+        return False
+    temps = [d.temperature_mean for d in window if d.temperature_mean is not None]
+    if len(temps) <= RECENT_DAYS:
+        return True
+    recent = sum(temps[-RECENT_DAYS:]) / RECENT_DAYS
+    earlier = sum(temps[:-RECENT_DAYS]) / (len(temps) - RECENT_DAYS)
+    return recent <= earlier - TEMPERATURE_DROP or recent < COOL_ROOM
 
 
-def _as_float(value: object) -> float | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+def dormant_band(band: tuple[float, float], dormant: bool) -> tuple[float, float]:
+    low, high = band
+    return (low * NEEDS_WATER_RELAX, high) if dormant else band

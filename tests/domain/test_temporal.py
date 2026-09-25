@@ -129,7 +129,7 @@ def test_sustained_wet_with_confidence_becomes_too_wet():
     )
     decision, state = evaluate_moisture(h, prior, NOW, "balanced", None)
     assert decision.status == S.TOO_WET
-    assert decision.health == S.HEALTH_TOO_WET
+    assert decision.health == S.HEALTH_WATCH
     assert decision.needs_attention is True
 
 
@@ -224,9 +224,11 @@ def test_no_valid_data_waits():
 
 def test_status_precedence_picks_the_most_urgent():
     assert S.worst_of([S.NORMAL, S.NEEDS_WATER, S.WET]) == S.NEEDS_WATER
-    assert S.worst_of([S.WET, S.RECENTLY_WATERED]) == S.WET
-    assert S.raises_attention(S.TOO_DRY) is True
-    assert S.raises_attention(S.WET) is False
+    # Roadmap Phase 5 order: recently_watered outranks wet.
+    assert S.worst_of([S.WET, S.RECENTLY_WATERED]) == S.RECENTLY_WATERED
+    assert S.worst_of([S.WET, S.TOO_COLD, S.INSUFFICIENT_LIGHT]) == S.TOO_COLD
+    assert S.worst_of([S.DRYING, S.TOO_COLD]) == S.DRYING
+    assert S.worst_of([S.NEEDS_WATER, S.SENSOR_PROBLEM]) == S.SENSOR_PROBLEM
 
 
 # ------------------------------------------------- P2: persistence / restart
@@ -378,55 +380,72 @@ def test_attention_stays_off_through_recently_watered_wet_and_drying():
 
 # ------------------------------------------------- P4: drying coefficient
 
-from domain.temporal.drying import adjusted_wet_limit, drying_coefficient
+from domain.temporal.drying import drying_context, limit_factor, vpd_kpa
 
 
-def test_drying_coefficient_from_evapotranspiration_is_bounded():
-    assert drying_coefficient(None) == 1.0
-    assert drying_coefficient({"et0_24h": 3.0}) == 1.0
-    assert drying_coefficient({"et0_24h": 6.0}) == 2.0
-    assert drying_coefficient({"et0_24h": 0.3}) == 0.5  # clamped up from 0.1
+def _ctx(**kw):
+    base = dict(base_limit_hours=72.0, slope=None, temperature=None, humidity=None,
+                light_lux_hours_24h=None, radiation_24h=None)
+    base.update(kw)
+    return drying_context(**base)
 
 
-def test_drying_coefficient_indoor_fallback_uses_temp_and_humidity():
-    # Warm, dry air with no forecast evapotranspiration -> faster than baseline.
-    k = drying_coefficient({"soil_temperature": 30.0, "humidity": 30.0})
-    assert 1.2 < k < 1.4
+def test_k_drying_is_neutral_without_inputs_and_bounded():
+    ctx = _ctx()
+    assert ctx.k_drying == 0.5 and ctx.adjusted_wet_duration_limit == 72.0
+    assert ctx.confidence == "low" and ctx.label == "normal"
+    hot = _ctx(slope=-5.0, temperature=40.0, humidity=5.0,
+               light_lux_hours_24h=1e6, radiation_24h=1e6)
+    cold = _ctx(slope=0.0, temperature=0.0, humidity=100.0,
+                light_lux_hours_24h=0.0, radiation_24h=0.0)
+    assert hot.k_drying == 1.0 and cold.k_drying == 0.0
+    assert hot.adjusted_wet_duration_limit == 72.0 * 0.65
+    assert cold.adjusted_wet_duration_limit == 72.0 * 2.0
 
 
-def test_adjusted_wet_limit_bounds():
-    assert adjusted_wet_limit(72.0, 1.0) == 72.0
-    assert adjusted_wet_limit(72.0, 0.5) == 144.0  # slow drying, +100% cap
-    assert adjusted_wet_limit(72.0, 2.0) == 72.0 * 0.65  # fast drying, -35% floor
+def test_outdoor_radiation_never_exceeds_its_fifteen_percent_share():
+    only_radiation = _ctx(radiation_24h=1e6)
+    assert abs(only_radiation.k_drying - (0.85 * 0.5 + 0.15)) < 1e-9
+    assert only_radiation.outdoor_radiation_bounded == 0.15
+
+
+def test_limit_factor_mapping_and_vpd():
+    assert limit_factor(0.0) == 2.0 and limit_factor(0.5) == 1.0
+    assert abs(limit_factor(1.0) - 0.65) < 1e-9
+    assert vpd_kpa(None, 50.0) is None
+    assert abs(vpd_kpa(25.0, 50.0) - 1.584) < 0.01  # Tetens at 25 C / 50 %
+
+
+def test_dormancy_extends_the_allowance_up_to_three_times():
+    cold = _ctx(slope=0.0, temperature=0.0, humidity=100.0,
+                light_lux_hours_24h=0.0, radiation_24h=0.0, dormant=True)
+    assert cold.adjusted_wet_duration_limit == 72.0 * 3.0
 
 
 def test_low_expected_drying_extends_the_allowance():
-    # 90 h wet would be too_wet at the static 72 h limit, but low ET0 extends it.
+    # 90 h wet would be too_wet at the base 72 h limit; a longer limit holds it.
     prior = TemporalMoistureState(
         S.STAYING_WET, NOW - timedelta(hours=90), None, 70.0, 0.0, None, "high"
     )
     decision, state = evaluate_moisture(
-        _confident_wet_history(), prior, NOW, "balanced", {"et0_24h": 0.5}
+        _confident_wet_history(), prior, NOW, "balanced", wet_limit_hours=144.0
     )
     assert decision.status == S.STAYING_WET
     assert state.adjusted_wet_duration_limit == 144.0
 
 
 def test_strong_expected_drying_shortens_the_allowance():
-    # 50 h wet is within the static 72 h limit, but high ET0 shortens it below 50.
     prior = TemporalMoistureState(
         S.STAYING_WET, NOW - timedelta(hours=50), None, 70.0, 0.0, None, "high"
     )
-    decision, state = evaluate_moisture(
-        _confident_wet_history(), prior, NOW, "balanced", {"et0_24h": 9.0}
+    decision, _ = evaluate_moisture(
+        _confident_wet_history(), prior, NOW, "balanced", wet_limit_hours=72.0 * 0.65
     )
     assert decision.status == S.TOO_WET
-    assert state.adjusted_wet_duration_limit == 72.0 * 0.65
+    assert decision.health == S.HEALTH_WATCH and decision.reason == "persistently_wet"
 
 
 def test_realized_drying_slope_beats_the_shortened_prediction():
-    # Strong expected drying and past the shortened limit, but the soil is
-    # measurably draining, so it reads drying rather than too_wet.
     declining = history(
         [obs(720, 95.0), obs(480, 86.0), obs(240, 76.0), obs(0, 70.0)]
     )
@@ -434,7 +453,7 @@ def test_realized_drying_slope_beats_the_shortened_prediction():
         S.STAYING_WET, NOW - timedelta(hours=50), None, 95.0, -4.0, None, "high"
     )
     decision, _ = evaluate_moisture(
-        declining, prior, NOW, "balanced", {"et0_24h": 9.0}
+        declining, prior, NOW, "balanced", wet_limit_hours=72.0 * 0.65
     )
     assert decision.status == S.DRYING
     assert decision.needs_attention is False
@@ -453,7 +472,7 @@ def _sample_decisions():
 
 def test_needs_attention_matches_status_classification():
     for decision in _sample_decisions():
-        assert decision.needs_attention == S.raises_attention(decision.status)
+        assert decision.needs_attention == (decision.reason in S.ATTENTION_REASONS)
 
 
 def test_decision_summaries_are_plain_language_and_reasons_are_keys():
@@ -474,66 +493,24 @@ def test_precedence_is_deterministic_and_total():
     assert S.worst_of([S.WAITING_FOR_DATA, S.TOO_WET, S.NORMAL]) == S.TOO_WET
 
 
-# ------------------------------------------------- care_status universal signals
+# ------------------------------------------------- health vocabulary
 
-from domain.temporal.drying import drying_context
-
-
-def test_drying_context_buckets_are_shared_by_both_placements():
-    assert drying_context(1.6) == "high"
-    assert drying_context(1.0) == "normal"
-    assert drying_context(0.5) == "low"
-
-
-def test_decision_reports_confidence_and_drying_context_for_indoor():
-    # Indoor: no ET0 forecast, warm dry air -> fallback coefficient -> "high".
-    decision, _ = decide(
-        [obs(0, 45.0)],
-        profile="balanced",
-        env={"placement": "indoor", "soil_temperature": 30.0, "humidity": 25.0},
-    )
-    assert decision.drying_context == "high"
-    assert decision.confidence in ("low", "medium", "high")
+def test_moisture_health_uses_only_the_four_roadmap_states():
+    allowed = {S.HEALTH_GOOD, S.HEALTH_WATCH, S.HEALTH_STRESSED, S.HEALTH_UNKNOWN}
+    for decision in _sample_decisions():
+        assert decision.health in allowed
+    assert decide([])[0].health == S.HEALTH_UNKNOWN
+    assert decide([obs(0, 18.0)])[0].health == S.HEALTH_WATCH  # needs_water
 
 
-def test_decision_reports_drying_context_for_outdoor_from_et0():
-    decision, _ = decide(
-        [obs(0, 45.0)],
-        profile="balanced",
-        env={"placement": "outdoor", "et0_24h": 0.5},
-    )
-    assert decision.drying_context == "low"
+def test_worst_health_ignores_unknown_when_something_is_known():
+    assert S.worst_health([S.HEALTH_GOOD, S.HEALTH_WATCH]) == S.HEALTH_WATCH
+    assert S.worst_health([S.HEALTH_WATCH, S.HEALTH_STRESSED]) == S.HEALTH_STRESSED
+    assert S.worst_health([S.HEALTH_UNKNOWN, S.HEALTH_GOOD]) == S.HEALTH_GOOD
+    assert S.worst_health([]) == S.HEALTH_UNKNOWN
 
 
-def test_waiting_for_data_still_reports_environmental_context():
-    decision, _ = decide(
-        [obs(0, None, valid=False)],
-        env={"placement": "outdoor", "et0_24h": 9.0},
-    )
-    assert decision.status == S.WAITING_FOR_DATA
-    assert decision.drying_context == "high"
-
-
-# ------------------------------------------------- F2: light + humidity
-
-from domain.temporal.light import light_context
-from domain.temporal.humidity import humidity_context
-from domain.temporal.status import merge_health
-
-
-def test_light_context_buckets():
-    assert light_context(None) is None
-    assert light_context(100.0) == "low"
-    assert light_context(5000.0) == "adequate"
-    assert light_context(200000.0) == "high"
-
-
-def test_humidity_context_buckets():
-    assert humidity_context(None) is None
-    assert humidity_context(20.0) == "low"
-    assert humidity_context(50.0) == "adequate"
-    assert humidity_context(85.0) == "high"
-
+# ------------------------------------------------- history helpers
 
 def test_rolling_mean_needs_minimum_samples_and_respects_window():
     h = history([
@@ -547,19 +524,6 @@ def test_rolling_mean_needs_minimum_samples_and_respects_window():
     assert abs(mean - 1000.0) < 0.01
     # a reading outside the window is excluded
     assert h.rolling_mean(NOW, "light", "light_valid", window_hours=0.25) is None
-
-
-def test_merge_health_moisture_alarm_always_wins():
-    assert merge_health(S.HEALTH_NEEDS_WATER, "low", "low") == S.HEALTH_NEEDS_WATER
-    assert merge_health(S.HEALTH_TOO_WET, "adequate", None) == S.HEALTH_TOO_WET
-    assert merge_health(S.HEALTH_UNKNOWN, "low", "high") == S.HEALTH_UNKNOWN
-
-
-def test_merge_health_secondary_inadequacy_raises_watch_only():
-    assert merge_health(S.HEALTH_GOOD, "low", "adequate") == S.HEALTH_WATCH
-    assert merge_health(S.HEALTH_GOOD, "adequate", "high") == S.HEALTH_WATCH
-    assert merge_health(S.HEALTH_GOOD, "adequate", "adequate") == S.HEALTH_GOOD
-    assert merge_health(S.HEALTH_GOOD, None, None) == S.HEALTH_GOOD
 
 
 def test_store_roundtrip_preserves_light_and_humidity():
@@ -662,63 +626,17 @@ def test_learned_band_overrides_profile_in_the_engine():
     assert learned_decision.status == S.NEEDS_WATER
 
 
-# ------------------------------------------------- F4: seasonal dormancy
-
-from domain.temporal.season import dormancy_multiplier, is_dormant
-
-
-def test_dormancy_multiplier_reads_both_placements():
-    assert dormancy_multiplier(None) == 1.0
-    assert dormancy_multiplier({"growth_season": True}) == 1.0
-    assert dormancy_multiplier({"growth_season": False}) == 0.7  # outdoor cold
-    assert dormancy_multiplier({"season": "winter"}) == 0.7
-    assert dormancy_multiplier({"season": "autumn"}) == 0.85
-    assert dormancy_multiplier({"season": "summer"}) == 1.0
-    assert dormancy_multiplier({"day_length": 8.0}) == 0.7
-    assert dormancy_multiplier({"day_length": 14.0}) == 1.0
-    assert is_dormant({"growth_season": False}) is True
-    assert is_dormant({"growth_season": True}) is False
-
-
-def test_dormancy_lowers_the_drying_coefficient():
-    active = drying_coefficient({"et0_24h": 3.0, "growth_season": True})
-    dormant = drying_coefficient({"et0_24h": 3.0, "growth_season": False})
-    assert active == 1.0
-    assert abs(dormant - 0.7) < 1e-9
-    # a longer wet allowance follows directly
-    assert adjusted_wet_limit(72.0, dormant) > adjusted_wet_limit(72.0, active)
-
-
-def test_dormant_plant_tolerates_wet_soil_longer():
-    prior = TemporalMoistureState(
-        S.STAYING_WET, NOW - timedelta(hours=90), None, 70.0, 0.0, None, "high"
-    )
-    active, _ = evaluate_moisture(
-        _confident_wet_history(), prior, NOW, "balanced", {"growth_season": True}
-    )
-    dormant, _ = evaluate_moisture(
-        _confident_wet_history(), prior, NOW, "balanced", {"growth_season": False}
-    )
-    assert active.status == S.TOO_WET  # 90 h exceeds the 72 h active limit
-    assert dormant.status == S.STAYING_WET  # dormant limit (~103 h) not yet reached
-
-
-def test_extreme_wetness_still_escalates_even_when_dormant():
-    prior = TemporalMoistureState(
-        S.STAYING_WET, NOW - timedelta(hours=200), None, 70.0, 0.0, None, "high"
-    )
-    dormant, _ = evaluate_moisture(
-        _confident_wet_history(), prior, NOW, "balanced", {"growth_season": False}
-    )
-    assert dormant.status == S.TOO_WET  # bounded limit (<=144 h) is exceeded
-
+# ------------------------------------------------- dormancy (engine-level)
+# Evidence-based dormancy and its effects are covered in test_timeline.py.
 
 def test_dormancy_never_suppresses_genuine_dryness():
-    decision, _ = decide(
-        [obs(0, 18.0)], profile="balanced", env={"growth_season": False}
+    # The dormant band only lowers the needs_water threshold, never removes it.
+    from domain.temporal.season import dormant_band
+    decision, _ = evaluate_moisture(
+        history([obs(0, 10.0)]), None, NOW, "balanced",
+        band=dormant_band((25.0, 65.0), True),
     )
-    assert decision.status == S.NEEDS_WATER
-    assert decision.needs_attention is True
+    assert decision.status == S.NEEDS_WATER and decision.needs_attention is True
 
 
 def test_watering_time_is_stable_across_dense_readings():
@@ -750,5 +668,8 @@ def test_one_watering_closes_exactly_one_learning_cycle():
         t = wt + timedelta(minutes=5 * i)
         h.append(_obs_at(t, 30.0 if i == 0 else 70.0 - i * 0.1))
         samples = update_samples(samples, h, t)
-    assert len(samples.troughs) == 1 and len(samples.peaks) == 1
+    assert len(samples.troughs) == 1
     assert samples.troughs[0] == 30.0
+    # The span before the first watering ever seen did not start at a watering,
+    # so its high is not a post-watering peak and is not learned.
+    assert samples.peaks == ()

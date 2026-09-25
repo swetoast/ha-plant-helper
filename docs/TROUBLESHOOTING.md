@@ -18,6 +18,26 @@ Expected. A plant judges against a generic profile until it has learned its own
 range, which takes about two weeks of readings. It flips to `calibrated` on its
 own. Moving a plant or changing its species restarts learning.
 
+## Status says `insufficient_light`
+
+Light is judged per day as cumulative exposure during daylight. Three low days in
+a row raise it, and two bright days outside while the spot stayed dim point to
+shading. Overcast days are forgiven for up to three days. Move the plant, add a
+grow light (15 minutes or longer counts), or check the light sensor faces the
+plant's leaves rather than a shadow.
+
+## Status says `sensor_problem`
+
+The moisture sensor has reported no valid reading for six hours, or every value
+it reports has stayed exactly the same for five days (a frozen device). Check the
+sensor's battery and connection in its own integration.
+
+## A plant is marked `dormant`
+
+A month of low light and a slightly cooler recent week mean the plant is resting.
+Wet soil is tolerated longer and the watering prompt comes at a lower moisture
+level. It lifts on its own as light returns.
+
 ## Species data is missing
 
 - Enrichment is optional.

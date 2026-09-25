@@ -2,7 +2,35 @@
 
 ## Status
 
-Approved implementation roadmap
+Implemented in Plant Helper `0.0.42` (Phases 1-7 and the appendix mechanics).
+The code lives in `custom_components/plant_helper/domain/temporal/`, with the
+combined engine in `engine.py` and the Phase 7 scenarios in
+`tests/domain/test_timeline.py`.
+
+Deliberate deviations from the text below:
+
+- The status entity keeps its compact label attributes (`confidence`,
+  `drying_context`, `light_context`, `humidity_context`, `temperature_context`,
+  `dormant`, placement context) restored in 0.0.25. They are coarse labels, not
+  coefficients or calculations.
+- Temperature is the plant's configured temperature sensor; bands are
+  placement-relative rather than profile-relative.
+- A frozen moisture sensor is reported only when every signal the plant reports
+  stays exactly flat for five days, so a resting plant on a sensor that reports
+  whole percentages is not mistaken for a fault.
+- Thresholds were calibrated in 0.0.43 by replaying two weeks of live Home
+  Assistant recorder data from two Zigbee soil sensors
+  (`tests/fixtures/home_assistant/`, `tests/domain/test_live_replay.py`).
+  Changes from the text: the watering rise scales with each probe's own noise
+  within a six-hour window instead of a fixed 5 points in 90 minutes; drying is
+  a decline of 0.05%/h over up to 48 hours; band edges have 2 points of
+  hysteresis; indoor humid starts at 80%; a low-light day starts below 2500
+  lx-h and relaxes toward the plant's learned normal.
+- The learned values feed judgments: moisture band, time back to range (wet
+  allowance), typical rise and peak (partial watering), drying slope (slower
+  than usual), light norm and monthly variation (low-light threshold),
+  supplemental pattern (missing grow light), and temperature and humidity
+  ranges (mild bands).
 
 ## Development baseline
 

@@ -20,6 +20,7 @@ DAILY_VARIABLES = (
     "sunrise",
     "sunset",
 )
+INDOOR_DAILY_VARIABLES = ("sunrise", "sunset")
 
 
 def forecast_url_params(request: Any) -> tuple[str, dict[str, Any]]:
@@ -39,6 +40,10 @@ def forecast_url_params(request: Any) -> tuple[str, dict[str, Any]]:
     if request.profile == "outdoor":
         params["daily"] = ",".join(DAILY_VARIABLES)
         params["forecast_days"] = 7
+    else:
+        # Indoor plants still need the daylight window for light accounting.
+        params["daily"] = ",".join(INDOOR_DAILY_VARIABLES)
+        params["forecast_days"] = 2
     return FORECAST_URL, params
 
 

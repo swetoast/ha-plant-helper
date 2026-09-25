@@ -1,20 +1,23 @@
-"""Immutable records the temporal engine reasons over.
+"""Immutable observation record the temporal engine reasons over.
 
-PlantObservation is one soil reading at a point in time. DailySummary is the
-per-local-day rollup used by the multi-day light and temperature slices; the
-moisture slice only needs the rolling observation window, but the dataclass
-lives here so the later slices share one definition.
+One PlantObservation is a snapshot of every configured physical signal at a
+point in time, plus the daylight classification in force when it was taken.
+``soil_temperature`` is the plant's temperature sensor (the roadmap's local
+temperature); the field keeps its stored name for restore compatibility.
+
+``is_daylight`` has three states: True, False, and None (unknown). Unknown must
+never be treated as nighttime.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
+
+DAYLIGHT_UNKNOWN_SOURCE = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
 class PlantObservation:
-    """A single soil reading. moisture is a percentage, temperature Celsius."""
-
     observed_at: datetime
     moisture: float | None
     soil_temperature: float | None
@@ -24,14 +27,5 @@ class PlantObservation:
     humidity: float | None = None
     light_valid: bool = False
     humidity_valid: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class DailySummary:
-    """Coarse rollup of one local day's valid moisture observations."""
-
-    day: date
-    min_moisture: float | None
-    max_moisture: float | None
-    mean_moisture: float | None
-    observations: int
+    is_daylight: bool | None = None
+    daylight_source: str = DAYLIGHT_UNKNOWN_SOURCE

@@ -154,13 +154,16 @@ def open_meteo_run(awaitable):
     return asyncio.run(awaitable)
 
 
-def test_forecast_params_indoor_omits_daily_outdoor_includes_it():
+def test_forecast_params_indoor_requests_only_daylight_outdoor_full_daily():
     url, indoor = forecast_url_params(forecast_request(57.72, 12.94, False))
     assert url == "https://api.open-meteo.com/v1/forecast"
     assert indoor["timezone"] == "UTC" and indoor["temperature_unit"] == "celsius"
-    assert "temperature_2m" in indoor["hourly"] and "daily" not in indoor
+    assert "temperature_2m" in indoor["hourly"]
+    # Indoor plants need the sunrise/sunset window for light accounting only.
+    assert indoor["daily"] == "sunrise,sunset" and indoor["forecast_days"] == 2
     _, outdoor = forecast_url_params(forecast_request(57.72, 12.94, True))
-    assert "daily" in outdoor and outdoor["forecast_days"] == 7
+    assert "precipitation_sum" in outdoor["daily"] and outdoor["forecast_days"] == 7
+    assert "past_days" not in outdoor  # daily index 0 stays today for outdoor
 
 
 def test_real_open_meteo_forecast_is_accepted_by_the_collector():

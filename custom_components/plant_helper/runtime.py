@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 import logging
 import time
 from pathlib import Path
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -17,24 +18,38 @@ from .domain.runtime import RuntimeCollection
 from .domain.rate_limit import RateLimitGate
 from .domain.entity_contract import is_retired_unique_id
 from .domain.interpretation import interpret_indoor, interpret_outdoor
+from .domain.temporal.baseline import (
+    BaselineSamples,
+    cycle_baseline,
+    daily_baseline,
+    derive_band,
+    monthly_baseline,
+    update_samples,
+)
+from .domain.temporal.daily import DailySummary, completed_days, update_ledger
+from .domain.temporal.daylight import (
+    DaylightState,
+    DaylightWindow,
+    parse_daily_windows,
+    resolve_daylight,
+)
+from .domain.temporal.engine import EngineInputs, evaluate_plant
 from .domain.temporal.history import ObservationHistory
-from .domain.temporal.humidity import (
-    HUMIDITY_MIN_SAMPLES,
-    HUMIDITY_WINDOW_HOURS,
-    humidity_context,
-)
-from .domain.temporal.light import (
-    LIGHT_MIN_SAMPLES,
-    LIGHT_WINDOW_HOURS,
-    light_context,
-)
-from .domain.temporal.status import merge_health
-from .domain.temporal.season import is_dormant
-from .domain.temporal.baseline import BaselineSamples, derive_band, update_samples
+from .domain.temporal.light import day_bounds, mean_daytime_radiation
 from .domain.learning import LearningRuntime
-from .domain.temporal.moisture import TemporalMoistureState, evaluate_moisture
+from .domain.temporal.moisture import (
+    PROFILE_BANDS,
+    TemporalMoistureState,
+    watering_rise_threshold,
+)
 from .domain.temporal.observation import PlantObservation
-from .domain.temporal.store import STORE_VERSION, restore_store, serialize_store
+from .domain.temporal.store import (
+    STORE_VERSION,
+    restore_daily,
+    restore_ephemeris,
+    restore_store,
+    serialize_store,
+)
 from .domain.forecast import (
     ForecastCollector,
     request_for as forecast_request_for,
@@ -68,6 +83,25 @@ _LOGGER = logging.getLogger(__name__)
 # coalesced over this window and flushed on a timer and on unload, rather than
 # once per observation.
 TEMPORAL_SAVE_DELAY = 30.0
+
+def _durable(state: TemporalMoistureState | None) -> tuple | None:
+    """The parts of the moisture state a restart must not lose.
+
+    Slope and the wet limit are recomputed on every evaluation, so they are
+    deliberately excluded; comparing them would force a write on every tick.
+    """
+    if state is None:
+        return None
+    return (
+        state.status,
+        state.state_since,
+        state.last_watering_event,
+        state.elevated_since,
+    )
+
+
+# Statuses whose readings must not teach the learned baseline (roadmap Phase 6).
+_UNLEARNABLE = frozenset({"too_wet", "too_dry", "sensor_problem", "waiting_for_data"})
 
 # How often the background tick advances durations without a sensor push. This
 # is what makes staying_wet and too_wet reachable while moisture is unchanged.
@@ -106,6 +140,11 @@ class PlantHelperRuntime:
     weather_unsub: Any = None
     temporal_history: dict[str, ObservationHistory] = field(default_factory=dict)
     temporal_state: dict[str, TemporalMoistureState] = field(default_factory=dict)
+    temporal_daily: dict[str, dict[str, DailySummary]] = field(default_factory=dict)
+    ephemeris_windows: tuple[DaylightWindow, ...] = ()
+    ephemeris_fetched_at: datetime | None = None
+    ephemeris_stale: bool = False
+    _astral_cache: tuple[date | None, tuple[DaylightWindow, ...]] = (None, ())
     temporal_store: Any = None
     temporal_unsub: Any = None
     image_proxy: Any = None
@@ -197,9 +236,19 @@ class PlantHelperRuntime:
         self.temporal_state = {
             uuid: state for uuid, state in states.items() if uuid in known
         }
+        self.temporal_daily = {
+            uuid: ledger for uuid, ledger in restore_daily(data).items() if uuid in known
+        }
+        self.ephemeris_windows, self.ephemeris_fetched_at = restore_ephemeris(data, now)
+        self.ephemeris_stale = True  # restored, not yet confirmed by a fresh fetch
 
     def _temporal_snapshot(self) -> dict[str, Any]:
-        return serialize_store(self.temporal_history, self.temporal_state)
+        return serialize_store(
+            self.temporal_history,
+            self.temporal_state,
+            self.temporal_daily,
+            (self.ephemeris_windows, self.ephemeris_fetched_at),
+        )
 
     def _schedule_temporal_save(self) -> None:
         if self.temporal_store is not None:
@@ -264,55 +313,85 @@ class PlantHelperRuntime:
             return
         self.learning = learning
 
+    def _learned_baseline(self, plant_uuid: str) -> dict[str, Any]:
+        """The stored baseline for the plant's placement, without side effects."""
+        learning = self.learning
+        if learning is None or plant_uuid not in learning.placement:
+            return {}
+        try:
+            return dict(learning.state(plant_uuid).baseline)
+        except Exception:
+            return {}
+
     async def _learning_step(
         self,
         plant_uuid: str,
         placement: str,
+        profile: str,
         history: ObservationHistory,
+        ledger: Mapping[str, DailySummary],
         now: datetime,
-        confidence: str,
         record: bool,
-    ) -> tuple[tuple[float, float] | None, str]:
-        """Return (learned band or None, calibration state), fully defensively.
+    ) -> tuple[dict[str, Any], str]:
+        """Return (learned baseline, calibration state), fully defensively.
 
-        Any failure yields (None, "learning") so the moisture engine falls back
-        to the profile band and the core evaluation never breaks. On the record
-        path it also accumulates cycle samples and finalizes the baseline once
-        the calibration gate passes.
+        Learning continues after calibration (roadmap Phase 6): each watering
+        cycle refines the typical rise, peak, drying slope and recovery time, and
+        each new day refreshes the light, temperature and humidity norms and the
+        monthly seasonal record. Readings taken in an abnormal state are not
+        learned. Any failure returns ({}, "learning") so the engine falls back
+        to the profile band and evaluation never breaks.
         """
         learning = self.learning
         if learning is None:
-            return None, "learning"
+            return {}, "learning"
         try:
             if plant_uuid not in learning.placement:
                 learning.placement[plant_uuid] = placement
                 learning.calibrating.add(plant_uuid)
             state = learning.state(plant_uuid)
-            if state.baseline.get("complete"):
-                return (
-                    float(state.baseline["low"]),
-                    float(state.baseline["high"]),
-                ), "calibrated"
+            baseline = dict(state.baseline)
             if not record:
-                return None, "learning"
+                return baseline, "calibrated" if baseline.get("complete") else "learning"
+            prior = self.temporal_state.get(plant_uuid)
+            learnable = prior is None or prior.status not in _UNLEARNABLE
+            profile_band = PROFILE_BANDS.get(profile, PROFILE_BANDS["balanced"])
+            band_high = (
+                float(baseline["high"]) if baseline.get("complete") else profile_band[1]
+            )
+            tz = self._timezone()
             samples = BaselineSamples.from_dict(state.active_samples)
-            updated = update_samples(samples, history, now)
+            updated = update_samples(
+                samples,
+                history,
+                now,
+                band_high=band_high,
+                learnable=learnable,
+                watering_rise=watering_rise_threshold(completed_days(ledger, now, tz)),
+            )
             learning.active_samples[plant_uuid] = updated.to_dict()
-            if len(updated.troughs) > len(samples.troughs):
+            cycle_closed = updated.last_watering != samples.last_watering
+            day_key = now.astimezone(tz).date().isoformat()
+            if cycle_closed:
                 await learning.set_active_samples(plant_uuid, updated.to_dict())
-            derived = derive_band(updated, confidence, now)
-            if derived is not None:
-                low, high = derived
-                await learning.set_baseline(
-                    plant_uuid,
-                    state.placement,
-                    {"complete": True, "low": low, "high": high},
+            if cycle_closed or baseline.get("updated") != day_key:
+                days = completed_days(ledger, now, tz)
+                refreshed = dict(baseline)
+                refreshed.update(cycle_baseline(updated))
+                refreshed.update(daily_baseline(days))
+                refreshed["monthly"] = monthly_baseline(baseline.get("monthly"), days)
+                derived = derive_band(
+                    updated, history.confidence(now), now, profile_band
                 )
-                return (low, high), "calibrated"
-            return None, "learning"
+                if derived is not None:
+                    refreshed.update({"complete": True, "low": derived[0], "high": derived[1]})
+                refreshed["updated"] = day_key
+                await learning.set_baseline(plant_uuid, state.placement, refreshed)
+                baseline = refreshed
+            return baseline, "calibrated" if baseline.get("complete") else "learning"
         except Exception:
             _LOGGER.debug("Learning step failed for %s", plant_uuid, exc_info=True)
-            return None, "learning"
+            return {}, "learning"
 
     async def _reset_learning(self, plant_uuid: str) -> None:
         """Drop a plant's learned baseline so it recalibrates. Best-effort."""
@@ -390,7 +469,13 @@ class PlantHelperRuntime:
                 forecast_request_for(latitude, longitude, outdoor), now
             )
             self.forecast_data = snapshot.data
+            windows = parse_daily_windows(snapshot.data.get("daily"))
+            if windows:
+                self.ephemeris_windows = windows
+                self.ephemeris_fetched_at = snapshot.fetched_at
+                self.ephemeris_stale = snapshot.stale
         except Exception:
+            self.ephemeris_stale = True
             _LOGGER.debug(
                 "Plant Helper forecast refresh failed", exc_info=True
             )
@@ -424,7 +509,7 @@ class PlantHelperRuntime:
             if plant.removing or plant_uuid in self._blocked:
                 continue
             self.hass.async_create_task(
-                self.evaluate(plant_uuid, record=False),
+                self.evaluate(plant_uuid, tick=True),
                 f"Plant Helper temporal tick for {plant_uuid}",
             )
 
@@ -454,14 +539,20 @@ class PlantHelperRuntime:
         await self.register_listeners(plant_uuid, config)
 
     async def evaluate(
-        self, plant_uuid: str, environment: Any = None, *, record: bool = True
+        self,
+        plant_uuid: str,
+        environment: Any = None,
+        *,
+        record: bool = True,
+        tick: bool = False,
     ) -> None:
         """Produce stable user-facing states from physical and weather context.
 
-        record=True (sensor push, CRUD, startup) stores a new observation.
-        record=False (background tick) re-evaluates against the existing
-        history so durations advance without recording a fresh sample, and only
-        notifies listeners when the user-facing status actually changes.
+        Every call records an observation (history deduplication decides what is
+        kept), so the background tick is a collection trigger as the roadmap
+        requires: steady plants keep coverage, and sunrise and sunset are
+        captured within a tick. A tick only notifies listeners when a published
+        output actually changed; sensor events and CRUD always notify.
         """
         plant = self.plants.plants.get(plant_uuid)
         if plant is None or plant.removing or plant_uuid in self._blocked:
@@ -471,11 +562,7 @@ class PlantHelperRuntime:
         moisture = state.get("moisture")
         profile = str(plant.config.get("profile", "balanced"))
         placement = str(plant.config.get("placement", "indoor"))
-        previous = (
-            state.get("care_status"),
-            state.get("health"),
-            state.get("needs_attention"),
-        )
+        previous = self._published(state)
 
         env = environment if environment is not None else self.current_environment(plant_uuid)
         forecast = env.get("forecast") if env else None
@@ -498,15 +585,18 @@ class PlantHelperRuntime:
         )
 
         now = datetime.now(timezone.utc)
+        tz = self._timezone()
         history = self.temporal_history.get(plant_uuid)
         if history is None:
             history = ObservationHistory()
             self.temporal_history[plant_uuid] = history
+        daylight = self._daylight(now)
         soil_temperature = state.get("temperature")
         light = state.get("light")
         humidity = state.get("humidity")
+        stored = False
         if record:
-            history.append(
+            stored = history.append(
                 PlantObservation(
                     observed_at=now,
                     moisture=moisture,
@@ -517,63 +607,57 @@ class PlantHelperRuntime:
                     humidity=humidity,
                     light_valid=light is not None,
                     humidity_valid=humidity is not None,
+                    is_daylight=daylight.is_daylight,
+                    daylight_source=daylight.source,
                 )
             )
-        temporal_env: dict[str, Any] = {
-            "placement": placement,
-            "rain_suppression": rain_suppression,
-            "soil_temperature": soil_temperature,
-            "humidity": state.get("humidity"),
-            "growth_season": conditions.get("growth_season"),
-            "season": conditions.get("season"),
-            "day_length": conditions.get("day_length"),
-        }
-        if isinstance(forecast, dict) and forecast.get("et0_24h") is not None:
-            temporal_env["et0_24h"] = forecast.get("et0_24h")
-        confidence = history.confidence(now)
-        band, calibration_state = await self._learning_step(
-            plant_uuid, placement, history, now, confidence, record
-        )
-        decision, moisture_state = evaluate_moisture(
+        ledger = update_ledger(
+            self.temporal_daily.get(plant_uuid, {}),
             history,
-            self.temporal_state.get(plant_uuid),
             now,
-            profile,
-            temporal_env,
-            band=band,
+            tz,
+            placement=placement,
+            radiation_for_day=lambda day: self._radiation_for_day(day, tz),
+            learned=self._learned_baseline(plant_uuid),
         )
-        self.temporal_state[plant_uuid] = moisture_state
-        self._schedule_temporal_save()
-
-        light_ctx = light_context(
-            history.rolling_mean(
-                now,
-                "light",
-                "light_valid",
-                window_hours=LIGHT_WINDOW_HOURS,
-                min_samples=LIGHT_MIN_SAMPLES,
+        self.temporal_daily[plant_uuid] = ledger
+        learned, calibration_state = await self._learning_step(
+            plant_uuid, placement, profile, history, ledger, now, record
+        )
+        result = evaluate_plant(
+            EngineInputs(
+                history=history,
+                prior=self.temporal_state.get(plant_uuid),
+                ledger=ledger,
+                now=now,
+                tz=tz,
+                profile=profile,
+                placement=placement,
+                learned=learned,
+                rain_suppression=rain_suppression,
+                growth_season=conditions.get("growth_season"),
+                radiation_24h=self._forecast_derived("radiation_24h"),
             )
         )
-        humidity_ctx = humidity_context(
-            history.rolling_mean(
-                now,
-                "humidity",
-                "humidity_valid",
-                window_hours=HUMIDITY_WINDOW_HOURS,
-                min_samples=HUMIDITY_MIN_SAMPLES,
-            )
-        )
-        health = merge_health(decision.health, light_ctx, humidity_ctx)
+        previous_state = self.temporal_state.get(plant_uuid)
+        self.temporal_state[plant_uuid] = result.moisture_state
+        # Persist only when something durable changed. Deduplication keeps at
+        # most one observation per few minutes, and today's and yesterday's
+        # summaries are rebuilt from history on load, so a steady plant writes
+        # rarely instead of on every tick.
+        if stored or _durable(previous_state) != _durable(result.moisture_state):
+            self._schedule_temporal_save()
 
         care_attributes: dict[str, Any] = {
-            "summary": decision.summary,
-            "reason": decision.reason,
-            "since": decision.since.isoformat() if decision.since else None,
-            "confidence": decision.confidence,
-            "drying_context": decision.drying_context,
-            "light_context": light_ctx,
-            "humidity_context": humidity_ctx,
-            "dormant": is_dormant(temporal_env),
+            "summary": result.summary,
+            "reason": result.reason,
+            "since": result.since.isoformat() if result.since else None,
+            "confidence": result.confidence,
+            "drying_context": result.drying_context,
+            "light_context": result.light_context,
+            "humidity_context": result.humidity_context,
+            "temperature_context": result.temperature_context,
+            "dormant": result.dormant,
             "placement": placement,
         }
         if placement == "outdoor":
@@ -583,14 +667,12 @@ class PlantHelperRuntime:
         else:
             care_attributes["external_daylight"] = conditions.get("external_daylight")
 
-        state["care_status"] = decision.status
+        state["care_status"] = result.status
         state["care_status_attributes"] = care_attributes
-        state["health"] = health
-        state["health_attributes"] = {"summary": decision.summary}
-        state["needs_attention"] = decision.needs_attention
-        state["needs_attention_attributes"] = {
-            "reason": decision.reason if decision.needs_attention else None
-        }
+        state["health"] = result.health
+        state["health_attributes"] = {"summary": result.health_summary}
+        state["needs_attention"] = result.needs_attention
+        state["needs_attention_attributes"] = {"reason": result.attention_reason}
         state["calibration"] = calibration_state
         if calibration_state == "calibrated":
             calibration_summary = (
@@ -618,13 +700,77 @@ class PlantHelperRuntime:
             state.pop("species_context", None)
             state.pop("species_context_attributes", None)
 
-        current = (
-            decision.status,
-            health,
-            decision.needs_attention,
-        )
-        if record or current != previous:
+        if not tick or self._published(state) != previous:
             self.plants.notify_updated(plant_uuid)
+
+    @staticmethod
+    def _published(state: Mapping[str, Any]) -> tuple:
+        """Everything the status, health and attention entities publish."""
+        return (
+            state.get("care_status"),
+            repr(state.get("care_status_attributes")),
+            state.get("health"),
+            repr(state.get("health_attributes")),
+            state.get("needs_attention"),
+            repr(state.get("needs_attention_attributes")),
+            state.get("calibration"),
+        )
+
+    def _timezone(self) -> tzinfo:
+        name = getattr(getattr(self.hass, "config", None), "time_zone", None)
+        try:
+            return ZoneInfo(name) if name else timezone.utc
+        except Exception:
+            return timezone.utc
+
+    def _daylight(self, now: datetime) -> DaylightState:
+        return resolve_daylight(
+            now,
+            forecast_windows=self.ephemeris_windows,
+            forecast_fetched_at=self.ephemeris_fetched_at,
+            forecast_stale=self.ephemeris_stale,
+            astral=self._astral_windows,
+        )
+
+    def _astral_windows(self, now: datetime) -> tuple[DaylightWindow, ...]:
+        """Home Assistant location plus Astral: yesterday, today and tomorrow."""
+        if self.hass is None:
+            return ()
+        today = now.astimezone(self._timezone()).date()
+        cached_day, cached = self._astral_cache
+        if cached_day == today:
+            return cached
+        from homeassistant.const import SUN_EVENT_SUNRISE, SUN_EVENT_SUNSET
+        from homeassistant.helpers.sun import get_astral_event_date
+
+        windows = []
+        for offset in (-1, 0, 1):
+            day = today + timedelta(days=offset)
+            sunrise = get_astral_event_date(self.hass, SUN_EVENT_SUNRISE, day)
+            sunset = get_astral_event_date(self.hass, SUN_EVENT_SUNSET, day)
+            if sunrise is not None and sunset is not None and sunset > sunrise:
+                windows.append(DaylightWindow(sunrise, sunset))
+        self._astral_cache = (today, tuple(windows))
+        return self._astral_cache[1]
+
+    def _forecast_derived(self, key: str) -> float | None:
+        data = self.forecast_data if isinstance(self.forecast_data, dict) else {}
+        derived = data.get("derived")
+        value = derived.get(key) if isinstance(derived, Mapping) else None
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _radiation_for_day(self, day: date, tz: tzinfo) -> float | None:
+        data = self.forecast_data if isinstance(self.forecast_data, dict) else {}
+        hourly = data.get("hourly")
+        times = getattr(hourly, "times", None)
+        values = getattr(hourly, "values", {}).get("radiation") if hourly is not None else None
+        if not times or not values:
+            return None
+        start, end = day_bounds(day, tz)
+        return mean_daytime_radiation(zip(times, values), start, end)
 
     async def async_configure_enrichment(
         self, hass: HomeAssistant, options: Mapping[str, Any]
@@ -771,8 +917,25 @@ class PlantHelperRuntime:
             await self.evaluate(plant_uuid)
 
     async def handle_placement_change(self, plant_uuid: str, *_args: Any) -> None:
-        """A placement change relearns the baseline; providers stay optional."""
-        await self._reset_learning(plant_uuid)
+        """Switch learning to the new placement, preserving the old baseline.
+
+        Indoor and outdoor baselines are kept separately (roadmap Phase 6): the
+        inactive placement's baseline stays stored and resumes if the plant moves
+        back. The daily ledger restarts because its bands are placement-relative.
+        """
+        self.temporal_daily.pop(plant_uuid, None)
+        plant = self.plants.plants.get(plant_uuid)
+        learning = self.learning
+        if plant is None or learning is None:
+            return
+        destination = str(plant.config.get("placement", "indoor"))
+        try:
+            if plant_uuid in learning.placement:
+                await learning.transition(plant_uuid, destination)
+            else:
+                learning.placement[plant_uuid] = destination
+        except Exception:
+            _LOGGER.debug("Placement learning switch failed for %s", plant_uuid, exc_info=True)
 
     async def handle_species_change(
         self, plant_uuid: str, species_change: Any = None, *_args: Any
@@ -782,8 +945,12 @@ class PlantHelperRuntime:
             await self._reset_learning(plant_uuid)
         await self.evaluate(plant_uuid)
 
-    def destination_baseline_complete(self, *_args: Any) -> bool:
-        return False
+    def destination_baseline_complete(self, plant_uuid: str, destination: str) -> bool:
+        learning = self.learning
+        if learning is None:
+            return False
+        stored = learning.baselines.get(plant_uuid, {}).get(destination, {})
+        return bool(stored.get("complete"))
 
     async def cancel_tasks(self, plant_uuid: str) -> None:
         self.species_context.pop(plant_uuid, None)
@@ -870,6 +1037,7 @@ class PlantHelperRuntime:
         self.entities.pop(plant_uuid, None)
         self.temporal_history.pop(plant_uuid, None)
         self.temporal_state.pop(plant_uuid, None)
+        self.temporal_daily.pop(plant_uuid, None)
         self.species_images.pop(plant_uuid, None)
         self._blocked.discard(plant_uuid)
 
@@ -933,6 +1101,7 @@ class PlantHelperRuntime:
         self.entities.clear()
         self.temporal_history.clear()
         self.temporal_state.clear()
+        self.temporal_daily.clear()
         self._blocked.clear()
         self.plants.unload()
         self.physical_subscriptions = None

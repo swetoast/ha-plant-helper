@@ -5,25 +5,24 @@ caller's ``now``, the care profile, and optional environment context, and
 returns a decision plus the next state. It has no clock or I/O of its own, so
 the roadmap's timeline scenarios run as ordinary domain tests.
 
-This slice uses a static wet-duration limit. Escalation to too_wet / too_dry is
-gated on both elapsed duration and confidence, which is why a single elevated
-reading reads as ``wet`` (good health, no attention) rather than ``too_wet``.
+The wet-duration limit and drying label come from the environmental drying
+context (drying.py), supplied by the combined engine. Escalation to too_wet /
+too_dry is gated on both elapsed duration and confidence, which is why a single
+elevated reading reads as ``wet`` (good health, no attention) not ``too_wet``.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Mapping
+from statistics import median
+from typing import Any, Mapping, Sequence
 
-from .drying import adjusted_wet_limit, drying_coefficient, drying_context
-from .history import ObservationHistory
+from .history import WATERING_RISE, ObservationHistory, same_watering
 from .status import (
     APPROACHING_DRY,
     DRYING,
     HEALTH_GOOD,
-    HEALTH_NEEDS_WATER,
-    HEALTH_TOO_DRY,
-    HEALTH_TOO_WET,
+    HEALTH_STRESSED,
     HEALTH_UNKNOWN,
     HEALTH_WATCH,
     NEEDS_WATER,
@@ -49,7 +48,7 @@ PROFILE_BANDS: dict[str, tuple[float, float]] = {
 # watering recommendation at or below it.
 CRITICAL_MOISTURE = 5.0
 
-# Static duration limits (hours). P4 makes the wet limit environment-driven.
+# Duration limits (hours). The wet limit is the base the drying context scales.
 WET_DURATION_LIMIT_HOURS = 72.0
 STAYING_WET_LIMIT_HOURS = 24.0
 DRY_DURATION_LIMIT_HOURS = 48.0
@@ -58,8 +57,23 @@ DRY_DURATION_LIMIT_HOURS = 48.0
 RECENTLY_WATERED_HOURS = 6.0
 
 # Trend and proximity tuning.
-DRYING_SLOPE = 0.5  # percent per hour of decline to call a trend "drying"
+# Calibrated against live recorder data: real pots dry about 1-10 points a day,
+# and sensors report whole percentages, so the trend is read over up to a day
+# (starting after the last watering) and a gentle steady decline counts.
+DRYING_SLOPE = 0.05  # percent per hour of decline to call a trend "drying"
+SLOPE_WINDOW_HOURS = 48.0  # two daily cycles: cancels the probe's day/night swing
+MIN_SLOPE_SPAN_HOURS = 4.0
 APPROACH_MARGIN = 5.0  # within this many points above the low band = approaching
+# Watering threshold scales with the sensor's typical daily swing.
+NOISE_DAYS = 7
+NOISE_MIN_DAYS = 3
+NOISE_COVERAGE_HOURS = 20.0
+NOISE_FACTOR = 1.5
+WATERING_RISE_MIN = 5.0
+WATERING_RISE_MAX = 20.0
+# A status at a band edge only clears once moisture is this far back inside,
+# so a sensor wobbling 24/25/26 does not flap needs-attention.
+BAND_HYSTERESIS = 2.0
 
 _CONFIDENT = ("medium", "high")
 
@@ -79,6 +93,10 @@ class TemporalMoistureState:
     drying_rate_per_hour: float | None
     adjusted_wet_duration_limit: float | None
     confidence: str
+    # Start of the current unbroken period above the band. It survives brief
+    # "drying" dips and top-up waterings, so soil that is repeatedly watered
+    # before it ever returns to range still accumulates wet duration.
+    elevated_since: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +118,10 @@ def evaluate_moisture(
     profile: str,
     environment: Mapping | None = None,
     band: tuple[float, float] | None = None,
+    *,
+    wet_limit_hours: float = WET_DURATION_LIMIT_HOURS,
+    drying_label: str = "normal",
+    watering_rise: float = WATERING_RISE,
 ) -> tuple[MoistureDecision, TemporalMoistureState]:
     if band is not None:
         low, high = band
@@ -110,9 +132,7 @@ def evaluate_moisture(
     rain_suppression = bool(env.get("rain_suppression"))
 
     confidence = history.confidence(now)
-    coefficient = drying_coefficient(env)
-    wet_limit_hours = adjusted_wet_limit(WET_DURATION_LIMIT_HOURS, coefficient)
-    context = drying_context(coefficient)
+    context = drying_label
 
     latest = history.latest_valid()
     if latest is None:
@@ -138,12 +158,40 @@ def evaluate_moisture(
         return decision, state
 
     moisture = float(latest.moisture)
-    slope = history.moisture_slope(now)
-    watering_at = history.detect_watering(now)
-    last_watering = watering_at or (prior.last_watering_event if prior else None)
+    last_watering = same_watering(
+        history.detect_watering(now, rise=watering_rise),
+        prior.last_watering_event if prior else None,
+        history,
+    )
+    slope = history.moisture_slope(
+        now,
+        window_hours=SLOPE_WINDOW_HOURS,
+        since=last_watering,
+        min_span_hours=MIN_SLOPE_SPAN_HOURS,
+    )
     peak = history.peak_since(last_watering)
     declining = slope is not None and slope <= -DRYING_SLOPE
     confident = confidence in _CONFIDENT
+
+    above = moisture > high or (
+        prior is not None
+        and prior.elevated_since is not None
+        and moisture > high - BAND_HYSTERESIS
+    )
+    below = moisture < low or (
+        prior is not None
+        and prior.status in (NEEDS_WATER, TOO_DRY, WATERING_PAUSED)
+        and moisture < low + BAND_HYSTERESIS
+    )
+    elevated_since = None
+    if above:
+        candidates = [now]
+        above_for = history.duration_above(high, now)
+        if above_for is not None:
+            candidates.append(now - above_for)
+        if prior is not None and prior.elevated_since is not None:
+            candidates.append(prior.elevated_since)
+        elevated_since = min(candidates)
 
     status, health, attention, summary, reason, since = _classify(
         moisture=moisture,
@@ -154,12 +202,14 @@ def evaluate_moisture(
         slope=slope,
         declining=declining,
         confident=confident,
-        watering_at=watering_at,
         last_watering=last_watering,
         wet_limit_hours=wet_limit_hours,
         placement=placement,
         rain_suppression=rain_suppression,
         prior=prior,
+        elevated_since=elevated_since,
+        above=above,
+        below=below,
     )
 
     decision = MoistureDecision(
@@ -173,8 +223,33 @@ def evaluate_moisture(
         slope,
         wet_limit_hours,
         confidence,
+        elevated_since,
     )
     return decision, state
+
+
+def watering_rise_threshold(days: Sequence[Any]) -> float:
+    """Rise that counts as a watering for this sensor.
+
+    1.5x the median daily moisture range over the last week of well-covered
+    days, bounded to 5..20 points. Waterings are occasional, so the median
+    reflects the probe's noise and day/night swing, not the waterings. For a pot
+    that dries many points a day this errs high, which can delay recognising a
+    very slow soak by an hour or two; that is deliberate, because a false
+    watering is far more harmful (it clears a real dry alert, restarts the wet
+    and dry timers, and corrupts learning). Replayed against live recorder data,
+    this estimate produced no false waterings on either sensor.
+    """
+    ranges = [
+        d.moisture_max - d.moisture_min
+        for d in list(days)[-NOISE_DAYS:]
+        if d.moisture_coverage_hours >= NOISE_COVERAGE_HOURS
+        and d.moisture_min is not None
+        and d.moisture_max is not None
+    ]
+    if len(ranges) < NOISE_MIN_DAYS:
+        return WATERING_RISE
+    return max(WATERING_RISE_MIN, min(WATERING_RISE_MAX, NOISE_FACTOR * median(ranges)))
 
 
 def _classify(
@@ -187,14 +262,19 @@ def _classify(
     slope,
     declining,
     confident,
-    watering_at,
     last_watering,
     wet_limit_hours,
     placement,
     rain_suppression,
     prior,
+    elevated_since,
+    above,
+    below,
 ):
-    if watering_at is not None and (now - watering_at) <= timedelta(
+    # The recently-watered window runs from the recorded watering, not only
+    # while the rise is still visible: a reading that dips a point during the
+    # soak must not bounce the status back to needs_water.
+    if last_watering is not None and timedelta(0) <= (now - last_watering) <= timedelta(
         hours=RECENTLY_WATERED_HOURS
     ):
         return (
@@ -203,14 +283,16 @@ def _classify(
             False,
             "Soil moisture rose sharply; recently watered",
             "recent_watering",
-            watering_at,
+            last_watering,
         )
 
-    if moisture > high:
+    if above:
         wet_for = history.duration_above(high, now)
         since = _run_since(
             prior, _WET_FAMILY, wet_for, last_watering, now
         )
+        if elevated_since is not None:
+            since = min(since, elevated_since)
         elapsed = now - since
         if declining:
             return (
@@ -224,13 +306,16 @@ def _classify(
         if elapsed >= timedelta(hours=wet_limit_hours) and confident:
             return (
                 TOO_WET,
-                HEALTH_TOO_WET,
+                HEALTH_WATCH,
                 True,
                 "Soil has stayed wet well beyond the expected drying time",
                 "persistently_wet",
                 since,
             )
-        if elapsed >= timedelta(hours=STAYING_WET_LIMIT_HOURS) and confident:
+        # The staying-wet point scales with the dynamic wet limit (24 h of the
+        # base 72 h), so slow-drying conditions delay both steps together.
+        staying_hours = wet_limit_hours * (STAYING_WET_LIMIT_HOURS / WET_DURATION_LIMIT_HOURS)
+        if elapsed >= timedelta(hours=staying_hours) and confident:
             return (
                 STAYING_WET,
                 HEALTH_WATCH,
@@ -248,14 +333,16 @@ def _classify(
             since,
         )
 
-    if moisture < low:
+    if below:
         dry_for = history.duration_below(low, now)
         since = _run_since(prior, _DRY_FAMILY, dry_for, None, now)
+        if last_watering is not None and since < last_watering <= now:
+            since = last_watering  # a watering ends the previous dry run
         elapsed = now - since
         if elapsed >= timedelta(hours=DRY_DURATION_LIMIT_HOURS) and confident:
             return (
                 TOO_DRY,
-                HEALTH_TOO_DRY,
+                HEALTH_STRESSED,
                 True,
                 "Soil has stayed dry well beyond the profile for too long",
                 "persistently_dry",
@@ -268,7 +355,7 @@ def _classify(
         ):
             return (
                 WATERING_PAUSED,
-                HEALTH_NEEDS_WATER,
+                HEALTH_GOOD,
                 False,
                 "Soil is below the profile, but rain is expected soon; watering is paused",
                 "rain_expected",
@@ -276,7 +363,7 @@ def _classify(
             )
         return (
             NEEDS_WATER,
-            HEALTH_NEEDS_WATER,
+            HEALTH_WATCH,
             True,
             "Soil moisture is below the selected care profile",
             "soil_dry",

@@ -20,7 +20,12 @@ wet soil instead of being nagged.
   alarm.
 - Per-plant learning. A plant learns its comfortable moisture band from its own
   watering cycles and is then judged against that instead of a generic profile.
-- Light and humidity tracked the same way, surfaced on the health sensor.
+- Light judged as cumulative daylight exposure, bounded by sunrise and sunset,
+  with grow lights counted separately and overcast days forgiven; night never
+  counts against a plant.
+- Temperature and humidity judged by how long they stay out of range, not by a
+  single reading, and combined with moisture (cold and wet, warm and dry).
+- Seasonal dormancy detected from a month of light and temperature history.
 - Weather aware, outdoor. Rain pauses a watering recommendation, frost and
   exposure show as context, and dormant plants tolerate wet soil longer.
 - Optional species enrichment from Perenual, Trefle, and iNaturalist, including
