@@ -134,17 +134,21 @@
       "no_plants": "There are no plants to remove."
     },
     "error": {
-      "name_required": "Enter a plant name.",
-      "moisture_required": "Select a soil moisture sensor.",
-      "moisture_not_ready": "The soil moisture sensor must report a number before the plant can be added.",
-      "moisture_not_numeric": "The soil moisture sensor is not reporting a numeric value.",
-      "moisture_out_of_range": "The soil moisture value must be between 0 and 100.",
-      "custom_multiplier_range": "The custom multiplier is outside the allowed range.",
-      "cannot_save_plant": "The plant could not be saved. No plant was added.",
-      "plant_changed": "The plant changed while this form was open. Reopen Edit and try again.",
-      "entities_remain": "Plant entities could not be fully removed. Cleanup will retry.",
       "cannot_remove_plant": "The plant removal could not be completed. Cleanup will retry.",
-      "confirmation_required": "Select Confirm removal before submitting."
+      "cannot_save_plant": "The plant could not be saved. No plant was added.",
+      "confirmation_required": "Select Confirm removal before submitting.",
+      "custom_multiplier_range": "The custom multiplier is outside the allowed range.",
+      "entities_remain": "Plant entities could not be fully removed. Cleanup will retry.",
+      "moisture_not_numeric": "The soil moisture sensor is not reporting a numeric value.",
+      "moisture_not_ready": "The soil moisture sensor must report a number before the plant can be added.",
+      "moisture_out_of_range": "The soil moisture value must be between 0 and 100.",
+      "moisture_required": "Select a soil moisture sensor.",
+      "name_required": "Enter a plant name.",
+      "placement": "Choose indoor or outdoor placement.",
+      "plant_changed": "The plant changed while this form was open. Reopen Edit and try again.",
+      "profile": "Choose a moisture profile.",
+      "rain_limit_mm": "Enter a rain limit between 0 and 1000 mm.",
+      "species": "The species name is not valid."
     }
   }
 }

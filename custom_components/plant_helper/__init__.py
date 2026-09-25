@@ -46,6 +46,7 @@ async def async_setup_entry(
     await entry.runtime_data.async_configure_images(hass)
     await entry.runtime_data.async_configure_learning()
     await entry.runtime_data.async_start(hass, entry.entry_id)
+    entry.runtime_data.prune_retired_entities()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await entry.runtime_data.reconcile_pending_removals()
     return True

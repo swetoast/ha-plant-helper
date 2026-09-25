@@ -21,7 +21,7 @@ def derived(series,now):
  d=derive_weather_windows(series,now=now);vals=series.values
  future=[(t,i) for i,t in enumerate(series.times) if now<t<=now+timedelta(hours=48)]
  def a(k):return [vals[k][i] for _,i in future if vals[k][i] is not None]
- temp=a('temperature');hum=a('humidity');rad=a('radiation');et=a('et0')
+ temp=a('temperature');hum=a('humidity')
  d.update({"radiation_24h":sum(v for t,i in future if t<=now+timedelta(hours=24) and (v:=vals['radiation'][i]) is not None),"et0_24h":sum(v for t,i in future if t<=now+timedelta(hours=24) and (v:=vals['et0'][i]) is not None),"vpd_max_48h":max((0.6108*math.exp(17.27*x/(x+237.3))*(1-h/100) for x,h in zip(temp,hum)),default=0),"frost_hours_48h":sum(1 for x in temp if x<=0),"wet_hours_48h":sum(1 for h in hum if h>=90),"hazard":bool(any(x<=0 for x in temp) or d['forecast_precipitation_24h']>=20)})
  return d
 class ForecastCollector:
@@ -45,7 +45,7 @@ class ForecastCollector:
   try:series=normalize_weather_payload(hourly,REQUIRED)
   except ValidationError as e:raise ForecastError(str(e)) from None
   units=series.units
-  expected={'temperature':'°C','humidity':'%','precipitation':'mm','radiation':'W/m²','et0':'mm'}
+  expected={'temperature':'\u00b0C','humidity':'%','precipitation':'mm','radiation':'W/m\u00b2','et0':'mm'}
   if any(units.get(k)!=v for k,v in expected.items()):raise ForecastError('units')
   if req.profile=='outdoor' and not isinstance(daily,Mapping):raise ForecastError('partial')
   data={'profile':req.profile,'sections':req.sections,'hourly':series,'daily':daily,'derived':derived(series,now)};self.generation+=1

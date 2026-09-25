@@ -15,6 +15,7 @@ from homeassistant.helpers.storage import Store
 from .const import DOMAIN
 from .domain.runtime import RuntimeCollection
 from .domain.rate_limit import RateLimitGate
+from .domain.entity_contract import is_retired_unique_id
 from .domain.interpretation import interpret_indoor, interpret_outdoor
 from .domain.temporal.history import ObservationHistory
 from .domain.temporal.humidity import (
@@ -216,16 +217,21 @@ class PlantHelperRuntime:
         """
         from .domain.image_proxy import SpeciesImageProxy
         from .image_client import ImageDownloader
-        from .image_proxy import PlantHelperImageView
+        from .image_proxy import async_set_image_proxy
+        from .domain.image_proxy import system_resolve
         from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
         session = async_get_clientsession(hass)
         cache_dir = Path(hass.config.path("plant_helper", "images"))
         downloader = ImageDownloader(session)
         self.image_proxy = await hass.async_add_executor_job(
-            SpeciesImageProxy, cache_dir, downloader.fetch
+            SpeciesImageProxy,
+            cache_dir,
+            downloader.fetch,
+            system_resolve,
+            hass.async_add_executor_job,
         )
-        hass.http.register_view(PlantHelperImageView(self.image_proxy))
+        async_set_image_proxy(hass, self.image_proxy)
         self.image_gc_unsub = async_track_time_interval(
             hass, self._image_gc_tick, timedelta(hours=24)
         )
@@ -808,6 +814,23 @@ class PlantHelperRuntime:
                 if entity.hass is not None:
                     await entity.async_remove()
 
+    def prune_retired_entities(self) -> None:
+        """Drop registry entries for entity keys this version no longer creates.
+
+        Keys retired by earlier releases otherwise linger as restored
+        "unavailable" entities, because no platform ever recreates them.
+        """
+        if self.hass is None or self.entry_id is None:
+            return
+        registry = er.async_get(self.hass)
+        for entity in list(registry.entities.values()):
+            if (
+                entity.platform == DOMAIN
+                and entity.config_entry_id == self.entry_id
+                and is_retired_unique_id(self.entry_id, entity.unique_id)
+            ):
+                registry.async_remove(entity.entity_id)
+
     async def remove_entity_registry(self, plant_uuid: str) -> None:
         if self.hass is None:
             return
@@ -891,6 +914,10 @@ class PlantHelperRuntime:
         if self.image_gc_unsub is not None:
             self.image_gc_unsub()
             self.image_gc_unsub = None
+        if self.hass is not None and self.image_proxy is not None:
+            from .image_proxy import async_set_image_proxy
+
+            async_set_image_proxy(self.hass, None)
         self.image_proxy = None
         self.forecast_collector = None
         self.air_collector = None

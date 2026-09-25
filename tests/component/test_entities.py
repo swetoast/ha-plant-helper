@@ -165,3 +165,15 @@ def test_care_status_exposes_universal_signals_for_both_placements():
     result = attributes_for(BY_KEY['care_status'], outdoor)
     assert result['rain_suppression'] is True and result['frost_hours'] == 2
     assert result['exposure'] == ['frost'] and 'external_daylight' not in result
+
+
+def test_retired_entity_keys_are_detected_for_pruning():
+    from domain.entity_contract import is_retired_unique_id
+    entry, plant = "01JABCDEF", "a" * 32
+    assert is_retired_unique_id(entry, f"{entry}_{plant}_calculated_moisture")
+    assert is_retired_unique_id(entry, f"{entry}_{plant}_drying_modifier")
+    # Current keys, including ones containing underscores and the image entity, stay.
+    for key in ("care_status", "needs_attention", "species_context", "species_image", "moisture"):
+        assert not is_retired_unique_id(entry, f"{entry}_{plant}_{key}")
+    # Entries belonging to another config entry are never touched.
+    assert not is_retired_unique_id(entry, f"OTHER_{plant}_calculated_moisture")

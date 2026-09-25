@@ -18,7 +18,7 @@ SENSORS=(
  EntityContract('sensor','care_status','Status',icon='mdi:sprout',attributes=('summary','reason','since','confidence','drying_context','light_context','humidity_context','dormant','placement','rain_suppression','frost_hours','exposure','external_daylight')),
  EntityContract('sensor','moisture','Moisture','%',device_class='moisture',state_class='measurement',icon='mdi:water-percent'),
  EntityContract('sensor','light','Light','lx',device_class='illuminance',state_class='measurement',icon='mdi:brightness-5'),
- EntityContract('sensor','temperature','Temperature','°C',device_class='temperature',state_class='measurement',icon='mdi:thermometer'),
+ EntityContract('sensor','temperature','Temperature','\u00b0C',device_class='temperature',state_class='measurement',icon='mdi:thermometer'),
  EntityContract('sensor','humidity','Humidity','%',device_class='humidity',state_class='measurement',icon='mdi:water-percent'),
  EntityContract('sensor','battery','Battery',icon='mdi:battery'),
  EntityContract('sensor','health','Health',icon='mdi:leaf',attributes=('summary',)),
@@ -27,6 +27,15 @@ SENSORS=(
 )
 BINARY_SENSORS=(EntityContract('binary_sensor','needs_attention','Needs attention',device_class='problem',icon='mdi:alert-circle-outline',attributes=('reason',)),)
 BY_KEY={item.key:item for item in (*SENSORS,*BINARY_SENSORS)}
+SPECIES_IMAGE_KEY='species_image'
+CURRENT_KEYS=frozenset((*BY_KEY,SPECIES_IMAGE_KEY))
+def is_retired_unique_id(entry_id:str,unique_id:str)->bool:
+ # unique ids are f'{entry_id}_{plant_uuid}_{key}'; the uuid has no underscores,
+ # so everything after it is the key, which may itself contain underscores.
+ prefix=f'{entry_id}_'
+ if not unique_id.startswith(prefix):return False
+ _,sep,key=unique_id[len(prefix):].partition('_')
+ return bool(sep) and key not in CURRENT_KEYS
 PROVIDER_DEBUG_KEYS=frozenset({'provider','providers','provenance','raw','debug','trace','error','cache','generation','backoff','auth_suspended','api_key','token'})
 
 def slug(value:str)->str:

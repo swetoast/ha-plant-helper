@@ -719,3 +719,36 @@ def test_dormancy_never_suppresses_genuine_dryness():
     )
     assert decision.status == S.NEEDS_WATER
     assert decision.needs_attention is True
+
+
+def test_watering_time_is_stable_across_dense_readings():
+    # Real sensors report every few minutes. The detected watering must stay at
+    # the moment of the rise, not move forward with each new reading.
+    t0 = NOW - timedelta(hours=3)
+    h = ObservationHistory()
+    h.append(_obs_at(t0, 30.0))
+    detected = set()
+    for i in range(1, 25):  # 5-minute readings for 2 hours after watering
+        t = t0 + timedelta(minutes=5 * i)
+        h.append(_obs_at(t, 62.0 - i * 0.1))
+        found = h.detect_watering(t)
+        if found is not None:
+            detected.add(found)
+    assert detected == {t0 + timedelta(minutes=5)}
+
+
+def test_one_watering_closes_exactly_one_learning_cycle():
+    t0 = NOW - timedelta(days=2)
+    h = ObservationHistory(retention_hours=24 * 60)
+    samples = BaselineSamples()
+    for i, m in enumerate([60, 50, 40, 30]):  # drying down
+        t = t0 + timedelta(hours=i * 6)
+        h.append(_obs_at(t, m))
+        samples = update_samples(samples, h, t)
+    wt = t0 + timedelta(hours=24)
+    for i in range(24):  # watering, then 5-minute readings for 2 hours
+        t = wt + timedelta(minutes=5 * i)
+        h.append(_obs_at(t, 30.0 if i == 0 else 70.0 - i * 0.1))
+        samples = update_samples(samples, h, t)
+    assert len(samples.troughs) == 1 and len(samples.peaks) == 1
+    assert samples.troughs[0] == 30.0

@@ -288,3 +288,17 @@ def test_reported_size_and_redirect_limit(tmp_path):
  with pytest.raises(ImageProxyError,match='size'):image_proxy_run(SpeciesImageProxy(tmp_path,huge,public).refresh('a','https://images.example/a.jpg',NOW))
  async def loop(u):return DownloadResponse(302,{'Location':'/again'},b'',u)
  with pytest.raises(ImageProxyError,match='redirect_limit'):image_proxy_run(SpeciesImageProxy(tmp_path,loop,public).refresh('a','https://images.example/a.jpg',NOW,max_redirects=1))
+
+
+def test_blocking_work_runs_through_the_injected_executor(tmp_path):
+    # In Home Assistant, run_blocking is hass.async_add_executor_job, so DNS
+    # validation, image decoding, file writes and serving never block the loop.
+    ran=[]
+    async def run_blocking(func,*args):
+        ran.append(getattr(func,'__name__',repr(func)))
+        return await asyncio.to_thread(func,*args)
+    p=SpeciesImageProxy(tmp_path,lambda u:asyncio.sleep(0,result=response()),public,run_blocking)
+    item=image_proxy_run(p.refresh('snake','https://images.example/a.jpg',NOW))
+    served=image_proxy_run(p.async_serve(item.digest,True))
+    assert 'validate_url' in ran and '_store' in ran and 'serve' in ran
+    assert served.status==200 and served.body[:4]==b'RIFF'

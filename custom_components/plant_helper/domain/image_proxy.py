@@ -3,7 +3,7 @@ import hashlib,io,ipaddress,socket
 from dataclasses import dataclass
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
-from typing import Awaitable,Callable,Iterable,Mapping
+from typing import Any,Awaitable,Callable,Iterable,Mapping
 from urllib.parse import urljoin,urlsplit
 from PIL import Image,ImageOps,UnidentifiedImageError
 
@@ -63,18 +63,28 @@ def transform_thumbnail(body:bytes,content_type:str|None=None)->tuple[bytes,int,
  except ImageProxyError:raise
  except (UnidentifiedImageError,OSError,Image.DecompressionBombError) as err:raise ImageProxyError('image') from err
 
+async def _run_inline(func:Callable[...,Any],*args:Any)->Any:return func(*args)
+
 class SpeciesImageProxy:
- def __init__(self,cache_dir:Path,fetch:Callable[[str],Awaitable[DownloadResponse]],resolve:Callable[[str],Iterable[str]]=system_resolve):
-  self.cache_dir=Path(cache_dir);self.cache_dir.mkdir(parents=True,exist_ok=True);self.fetch=fetch;self.resolve=resolve;self.index={};self.references={}
+ def __init__(self,cache_dir:Path,fetch:Callable[[str],Awaitable[DownloadResponse]],resolve:Callable[[str],Iterable[str]]=system_resolve,run_blocking:Callable[...,Awaitable[Any]]|None=None):
+  # run_blocking executes DNS resolution, image decoding and file I/O off the
+  # caller's event loop; inline by default so the pure module has no HA import.
+  self.cache_dir=Path(cache_dir);self.cache_dir.mkdir(parents=True,exist_ok=True);self.fetch=fetch;self.resolve=resolve;self.run_blocking=run_blocking or _run_inline;self.index={};self.references={}
+ def _store(self,body:bytes,ctype:str)->tuple[str,Path,int,int]:
+  data,width,height=transform_thumbnail(body,ctype)
+  digest=hashlib.sha256(data).hexdigest();path=self.cache_dir/f'{digest}.webp'
+  if not path.exists():
+   temp=path.with_suffix('.tmp');temp.write_bytes(data);temp.replace(path)
+  return digest,path,width,height
  async def refresh(self,species_key:str,url:str,now:datetime|None=None,max_redirects:int=3)->CachedImage:
-  now=now or datetime.now(timezone.utc);old_digest=self.references.get(species_key);current=validate_url(url,self.resolve)
+  now=now or datetime.now(timezone.utc);old_digest=self.references.get(species_key);current=await self.run_blocking(validate_url,url,self.resolve)
   try:
    for _ in range(max_redirects+1):
     response=await self.fetch(current)
     if response.status in {301,302,303,307,308}:
      location=response.headers.get('Location') or response.headers.get('location')
      if not location:raise ImageProxyError('redirect')
-     current=validate_url(urljoin(current,location),self.resolve);continue
+     current=await self.run_blocking(validate_url,urljoin(current,location),self.resolve);continue
     if response.status!=200:raise ImageProxyError(f'http_{response.status}')
     reported=response.headers.get('Content-Length') or response.headers.get('content-length')
     if reported is not None:
@@ -82,15 +92,14 @@ class SpeciesImageProxy:
      except ValueError:raise ImageProxyError('content_length') from None
      if length<0 or length>MAX_DOWNLOAD:raise ImageProxyError('size')
     ctype=response.headers.get('Content-Type') or response.headers.get('content-type','')
-    data,width,height=transform_thumbnail(response.body,ctype)
-    digest=hashlib.sha256(data).hexdigest();path=self.cache_dir/f'{digest}.webp'
-    if not path.exists():
-     temp=path.with_suffix('.tmp');temp.write_bytes(data);temp.replace(path)
+    digest,path,width,height=await self.run_blocking(self._store,response.body,ctype)
     item=CachedImage(digest,path,'image/webp',width,height,now);self.index[digest]=item;self.references[species_key]=digest;return item
    raise ImageProxyError('redirect_limit')
   except Exception:
-   if old_digest and old_digest in self.index and self.index[old_digest].path.exists():return self.index[old_digest]
+   if old_digest and old_digest in self.index and await self.run_blocking(self.index[old_digest].path.exists):return self.index[old_digest]
    raise
+ async def async_serve(self,digest:str,authenticated:bool,if_none_match:str|None=None)->ImageResponse:
+  return await self.run_blocking(self.serve,digest,authenticated,if_none_match)
  def serve(self,digest:str,authenticated:bool,if_none_match:str|None=None)->ImageResponse:
   if not authenticated:return ImageResponse(401,{'Cache-Control':'no-store'},b'')
   item=self.index.get(digest);path=self.cache_dir/f'{digest}.webp'

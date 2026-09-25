@@ -151,11 +151,20 @@ class ObservationHistory:
             return None
         newest = recent[-1]
         base = min(recent[:-1], key=lambda o: o.moisture)
-        if base.observed_at < newest.observed_at and (
+        if base.observed_at >= newest.observed_at or (
             newest.moisture - base.moisture
-        ) >= rise:
-            return newest.observed_at
-        return None
+        ) < rise:
+            return None
+        # Report the first reading that cleared the rise, not the newest one.
+        # The newest reading moves forward on every update, which would re-stamp
+        # one watering as many for the whole window and close a fresh learning
+        # cycle on each reading. The first crossing is stable across updates.
+        crossing = next(
+            o
+            for o in recent
+            if o.observed_at > base.observed_at and (o.moisture - base.moisture) >= rise
+        )
+        return crossing.observed_at
 
     def duration_above(self, threshold: float, now: datetime) -> timedelta | None:
         """How long the newest run of valid readings has stayed > threshold."""

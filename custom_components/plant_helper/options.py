@@ -91,7 +91,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
             scientific=str(candidate.get("scientific_name") or "Unknown species")
             common=str(candidate.get("common_name") or "No common name")
             matched=str(candidate.get("matched_term") or common)
-            options.append({"value":str(index),"label":f"{common} · {scientific} · matched: {matched}"})
+            options.append({"value":str(index),"label":f"{common} - {scientific} - matched: {matched}"})
         return self.async_show_form(
             step_id="select_species",
             data_schema=vol.Schema({vol.Required("candidate"):selector.SelectSelector(selector.SelectSelectorConfig(options=options,mode=selector.SelectSelectorMode.DROPDOWN))}),
@@ -147,7 +147,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
                 return self.async_abort(reason="plant_not_found")
             self._expected_revision=int(selected.config["revision"])
             return await self.async_step_edit_placement()
-        options=[{"value":uuid,"label":f"{plant.config.get('display_name',uuid)} · {str(plant.config.get('placement','')).title()}"} for uuid,plant in sorted(plants.items())]
+        options=[{"value":uuid,"label":f"{plant.config.get('display_name',uuid)} - {str(plant.config.get('placement','')).title()}"} for uuid,plant in sorted(plants.items())]
         schema=vol.Schema({vol.Required("plant_uuid"): selector.SelectSelector(selector.SelectSelectorConfig(options=options))})
         return self.async_show_form(step_id="edit",data_schema=schema)
 
@@ -213,7 +213,7 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
             return await self.async_step_confirm_remove()
         if not plants:
             return self.async_abort(reason="no_plants")
-        options=[{"value":u,"label":f"{p.config.get('display_name',u)} · {str(p.config.get('placement','')).title()}"} for u,p in sorted(plants.items())]
+        options=[{"value":u,"label":f"{p.config.get('display_name',u)} - {str(p.config.get('placement','')).title()}"} for u,p in sorted(plants.items())]
         return self.async_show_form(step_id="remove",data_schema=vol.Schema({vol.Required("plant_uuid"):selector.SelectSelector(selector.SelectSelectorConfig(options=options))}))
 
     async def async_step_confirm_remove(self,user_input: dict[str,Any] | None=None) -> ConfigFlowResult:

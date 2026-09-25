@@ -8,7 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import PlantHelperConfigEntry
 from .const import DOMAIN
-from .domain.entity_contract import slug, unique_id
+from .domain.entity_contract import SPECIES_IMAGE_KEY, unique_id
 from .domain.runtime import PlantSetChange, RuntimePlant
 
 
@@ -70,9 +70,10 @@ class PlantHelperImage(ImageEntity):
         self._plant = plant
         self.plant_uuid = plant.plant_uuid
         display_name = str(plant.config.get("display_name", plant.plant_uuid))
-        self._attr_unique_id = unique_id(entry_id, plant.plant_uuid, "species_image")
-        self._attr_suggested_object_id = slug(display_name)
-        self._attr_name = "Photo"
+        self._attr_unique_id = unique_id(entry_id, plant.plant_uuid, SPECIES_IMAGE_KEY)
+        # The photo is the plant device's primary entity: no entity name, so the
+        # entity id is image.<plant> and the friendly name is the plant's name.
+        self._attr_name = None
         self._attr_icon = "mdi:image"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, plant.plant_uuid)},
