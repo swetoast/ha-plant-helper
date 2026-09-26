@@ -1,6 +1,9 @@
 # Plant Helper - Feature Roadmap (F1-F4)
 
-> Status: F1-F4 all shipped (0.0.27-0.0.30).
+> Status: F1-F4 all shipped (0.0.27-0.0.30). Historical: F2's rolling-mean
+> light and humidity and F4's calendar-based dormancy were replaced by the
+> temporal engine in 0.0.42 (see `temporal_sensor_roadmap.md`), and species
+> enrichment became per-provider matching in 0.0.44.
 
 > Purpose: pre-decide every design question so these four features can be built
 > without stopping to ask. Order is fixed by dependency and risk: F1 (photos),

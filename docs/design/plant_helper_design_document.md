@@ -1,6 +1,12 @@
 # Plant Helper Complete Design Plan
 
-**Status:** Design specification  
+**Status:** Original design specification (historical). Current behavior is
+described in the user documentation and `CHANGELOG.md`. Notable differences:
+species enrichment is per-provider matching with stored record IDs since
+0.0.44 (not the automatic evidence-based matching of sections 31-32, and
+common names never count as a match); temporal behavior follows
+`temporal_sensor_roadmap.md`; and `custom_multiplier` is specified here but
+its effect was never defined and it is not applied yet.  
 **Target platform:** Home Assistant 2025.12.2  
 **Document date:** 2026-09-22  
 

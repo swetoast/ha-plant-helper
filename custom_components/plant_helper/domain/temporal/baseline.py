@@ -13,8 +13,9 @@ module only computes; every constant is a starting value to tune against fixture
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from statistics import median
 
 from .history import WATERING_RISE, ObservationHistory, same_watering
@@ -54,6 +55,7 @@ class BaselineSamples:
     slopes: tuple[float, ...] = ()
     recovery_hours: tuple[float, ...] = ()
     back_in_range_at: datetime | None = None
+    intervals: tuple[float, ...] = ()  # hours between consecutive waterings
 
     def to_dict(self) -> dict:
         return {
@@ -68,6 +70,7 @@ class BaselineSamples:
             "slopes": list(self.slopes),
             "recovery_hours": list(self.recovery_hours),
             "back_in_range_at": _iso(self.back_in_range_at),
+            "intervals": list(self.intervals),
         }
 
     @classmethod
@@ -86,6 +89,7 @@ class BaselineSamples:
             slopes=tuple(_floats(raw.get("slopes"))),
             recovery_hours=tuple(_floats(raw.get("recovery_hours"))),
             back_in_range_at=_parse(raw.get("back_in_range_at")),
+            intervals=tuple(_floats(raw.get("intervals"))),
         )
 
 
@@ -115,6 +119,7 @@ def update_samples(
         cycle_high = moisture if cycle_high is None else max(cycle_high, moisture)
     troughs, peaks = samples.troughs, samples.peaks
     rises, slopes, recovery = samples.rises, samples.slopes, samples.recovery_hours
+    intervals = samples.intervals
     last_watering = samples.last_watering
     back_in_range = samples.back_in_range_at
     if (
@@ -143,6 +148,7 @@ def update_samples(
             troughs = _cap(troughs + (cycle_low,))
             if last_watering is not None and watering > last_watering:
                 hours = (watering - last_watering).total_seconds() / 3600.0
+                intervals = _cap(intervals + (hours,))
                 slopes = _cap(slopes + ((cycle_high - cycle_low) / hours,))
                 if back_in_range is not None:
                     recovery = _cap(
@@ -166,6 +172,7 @@ def update_samples(
         slopes=slopes,
         recovery_hours=recovery,
         back_in_range_at=back_in_range,
+        intervals=intervals,
     )
 
 
@@ -265,6 +272,129 @@ def light_normal(learned, month: int) -> float | None:
     entry = monthly.get(f"{month:02d}") or {}
     value = entry.get("light", learned.get("light_effective"))
     return float(value) if value is not None else None
+
+
+RELEARN_KEY = "relearn_since"
+
+
+def relearn_baseline(today: date) -> dict:
+    """A fresh baseline after a relearn: nothing learned, and a start day.
+
+    ``today`` is the local day, matching the daily-summary keys. The start day
+    keeps learning from reusing summaries recorded before the relearn, which are
+    exactly the data the user wants to discard.
+    """
+    return {RELEARN_KEY: today.isoformat()}
+
+
+def days_since_relearn(days, baseline: dict | None) -> list:
+    """Completed days that count for learning: those on or after a relearn."""
+    since = (baseline or {}).get(RELEARN_KEY)
+    return [d for d in days if not since or d.day >= since]
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationProgress:
+    """How far a plant is from a learned moisture band, and what it waits for."""
+
+    percent: int
+    phase: str
+    days: int
+    cycles: int
+    waiting_for: str | None
+    estimated_ready: datetime | None
+
+
+def calibration_progress(
+    samples: BaselineSamples,
+    confidence: str,
+    now: datetime,
+    *,
+    complete: bool,
+    profile_band: tuple[float, float] | None = None,
+) -> CalibrationProgress:
+    """Progress toward the calibration gate in derive_band.
+
+    Days of coverage count for half and complete watering cycles for the other
+    half, so progress moves steadily instead of sitting still until the last
+    cycle closes. It stays below 100 until the band is actually learned.
+    """
+    days = 0.0
+    if samples.first_seen is not None:
+        # Same coverage measure as the gate in derive_band.
+        seen_until = samples.last_seen or now
+        days = max(0.0, (seen_until - samples.first_seen) / timedelta(days=1))
+    cycles = min(len(samples.troughs), len(samples.peaks))
+    if complete:
+        return CalibrationProgress(100, "calibrated", int(days), cycles, None, None)
+    percent = 50.0 * min(1.0, days / CALIBRATION_DAYS) + 50.0 * min(1.0, cycles / MIN_CYCLES)
+    needed = max(0, MIN_CYCLES - cycles)
+    if needed:
+        waiting = (
+            "one more complete watering cycle"
+            if needed == 1
+            else f"{needed} more complete watering cycles"
+        )
+    elif days < CALIBRATION_DAYS:
+        left = max(1, math.ceil(CALIBRATION_DAYS - days))
+        waiting = "one more day of readings" if left == 1 else f"{left} more days of readings"
+    elif confidence != "high":
+        waiting = f"steadier readings (data confidence is {confidence})"
+    elif derive_band(samples, confidence, now, profile_band) is None:
+        waiting = "a wider moisture swing between waterings"
+    else:
+        waiting = "the next update"
+    ready = None
+    if samples.first_seen is not None:
+        ready = samples.first_seen + timedelta(days=CALIBRATION_DAYS)
+        if needed:
+            if samples.intervals and samples.last_watering is not None:
+                by_cycles = samples.last_watering + timedelta(
+                    hours=float(median(samples.intervals)) * needed
+                )
+                ready = max(ready, by_cycles)
+            else:
+                ready = None  # no watering rhythm seen yet to project from
+    if ready is not None and ready <= now:
+        ready = None
+    return CalibrationProgress(
+        min(99, int(percent)), "learning", int(days), cycles, waiting, ready
+    )
+
+
+_NORMS = (("light", "light_effective"), ("temperature", "temperature_low"), ("humidity", "humidity_low"))
+
+
+def describe_calibration(
+    progress: CalibrationProgress, baseline: dict | None, tz
+) -> tuple[int, dict]:
+    """State and attributes for the calibration sensor."""
+    baseline = baseline or {}
+    attributes: dict = {
+        "phase": progress.phase,
+        "days": progress.days,
+        "days_required": int(CALIBRATION_DAYS),
+        "cycles": progress.cycles,
+        "cycles_required": MIN_CYCLES,
+        "waiting_for": progress.waiting_for,
+        "estimated_ready": (
+            progress.estimated_ready.astimezone(tz).date().isoformat()
+            if progress.estimated_ready is not None
+            else None
+        ),
+        "learned_norms": [name for name, key in _NORMS if key in baseline] or None,
+    }
+    if progress.phase == "calibrated" and "low" in baseline and "high" in baseline:
+        low, high = round(float(baseline["low"])), round(float(baseline["high"]))
+        attributes["learned_low"] = low
+        attributes["learned_high"] = high
+        attributes["summary"] = f"Judged against its own learned range, {low}-{high}%"
+    else:
+        attributes["summary"] = (
+            f"Learning this plant's range, waiting for {progress.waiting_for}; "
+            "the care profile is used meanwhile"
+        )
+    return progress.percent, attributes
 
 
 def _cap(values: tuple[float, ...]) -> tuple[float, ...]:

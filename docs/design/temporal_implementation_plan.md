@@ -1,6 +1,9 @@
 # Temporal Soil Engine - Implementation Plan
 
-> Status: P0-P5 shipped in 0.0.22-0.0.24. Deferred items in the section below remain open.
+> Status: historical. P0-P5 shipped in 0.0.22-0.0.24, and the full
+> `temporal_sensor_roadmap.md`, including the items deferred below, was
+> implemented in 0.0.42 and calibrated against live data in 0.0.43. The
+> roadmap's status section records what differs from the plan.
 
 ## Relationship to the other documents
 

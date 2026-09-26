@@ -8,9 +8,9 @@
           "latitude": "Latitude override",
           "longitude": "Longitude override",
           "perenual_api_key": "Perenual API key",
-          "perenual_access_level": "Perenual access level",
+          "perenual_access_level": "Perenual plan",
           "trefle_api_key": "Trefle API token",
-          "update_interval": "Update interval"
+          "update_interval": "Weather refresh interval"
         },
         "data_description": {
           "latitude": "Leave empty to use Home Assistant latitude.",
@@ -18,7 +18,7 @@
           "perenual_api_key": "Optional credential stored in config-entry options.",
           "perenual_access_level": "Free: only Perenual records your key can open (IDs up to 3000) are offered. Paid (Premium or Supreme): every record is offered.",
           "trefle_api_key": "Optional credential stored in config-entry options.",
-          "update_interval": "Periodic local evaluation interval in seconds."
+          "update_interval": "Seconds between Open-Meteo weather refreshes. Plants are evaluated every minute and on every sensor change regardless."
         }
       },
       "reconfigure": {
@@ -28,9 +28,9 @@
           "latitude": "Latitude override",
           "longitude": "Longitude override",
           "perenual_api_key": "Perenual API key",
-          "perenual_access_level": "Perenual access level",
+          "perenual_access_level": "Perenual plan",
           "trefle_api_key": "Trefle API token",
-          "update_interval": "Update interval"
+          "update_interval": "Weather refresh interval"
         },
         "data_description": {
           "latitude": "Leave empty to use Home Assistant latitude.",
@@ -38,7 +38,7 @@
           "perenual_api_key": "Optional credential stored in config-entry options.",
           "perenual_access_level": "Free: only Perenual records your key can open (IDs up to 3000) are offered. Paid (Premium or Supreme): every record is offered.",
           "trefle_api_key": "Optional credential stored in config-entry options.",
-          "update_interval": "Periodic local evaluation interval in seconds."
+          "update_interval": "Seconds between Open-Meteo weather refreshes. Plants are evaluated every minute and on every sensor change regardless."
         }
       }
     },
@@ -174,6 +174,112 @@
       "profile": "Choose a moisture profile.",
       "rain_limit_mm": "Enter a rain limit between 0 and 1000 mm.",
       "species": "The species name is not valid."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "care_status": {
+        "state": {
+          "waiting_for_data": "Waiting for data",
+          "normal": "Normal",
+          "recently_watered": "Recently watered",
+          "partial_watering": "Partly watered",
+          "wet": "Wet",
+          "staying_wet": "Staying wet",
+          "too_wet": "Too wet",
+          "drying": "Drying",
+          "approaching_dry": "Approaching dry",
+          "needs_water": "Needs water",
+          "too_dry": "Too dry",
+          "watering_paused": "Watering paused (rain)",
+          "too_cold": "Too cold",
+          "too_hot": "Too hot",
+          "insufficient_light": "Insufficient light",
+          "sensor_problem": "Sensor problem"
+        }
+      },
+      "health": {
+        "state": {
+          "good": "Good",
+          "watch": "Watch",
+          "stressed": "Stressed"
+        }
+      },
+      "battery": {
+        "state": {
+          "low": "Low",
+          "middle": "Medium",
+          "high": "High"
+        }
+      }
+    },
+    "select": {
+      "care_profile": {
+        "state": {
+          "dry": "Dry",
+          "balanced": "Balanced",
+          "moist": "Moist",
+          "custom": "Custom"
+        }
+      }
+    },
+    "event": {
+      "watering": {
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "watered": "Watered"
+            }
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "relearn": {
+      "name": "Relearn baseline",
+      "description": "Forget what the selected plants learned for their current placement (moisture range, watering cycles, light, temperature and humidity norms) and start calibrating again. Use it after repotting, moving the sensor, or when the learned range is wrong. The other placement's baseline is kept."
+    }
+  },
+  "exceptions": {
+    "no_plant_selected": {
+      "message": "Select at least one Plant Helper plant device."
+    },
+    "not_a_plant": {
+      "message": "The selected device is not a loaded Plant Helper plant."
+    },
+    "plant_changed": {
+      "message": "The plant changed at the same time. Try again."
+    },
+    "custom_needs_multiplier": {
+      "message": "The custom profile needs a custom multiplier. Set it in the plant's options (Edit a plant)."
+    },
+    "moisture_not_ready": {
+      "message": "The soil moisture sensor is not reporting a valid value, so the plant cannot be saved right now."
+    },
+    "rain_limit_range": {
+      "message": "The rain limit must be between 0 and 1000 mm."
+    },
+    "cannot_save_plant": {
+      "message": "The plant could not be saved. Check the log for details."
+    }
+  },
+  "issues": {
+    "missing_moisture_sensor": {
+      "title": "Soil moisture sensor missing for {plant}",
+      "description": "{plant} uses {entity_id} as its soil moisture sensor, but that entity does not exist (it may have been renamed, removed or disabled). Until it is back, the plant waits for data. Choose the sensor again under Settings > Devices & services > Plant Helper > Configure > Edit a plant."
+    },
+    "provider_key_rejected": {
+      "title": "{provider} rejected the API key",
+      "description": "{provider} refused the configured key, so its species data is not refreshed. Enter a valid key under Settings > Devices & services > Plant Helper > three-dot menu > Reconfigure. Data fetched earlier stays in use."
+    },
+    "perenual_plan_mismatch": {
+      "title": "Perenual key is not on a paid plan",
+      "description": "The Perenual plan is set to Paid, but Perenual refused a record because the key's plan does not cover it. Set the plan to Free under Reconfigure, so only records the key can open are offered, or upgrade the Perenual plan."
+    },
+    "plants_not_rematched": {
+      "title": "Some plants use the old species matching",
+      "description": "These plants were added before species data was matched per provider: {plants}. They still match by name, which can pick the wrong plant. Re-match them under Settings > Devices & services > Plant Helper > Configure > Re-match species data."
     }
   }
 }

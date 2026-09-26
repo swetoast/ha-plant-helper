@@ -12,9 +12,14 @@ wet soil instead of being nagged.
 
 ## What it does
 
-- One device per plant: status, moisture, light, soil temperature, humidity,
-  battery, health, calibration, and species sensors, plus a needs-attention
-  binary sensor.
+- One device per plant: status, moisture, light, temperature, humidity,
+  battery, health, last watered, daily light, calibration, and species sensors,
+  a needs-attention binary sensor, a watering event, a care profile select, and
+  a species photo. Outdoor plants add a rain limit.
+- Calibration progress in percent, with what it still waits for and an
+  estimated date, and a `plant_helper.relearn` action to start over.
+- Repairs for a missing moisture sensor, a rejected API key and plans that do
+  not match, and a diagnostics download per plant.
 - Trend-based moisture care. Watering, drying, too wet, and too dry are read
   from the recent history, with a confidence gate so sparse data never drives an
   alarm.
@@ -38,10 +43,10 @@ wet soil instead of being nagged.
 
 - Home Assistant with config-entry custom integrations.
 - Physical sensor entities are optional but give the most useful readings.
-- Internet is optional. It powers the Open-Meteo forecast and air quality and
-  the optional species providers. Without it, plants run on physical sensors
-  alone.
-- Perenual and Trefle credentials are optional.
+- Internet is optional. It powers the Open-Meteo forecast (plus air quality for
+  outdoor plants) and the optional species providers. Without it, plants run on
+  physical sensors alone.
+- Perenual and Trefle credentials are optional; iNaturalist needs none.
 
 ## Install
 
@@ -54,20 +59,28 @@ Upgrades and configuration fields: [Installation](docs/INSTALLATION.md).
 
 ## Entities
 
-Each plant exposes up to nine sensors, one binary sensor, and one image entity. An entity stays
-unavailable until it has data; missing optional data does not affect the rest.
+Each plant exposes eleven sensors, one binary sensor, an image, a watering
+event and a care profile select, plus a rain limit number when it is outdoors.
+An entity stays unavailable until it has data; missing optional data does not
+affect the rest.
 Full reference: [Entities](docs/ENTITIES.md).
 
 ## Species data and photos
 
 Providers are optional and isolated: a provider failure never takes a plant
-offline. Once iNaturalist confirms a match, Trefle is queried for taxonomy and
-then for its growth/care record (light, humidity, soil-moisture, pH and
-temperature ranges, toxicity, height, duration and more), self-regulating
-against Trefle's published rate limit so it backs off before exhausting the
-window rather than absorbing 429s. Species photos are downloaded server-side, validated, converted to
-WebP, cached, and served from an authenticated local endpoint, so the frontend
-never loads a raw provider URL. The photo is exposed as `image.<plant>`, which
+offline. When you add a plant you pick the matching record from each configured
+provider, or skip it: iNaturalist (name and photo, no key needed), Trefle
+(classification and, where it has them, growth ranges such as light, humidity,
+soil moisture, pH and temperature), and Perenual (watering, sunlight, care
+level, toxicity). Each entry says what it would contribute, and on Perenual's
+free plan only records the key can open are offered. The chosen records are
+then fetched by ID and cached for six months, and Trefle requests back off
+before its rate limit is reached. Use Re-match species data in the options to
+change them later.
+
+Species photos are downloaded server-side, validated, converted to WebP,
+cached, and served from an authenticated local endpoint, so the frontend never
+loads a raw provider URL. The photo is exposed as `image.<plant>`, which
 Home Assistant renders natively as the entity picture, and is also linked from
 the species sensor's `image_url` attribute for use in custom cards.
 

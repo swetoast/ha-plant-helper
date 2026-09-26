@@ -1,5 +1,75 @@
 # Changelog
 
+## 0.0.48 - 2026-09-26
+
+Presentation in Home Assistant, calibration progress, and a relearn action.
+
+Breaking: `sensor.<plant>_calibration` now reports progress in percent (0-100)
+instead of `learning`/`calibrated`. Automations that tested the old state should
+test the new `phase` attribute, which keeps those two values.
+
+- Calibration is a diagnostic sensor showing progress in percent, with the
+  days and watering cycles counted against what is needed, what it is still
+  waiting for in plain language, an estimated finish date from the plant's own
+  watering interval, which light, temperature and humidity norms are learned,
+  and the learned moisture range once calibrated.
+- New action `plant_helper.relearn`, targeted at plant devices: forgets what the
+  plant learned for its current placement and starts over from today. The other
+  placement's baseline is kept.
+- New entities: `sensor.<plant>_last_watered` (timestamp),
+  `sensor.<plant>_daily_light` (yesterday's effective lux-hours, with natural,
+  supplemental and today's running total), `event.<plant>_watering` (fires once
+  per detected watering, never on restart), `select.<plant>_care_profile`, and
+  for outdoor plants `number.<plant>_rain_limit`. The select and number save the
+  plant exactly like Edit a plant.
+- Status and health are enum sensors with translated state names and icons that
+  follow the state (icons.json). Health `unknown` shows as unknown.
+- Battery is diagnostic, with the battery device class and a percentage for
+  numeric sources, or Low/Medium/High for categorical ones.
+- Needs attention now actually uses the problem device class the docs described.
+- Display precision: whole numbers for moisture, humidity and light, one
+  decimal for temperature.
+- The plant device shows the species as its model and the Plant Helper version,
+  and follows plant renames.
+- Diagnostics download for the integration and for each plant device, with API
+  keys, location and image links redacted.
+- Repairs: missing soil moisture sensor, rejected Trefle or Perenual key,
+  Perenual plan set to Paid on a free key, and plants still on the old
+  name-based species matching. Each clears itself once fixed.
+- Adding a plant now creates the entities of every platform right away, not only
+  sensors, binary sensor and image.
+- Entity platforms share one setup helper instead of three copies.
+
+## 0.0.47 - 2026-09-25
+
+Documentation pass: every user-facing claim checked against the code.
+
+- Setup form: the "Update interval" field was described as the local evaluation
+  interval, but it sets how often Open-Meteo weather is refreshed; plants are
+  evaluated every minute and on every sensor change regardless. It is now
+  labelled "Weather refresh interval", and "Perenual access level" is labelled
+  "Perenual plan" to match the documentation.
+- Entities: all nine sensors are created for every plant (unconfigured ones stay
+  unavailable), not only when a source is configured; `light_context` is only
+  `low` or `adequate`; a missing habitual grow light also moves Health to
+  `watch`; dormancy needs at least two weeks of light data; the species
+  attributes are listed per provider without duplicates.
+- Installation: documents the current add flow (placement, sensors, then one
+  step per species provider), the Re-match species data option, the care
+  profile ranges, the six-hour rain threshold for outdoor plants, and that air
+  quality applies to outdoor plants only.
+- Troubleshooting: moving a plant between indoor and outdoor no longer restarts
+  learning (each placement keeps its own baseline); photos come only from
+  iNaturalist or Trefle records; images are validated by decoding, not by the
+  content-type header.
+- README and Services: species enrichment described as per-provider matching;
+  the options menu lists all four entries.
+- Design documents now carry accurate status notes pointing to where current
+  behavior is documented.
+- Known gap, now stated in the docs: the `custom` care profile uses the balanced
+  range, and its multiplier is stored but not applied, because its effect was
+  never defined in the design.
+
 ## 0.0.46 - 2026-09-25
 
 Perenual free and paid tiers, and only the useful part of each provider.

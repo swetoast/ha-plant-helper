@@ -91,6 +91,7 @@ options = _load_options()
 enrichment = importlib.import_module("ph_flow_pkg.domain.enrichment")
 storage_mod = importlib.import_module("ph_flow_pkg.domain.storage")
 runtime_mod = importlib.import_module("ph_flow_pkg.domain.runtime")
+edit_plant_mod = importlib.import_module("ph_flow_pkg.domain.edit_plant")
 
 
 def _served(name):
@@ -133,6 +134,11 @@ class _Runtime:
 
     def destination_baseline_complete(self, *_args):
         return False
+
+    async def async_edit(self, plant_uuid, expected_revision, raw, placement):
+        await edit_plant_mod.async_edit_runtime_plant(
+            self, plant_uuid, expected_revision, raw, placement, lambda _entity: "50"
+        )
 
 
 PERENUAL_QUERIES: list[str] = []

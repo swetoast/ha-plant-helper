@@ -6,7 +6,8 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers import selector
 from .domain.add_plant import AddPlantError,AddPlantHooks,async_add_plant
-from .domain.edit_plant import EditPlantError,EditPlantHooks,async_edit_plant
+from .domain.config import PROFILES,RAIN_LIMIT_RANGE
+from .domain.edit_plant import EditPlantError
 from .domain.enrichment import ProviderError,describe_candidate,is_exact_candidate,is_restricted,rank_candidates
 from .domain.remove_plant import RemovePlantError
 
@@ -35,11 +36,11 @@ def plant_schema(placement: str) -> vol.Schema:
         vol.Optional("humidity_sensor"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="humidity")),
         vol.Optional("lux"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor",device_class="illuminance")),
         vol.Optional("battery"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-        vol.Required("profile",default="balanced"): selector.SelectSelector(selector.SelectSelectorConfig(options=["dry","balanced","moist","custom"])),
+        vol.Required("profile",default="balanced"): selector.SelectSelector(selector.SelectSelectorConfig(options=list(PROFILES))),
         vol.Optional("custom_multiplier"): selector.NumberSelector(selector.NumberSelectorConfig(min=0.25,max=4.0,mode=selector.NumberSelectorMode.BOX)),
     }
     if placement=="outdoor":
-        schema[vol.Required("rain_limit_mm")]=selector.NumberSelector(selector.NumberSelectorConfig(min=0,max=1000,mode=selector.NumberSelectorMode.BOX))
+        schema[vol.Required("rain_limit_mm")]=selector.NumberSelector(selector.NumberSelectorConfig(min=RAIN_LIMIT_RANGE[0],max=RAIN_LIMIT_RANGE[1],mode=selector.NumberSelectorMode.BOX))
     return vol.Schema(schema)
 
 class PlantHelperOptionsFlow(config_entries.OptionsFlow):
@@ -271,10 +272,8 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
     async def _async_request_entities(self, plant_uuid: str) -> None:
         """Ask every loaded entity platform to reconcile this committed plant."""
         runtime = self.config_entry.runtime_data
-        for platform in ("sensor", "binary_sensor", "image"):
-            callback = runtime.platform_callbacks.get(platform)
-            if callback is not None:
-                callback(plant_uuid)
+        for callback in list(runtime.platform_callbacks.values()):
+            callback(plant_uuid)
 
     def _clear_transient(self) -> None:
         self._selected_plant_uuid=None
@@ -336,26 +335,8 @@ class PlantHelperOptionsFlow(config_entries.OptionsFlow):
         if plant is None or self._expected_revision is None:
             return "plant_changed"
         target=placement or plant.config["placement"]
-        hooks=EditPlantHooks(
-            replace_listeners=runtime.replace_listeners,
-            evaluate=runtime.evaluate,
-            handle_placement_change=runtime.handle_placement_change,
-            handle_species_change=runtime.handle_species_change,
-            schedule_enrichment=runtime.schedule_enrichment,
-            schedule_reconciliation=runtime.schedule_reconciliation,
-        )
         try:
-            await async_edit_plant(
-                plant_uuid=uuid,
-                expected_revision=self._expected_revision,
-                raw=raw,
-                placement=target,
-                storage=runtime.require_storage(),
-                runtime=runtime.plants,
-                moisture_reader=lambda entity_id: self.hass.states.get(entity_id).state if self.hass.states.get(entity_id) else None,
-                destination_baseline_complete=bool(runtime.destination_baseline_complete(uuid,target)),
-                hooks=hooks,
-            )
+            await runtime.async_edit(uuid,self._expected_revision,raw,target)
         except EditPlantError as err:
             return err.key
         except Exception:

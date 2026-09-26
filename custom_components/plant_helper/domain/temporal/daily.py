@@ -202,3 +202,32 @@ def _light_from_dict(raw: Mapping[str, Any]) -> DailyLightExposure | None:
         return DailyLightExposure(**{f: values.get(f) for f in DailyLightExposure.__dataclass_fields__})
     except (TypeError, ValueError):
         return None
+
+
+def light_report(
+    ledger: Mapping[str, DailySummary], now: datetime, tz: tzinfo
+) -> tuple[float | None, dict[str, Any]]:
+    """Yesterday's effective light (lux-hours) and today's running total.
+
+    Yesterday is the last complete day, so the state is a whole day's light and
+    does not fall back to zero every midnight.
+    """
+    today = now.astimezone(tz).date()
+    yesterday = ledger.get((today - timedelta(days=1)).isoformat())
+    current = ledger.get(today.isoformat())
+    value: float | None = None
+    attributes: dict[str, Any] = {}
+    if yesterday is not None and yesterday.light is not None:
+        light = yesterday.light
+        value = round(light.effective_light_exposure)
+        attributes = {
+            "day": yesterday.day,
+            "natural": round(light.natural_light_exposure),
+            "supplemental": round(light.artificial_light_exposure),
+            "classification": light.classification,
+        }
+    if current is not None and current.light is not None:
+        # Rounded to 100 lx-h so the running total does not rewrite the entity
+        # (and the recorder) on every one-minute tick.
+        attributes["today_so_far"] = int(round(current.light.effective_light_exposure, -2))
+    return value, attributes

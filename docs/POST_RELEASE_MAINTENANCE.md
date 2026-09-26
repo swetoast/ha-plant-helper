@@ -79,9 +79,13 @@ Security issues, credential exposure, destructive storage behavior, SSRF bypasse
 
 - Install through HACS and restart Home Assistant.
 - Create the integration entry.
-- Add one indoor and one outdoor plant.
-- Confirm entity creation, names, units, device classes, and availability.
-- Edit each plant and confirm identity is retained.
-- Exercise optional provider and image behavior when credentials are available.
+- Add one indoor and one outdoor plant, walking each configured species
+  provider step (pick a record on one, skip another).
+- Confirm entity creation, names, units, device classes, and availability,
+  including `image.<plant>` once a photo is fetched.
+- Edit each plant and confirm identity and the chosen species records are
+  retained.
+- Re-match one plant's species data and confirm the species sensor updates.
+- On a free Perenual key, confirm paid-only records are not offered.
 - Remove both plants and confirm entity and device cleanup.
 - Remove and reinstall the integration while preserving expected Home Assistant storage behavior.

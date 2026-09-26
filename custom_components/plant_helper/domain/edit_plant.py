@@ -113,3 +113,44 @@ async def async_edit_plant(
             enrichment=False
 
     return EditPlantResult(plant_uuid,saved.revision,saved.store_version,runtime_plant.generation,placement_change,species_change,listeners,evaluated,enrichment,0)
+
+
+def hooks_for(runtime: Any) -> EditPlantHooks:
+    """The edit hooks of a Plant Helper runtime (shared by every edit path)."""
+    return EditPlantHooks(
+        replace_listeners=runtime.replace_listeners,
+        evaluate=runtime.evaluate,
+        handle_placement_change=runtime.handle_placement_change,
+        handle_species_change=runtime.handle_species_change,
+        schedule_enrichment=runtime.schedule_enrichment,
+        schedule_reconciliation=runtime.schedule_reconciliation,
+    )
+
+
+async def async_edit_runtime_plant(
+    runtime: Any,
+    plant_uuid: str,
+    expected_revision: int,
+    raw: Mapping[str,Any],
+    placement: str,
+    moisture_reader: Callable[[str],Any],
+) -> EditPlantResult:
+    """Edit a plant of a live runtime: the options flow, select and number use this."""
+    return await async_edit_plant(
+        plant_uuid=plant_uuid,
+        expected_revision=expected_revision,
+        raw=raw,
+        placement=placement,
+        storage=runtime.require_storage(),
+        runtime=runtime.plants,
+        moisture_reader=moisture_reader,
+        destination_baseline_complete=bool(runtime.destination_baseline_complete(plant_uuid,placement)),
+        hooks=hooks_for(runtime),
+    )
+
+
+def setting_change(config: Mapping[str,Any], key: str, value: Any) -> tuple[int,dict[str,Any],str]:
+    """(revision, raw edit, placement) that changes one setting and keeps the rest."""
+    raw={k:v for k,v in config.items() if k not in {"plant_uuid","revision","placement"}}
+    raw[key]=value
+    return int(config["revision"]),raw,str(config["placement"])

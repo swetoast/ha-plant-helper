@@ -2,7 +2,10 @@ from __future__ import annotations
 import re,unicodedata
 from dataclasses import dataclass
 from typing import Any,Mapping
+from .temporal.status import HEALTH_GOOD,HEALTH_STRESSED,HEALTH_WATCH,STATUS_PRECEDENCE
 
+# Icons live in icons.json (keyed by the translation key, which is the entity
+# key) so they can follow the state; an icon set here would override them.
 @dataclass(frozen=True,slots=True)
 class EntityContract:
  platform:str
@@ -11,24 +14,32 @@ class EntityContract:
  unit:str|None=None
  device_class:str|None=None
  state_class:str|None=None
- icon:str|None=None
  attributes:tuple[str,...]=()
+ category:str|None=None  # 'diagnostic' or 'config'
+ precision:int|None=None
+ options:tuple[str,...]=()  # the full state list of an enum sensor
 
+CALIBRATION_ATTRIBUTES=('summary','phase','days','days_required','cycles','cycles_required','waiting_for','estimated_ready','learned_low','learned_high','learned_norms')
 SENSORS=(
- EntityContract('sensor','care_status','Status',icon='mdi:sprout',attributes=('summary','reason','since','confidence','drying_context','light_context','humidity_context','temperature_context','dormant','placement','rain_suppression','frost_hours','exposure','external_daylight')),
- EntityContract('sensor','moisture','Moisture','%',device_class='moisture',state_class='measurement',icon='mdi:water-percent'),
- EntityContract('sensor','light','Light','lx',device_class='illuminance',state_class='measurement',icon='mdi:brightness-5'),
- EntityContract('sensor','temperature','Temperature','\u00b0C',device_class='temperature',state_class='measurement',icon='mdi:thermometer'),
- EntityContract('sensor','humidity','Humidity','%',device_class='humidity',state_class='measurement',icon='mdi:water-percent'),
- EntityContract('sensor','battery','Battery',icon='mdi:battery'),
- EntityContract('sensor','health','Health',icon='mdi:leaf',attributes=('summary',)),
- EntityContract('sensor','calibration','Calibration',icon='mdi:tune',attributes=('summary',)),
- EntityContract('sensor','species_context','Species',icon='mdi:flower',attributes=('scientific_name','common_name','family','genus','watering_category','sunlight_requirements','image_url','light_requirement','humidity_requirement','soil_moisture_requirement','ph_minimum','ph_maximum','minimum_temperature_c','maximum_temperature_c','growth_habit','growth_rate','toxicity','average_height_cm','duration','edible','watering_interval','care_level','indoor','drought_tolerant','poisonous_to_pets','poisonous_to_humans')),
+ EntityContract('sensor','care_status','Status',device_class='enum',options=STATUS_PRECEDENCE,attributes=('summary','reason','since','confidence','drying_context','light_context','humidity_context','temperature_context','dormant','placement','rain_suppression','frost_hours','exposure','external_daylight')),
+ EntityContract('sensor','moisture','Moisture','%',device_class='moisture',state_class='measurement',precision=0),
+ EntityContract('sensor','light','Light','lx',device_class='illuminance',state_class='measurement',precision=0),
+ EntityContract('sensor','temperature','Temperature','\u00b0C',device_class='temperature',state_class='measurement',precision=1),
+ EntityContract('sensor','humidity','Humidity','%',device_class='humidity',state_class='measurement',precision=0),
+ EntityContract('sensor','battery','Battery',category='diagnostic',precision=0),
+ EntityContract('sensor','health','Health',device_class='enum',options=(HEALTH_GOOD,HEALTH_WATCH,HEALTH_STRESSED),attributes=('summary',)),
+ EntityContract('sensor','last_watered','Last watered',device_class='timestamp'),
+ EntityContract('sensor','daily_light','Daily light','lx\u00b7h',state_class='measurement',precision=0,attributes=('day','natural','supplemental','classification','today_so_far')),
+ EntityContract('sensor','calibration','Calibration','%',state_class='measurement',category='diagnostic',precision=0,attributes=CALIBRATION_ATTRIBUTES),
+ EntityContract('sensor','species_context','Species',attributes=('scientific_name','common_name','family','genus','watering_category','sunlight_requirements','image_url','light_requirement','humidity_requirement','soil_moisture_requirement','ph_minimum','ph_maximum','minimum_temperature_c','maximum_temperature_c','growth_habit','growth_rate','toxicity','average_height_cm','duration','edible','watering_interval','care_level','indoor','drought_tolerant','poisonous_to_pets','poisonous_to_humans')),
 )
-BINARY_SENSORS=(EntityContract('binary_sensor','needs_attention','Needs attention',device_class='problem',icon='mdi:alert-circle-outline',attributes=('reason',)),)
+BINARY_SENSORS=(EntityContract('binary_sensor','needs_attention','Needs attention',device_class='problem',attributes=('reason',)),)
 BY_KEY={item.key:item for item in (*SENSORS,*BINARY_SENSORS)}
 SPECIES_IMAGE_KEY='species_image'
-CURRENT_KEYS=frozenset((*BY_KEY,SPECIES_IMAGE_KEY))
+WATERING_EVENT_KEY='watering'
+CARE_PROFILE_KEY='care_profile'
+RAIN_LIMIT_KEY='rain_limit'
+CURRENT_KEYS=frozenset((*BY_KEY,SPECIES_IMAGE_KEY,WATERING_EVENT_KEY,CARE_PROFILE_KEY,RAIN_LIMIT_KEY))
 def is_retired_unique_id(entry_id:str,unique_id:str)->bool:
  # unique ids are f'{entry_id}_{plant_uuid}_{key}'; the uuid has no underscores,
  # so everything after it is the key, which may itself contain underscores.
@@ -54,4 +65,6 @@ def validate_contract()->None:
  for item in (*SENSORS,*BINARY_SENSORS):
   if set(item.attributes)&PROVIDER_DEBUG_KEYS:raise ValueError('debug_attribute')
   if item.state_class and item.state_class!='measurement':raise ValueError('state_class')
+  if item.category not in {None,'diagnostic','config'}:raise ValueError('category')
+  if bool(item.options)!=(item.device_class=='enum') or (item.options and (item.unit or item.state_class)):raise ValueError('enum')
 validate_contract()

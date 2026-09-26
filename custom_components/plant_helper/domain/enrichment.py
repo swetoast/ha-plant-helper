@@ -377,6 +377,9 @@ class SourceEnrichment:
  """
  def __init__(self,*,trefle:TrefleAdapter|None=None,perenual:PerenualAdapter|None=None,storage:PlantHelperStorage|None=None):
   self.adapters={'trefle':trefle,'perenual':perenual};self.storage=storage;self.cache:dict[str,dict[str,Any]]={}
+  # The last fetch outcome worth a repair issue, per provider: 'auth' (key
+  # rejected) or 'plan' (record paywalled). A successful fetch clears it.
+  self.problems:dict[str,str]={}
  async def load(self)->None:
   if self.storage is None:return
   snapshot=await self.storage.async_snapshot()
@@ -391,7 +394,9 @@ class SourceEnrichment:
   try:
    data=await adapter.record(species_id)
    stored={'status':'ok','data':data,'expires_at':(now+CARE_TTL).isoformat()}
+   self.problems.pop(provider,None)
   except ProviderError as err:
+   if err.kind in {'auth','plan'}:self.problems[provider]=err.kind
    if err.kind!='plan':return stale
    stored={'status':'plan','data':{},'expires_at':(now+NEGATIVE_TTL).isoformat()}
   self.cache[key]=stored

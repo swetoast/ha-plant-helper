@@ -5,7 +5,7 @@ from domain.entity_contract import BY_KEY, SENSORS
 
 # ---- from test_entity_contract.py ----
 def test_final_meaningful_entity_set():
- assert tuple(x.key for x in SENSORS)==('care_status','moisture','light','temperature','humidity','battery','health','calibration','species_context')
+ assert tuple(x.key for x in SENSORS)==('care_status','moisture','light','temperature','humidity','battery','health','last_watered','daily_light','calibration','species_context')
  assert tuple(x.key for x in BINARY_SENSORS)==('needs_attention',)
  assert not ({'provider_status','api_status','debug','cache','generation'} & set(BY_KEY))
 def test_stable_unique_and_entity_ids():
@@ -17,7 +17,30 @@ def test_units_device_classes_and_state_classes():
  for key,values in expected.items():
   item=BY_KEY[key];assert (item.unit,item.device_class,item.state_class)==values
  assert BY_KEY['needs_attention'].device_class=='problem'
- for key in ('care_status','health','calibration','species_context'):assert BY_KEY[key].unit is None and BY_KEY[key].state_class is None
+ for key in ('care_status','health','species_context','last_watered'):assert BY_KEY[key].unit is None and BY_KEY[key].state_class is None
+ assert (BY_KEY['calibration'].unit,BY_KEY['calibration'].state_class,BY_KEY['calibration'].category)==('%','measurement','diagnostic')
+ assert BY_KEY['battery'].category=='diagnostic' and BY_KEY['last_watered'].device_class=='timestamp'
+def test_enum_sensors_list_every_state_the_engine_can_publish():
+ from domain.temporal.status import STATUS_PRECEDENCE
+ assert set(BY_KEY['care_status'].options)==set(STATUS_PRECEDENCE)
+ assert BY_KEY['health'].options==('good','watch','stressed')  # 'unknown' is shown as unknown
+def test_every_entity_key_survives_the_retired_entity_prune():
+ for key in ('watering','care_profile','rain_limit','species_image','last_watered','daily_light'):
+  assert not is_retired_unique_id('entry','entry_'+'a'*32+'_'+key)
+ assert is_retired_unique_id('entry','entry_'+'a'*32+'_drying_modifier')
+def test_every_entity_has_icons_and_every_enum_state_is_translated():
+ import json
+ from pathlib import Path
+ base=Path(__file__).resolve().parents[2]/'custom_components/plant_helper'
+ icons=json.loads((base/'icons.json').read_text())['entity']
+ strings=json.loads((base/'strings.json').read_text())
+ assert strings==json.loads((base/'translations/en.json').read_text())
+ for item in (*SENSORS,*BINARY_SENSORS):
+  if item.key!='battery':assert item.key in icons[item.platform],item.key  # battery uses HA's level icons
+  if item.options:assert set(strings['entity']['sensor'][item.key]['state'])==set(item.options)
+ for platform,key in (('select','care_profile'),('number','rain_limit'),('event','watering'),('image','species_image')):
+  assert key in icons[platform]
+ assert set(strings['entity']['select']['care_profile']['state'])=={'dry','balanced','moist','custom'}
 def test_minimal_attributes_and_no_provider_debug_clutter():
  state={'care_status_attributes':{'summary':'Water soon','reason':'drying','provider':'x','debug':{'x':1},'generation':7},'species_context_attributes':{'scientific_name':'Dracaena trifasciata','family':'Asparagaceae','image_url':'/api/plant_helper/image/hash','providers':['x'],'raw':{}}}
  assert attributes_for(BY_KEY['care_status'],state)=={'summary':'Water soon','reason':'drying'}
@@ -68,9 +91,10 @@ def test_battery_entity_contract_supports_mixed_verified_source_formats():
     assert battery.state_class is None
 
 
-def test_calibration_entity_exposes_only_a_summary_attribute():
+def test_calibration_entity_exposes_the_progress_detail():
     calibration = BY_KEY["calibration"]
-    assert calibration.attributes == ("summary",)
+    assert calibration.attributes[0] == "summary"
+    assert {"phase", "waiting_for", "estimated_ready", "learned_low", "learned_high"} <= set(calibration.attributes)
 
 
 def test_new_entity_ids_follow_existing_contract_without_renaming_old_entities():

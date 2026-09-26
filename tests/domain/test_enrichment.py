@@ -302,3 +302,216 @@ def test_blocking_work_runs_through_the_injected_executor(tmp_path):
     served=image_proxy_run(p.async_serve(item.digest,True))
     assert 'validate_url' in ran and '_store' in ran and 'serve' in ran
     assert served.status==200 and served.body[:4]==b'RIFF'
+
+
+# ---- per-provider matching (real provider responses) -----------------------
+import json as _json
+from pathlib import Path as _Path
+from domain.config import PlantConfig
+from domain.config import ValidationError as _VE
+
+_FIX = _Path(__file__).resolve().parents[1] / "fixtures"
+
+
+def _fixture(name):
+    return _json.loads((_FIX / name).read_text())
+
+
+def _served(raw):
+    async def request(_arg):
+        return {"http_status": raw.get("http_status", 200), "body": raw.get("body", raw)}
+    return request
+
+
+def test_trefle_search_candidates_from_live_response_rank_the_accepted_species_first():
+    raw = _fixture("trefle/dracaena_trifasciata_search.json")
+    found = enrichment_run(TrefleAdapter(_served(raw)).search("Dracaena trifasciata"))
+    assert [c["id"] for c in found] == [375325, 453823]
+    # iNaturalist still calls it Sansevieria trifasciata; Trefle lists that as a
+    # synonym of the accepted species only.
+    ranked = rank_candidates(found, ["Sansevieria trifasciata", "Snake Plant"])
+    assert ranked[0]["id"] == 375325 and is_exact_candidate(ranked[0], ["Sansevieria trifasciata"])
+    assert not is_exact_candidate(ranked[1], ["Sansevieria trifasciata"])
+    assert "little or no growth data" in describe_candidate("trefle", ranked[0])
+    assert describe_candidate("trefle", ranked[1]).startswith("Dracaena trifasciata subsp. trifasciata (ssp")
+
+
+def test_trefle_record_by_id_from_live_detail_is_taxonomy_only_for_this_species():
+    raw = _fixture("trefle/dracaena_trifasciata_details.json")
+    record = enrichment_run(TrefleAdapter(_served(raw), _served(raw)).record(375325))
+    assert record["scientific_name"] == "Dracaena trifasciata" and record["family"] == "Asparagaceae"
+    assert record["synonyms"] == ["Sansevieria trifasciata"]
+    assert not any(key in record for key in ("light_requirement", "toxicity", "ph_minimum"))
+
+
+def test_trefle_record_carries_growth_data_when_trefle_has_it():
+    raw = _fixture("trefle/monstera_deliciosa_details.json")
+    record = enrichment_run(TrefleAdapter(_served(raw), _served(raw)).record(1))
+    assert record["scientific_name"] == "Monstera deliciosa" and record["family"] == "Araceae"
+    assert record["growth_habit"] == "Vine, Forb/herb" and record["edible"] is False
+
+
+def test_perenual_record_by_id_reads_watering_and_sunlight_from_details():
+    raw = _fixture("perenual/free_details_success.json")
+    record = enrichment_run(PerenualAdapter(_served(raw), "k", detail_request=_served(raw)).record(1))
+    assert record["watering_category"] == "Frequent"
+    assert record["sunlight_requirements"] == ["full sun"]
+    assert record["scientific_name"] == "Abies alba"
+
+
+def test_perenual_paid_only_record_is_a_plan_error_not_a_silent_miss():
+    raw = _fixture("perenual/paid_details_restricted.json")
+    with pytest.raises(ProviderError) as err:
+        enrichment_run(PerenualAdapter(_served(raw), "k", detail_request=_served(raw)).record(4000))
+    assert err.value.kind == "plan"
+
+
+def test_perenual_paywall_placeholders_are_dropped():
+    locked = "Upgrade Plans To Premium/Supreme - https://perenual.com/subscription-api-pricing. I'm sorry"
+    items = {"data": [{"id": 4127, "common_name": "Snake plant", "scientific_name": ["Dracaena trifasciata"],
+                       "watering": locked, "sunlight": [locked], "cycle": locked}]}
+    found = enrichment_run(PerenualAdapter(lambda q: asyncio.sleep(0, result=items)).search("x"))
+    assert found[0]["id"] == 4127 and found[0]["watering_category"] is None
+    assert found[0]["sunlight_requirements"] is None
+    assert "paid Perenual plan" in describe_candidate("perenual", found[0], perenual_free=True)
+    assert "paid" not in describe_candidate("perenual", {**found[0], "id": 12}, perenual_free=True)
+
+
+class _Adapter:
+    def __init__(self, record=None, error=None):
+        self.value, self.error, self.calls = record or {}, error, 0
+
+    async def record(self, _id):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return dict(self.value)
+
+
+SOURCES = {
+    "inaturalist": {"id": 67710, "name": "Sansevieria trifasciata", "common_name": "Snake Plant", "image_url": "i.jpg"},
+    "trefle": {"id": 375325, "name": "Dracaena trifasciata"},
+    "perenual": {"id": 1, "name": "Dracaena trifasciata"},
+}
+
+
+def test_source_enrichment_merges_the_chosen_records_by_id():
+    trefle = _Adapter({"scientific_name": "Dracaena trifasciata", "family": "Asparagaceae", "genus": "Dracaena"})
+    perenual = _Adapter({"scientific_name": "Dracaena trifasciata", "watering_category": "Minimum",
+                         "sunlight_requirements": ["part shade"]})
+    result = enrichment_run(SourceEnrichment(trefle=trefle, perenual=perenual).enrich(SOURCES))
+    assert result.data["scientific_name"] == "Dracaena trifasciata"  # Trefle's accepted name
+    assert result.data["family"] == "Asparagaceae"
+    assert result.data["watering_category"] == "Minimum"
+    assert result.data["image_url"] == "i.jpg" and result.data["common_name"] == "Snake Plant"
+    assert set(result.providers) == {"inaturalist", "trefle", "perenual"}
+
+
+def test_skipped_and_failing_providers_never_disturb_the_others():
+    trefle = _Adapter(error=ProviderError("network"))
+    result = enrichment_run(SourceEnrichment(trefle=trefle, perenual=None).enrich(
+        {**SOURCES, "perenual": "skip"}))
+    assert result.status == "matched" and result.providers == ("inaturalist",)
+    assert result.data["scientific_name"] == "Sansevieria trifasciata"
+
+
+def test_records_are_cached_and_a_stale_record_beats_an_outage():
+    b, s = store()
+    trefle = _Adapter({"scientific_name": "Dracaena trifasciata", "family": "Asparagaceae"})
+    first = SourceEnrichment(trefle=trefle, storage=s)
+    enrichment_run(first.load())
+    enrichment_run(first.enrich(SOURCES, now=datetime(2026, 9, 25, tzinfo=timezone.utc)))
+    enrichment_run(first.enrich(SOURCES, now=datetime(2026, 9, 26, tzinfo=timezone.utc)))
+    assert trefle.calls == 1  # the second start is served from the cache
+    # A restart after the cache expired, with Trefle down: the stale record is used.
+    down = _Adapter(error=ProviderError("network"))
+    later = SourceEnrichment(trefle=down, storage=s)
+    enrichment_run(later.load())
+    result = enrichment_run(later.enrich(SOURCES, now=datetime(2027, 6, 1, tzinfo=timezone.utc)))
+    assert down.calls == 1 and result.data["family"] == "Asparagaceae"
+
+
+def test_a_paid_only_perenual_record_is_not_retried_every_start():
+    perenual = _Adapter(error=ProviderError("plan", 429))
+    source = SourceEnrichment(perenual=perenual)
+    now = datetime(2026, 9, 25, tzinfo=timezone.utc)
+    for day in range(5):
+        enrichment_run(source.enrich(SOURCES, now=now + timedelta(days=day)))
+    assert perenual.calls == 1
+
+
+def test_species_sources_are_validated_on_the_plant():
+    base = {"display_name": "Snake Plant", "soil_moisture": "sensor.m", "placement": "indoor"}
+    config = PlantConfig.normalize({**base, "species_sources": {
+        "inaturalist": {"id": 67710, "name": "Sansevieria trifasciata", "nested": {"x": 1}},
+        "trefle": "skip"}}, plant_uuid="a" * 32)
+    assert config.species_sources == {"inaturalist": {"id": 67710, "name": "Sansevieria trifasciata"},
+                                      "trefle": "skip"}
+    for bad in ({"gbif": "skip"}, {"trefle": {"name": "no id"}}, ["trefle"]):
+        with pytest.raises(_VE):
+            PlantConfig.normalize({**base, "species_sources": bad}, plant_uuid="a" * 32)
+
+
+def _perenual_search(name):
+    raw = _fixture(f"perenual/{name}")
+    return enrichment_run(PerenualAdapter(lambda q: asyncio.sleep(0, result=raw), "k").search("q"))
+
+
+def test_live_perenual_search_finds_the_snake_plant_behind_the_free_plan_paywall():
+    found = _perenual_search("sansevieria_trifasciata_search.json")
+    ranked = rank_candidates(found, ["Dracaena trifasciata", "Sansevieria trifasciata"])
+    assert ranked[0]["id"] == 7171 and is_exact_candidate(ranked[0], ["Sansevieria trifasciata"])
+    # Cultivars share the species epithet but are not the species itself.
+    assert not any(is_exact_candidate(c, ["Sansevieria trifasciata"]) for c in ranked[1:])
+    # Perenual swaps in an upgrade_access placeholder image for records the key
+    # cannot open; that is detected per record, and no image is ever kept.
+    assert ranked[0]["restricted"] is True and "image_url" not in ranked[0]
+    assert "needs a paid Perenual plan" in describe_candidate("perenual", ranked[0], perenual_free=False)
+    assert is_restricted(ranked[0], perenual_free=False)
+
+
+def test_common_names_never_count_as_an_exact_match():
+    found = _perenual_search("snake_plant_search.json")
+    patens = next(c for c in found if c["id"] == 7168)
+    assert patens["common_name"] == "snake plant"  # a different species entirely
+    assert not is_exact_candidate(patens, ["Snake Plant", "snake plant", "Dracaena trifasciata"])
+    # The one record inside the free range carries a real photo, not the placeholder.
+    calathea = next(c for c in found if c["id"] == 1469)
+    assert calathea["restricted"] is False and not is_restricted(calathea, perenual_free=True)
+    assert looks_scientific("Sansevieria trifasciata") and not looks_scientific("Snake Plant")
+    assert not looks_scientific("mother-in-law's tongue")
+
+
+def test_the_current_name_is_simply_absent_from_perenual():
+    assert _perenual_search("dracaena_trifasciata_search.json") == []
+
+
+def test_live_free_tier_details_keep_only_the_useful_core_record():
+    raw = _fixture("perenual/calathea_lancifolia_details_free.json")
+    record = enrichment_run(PerenualAdapter(_served(raw), "k", detail_request=_served(raw)).record(1469))
+    assert record["scientific_name"] == "Calathea lancifolia" and record["family"] == "Marantaceae"
+    assert record["watering_category"] == "Average"
+    assert record["sunlight_requirements"] == ["part shade", "part sun/part shade"]
+    assert record["care_level"] == "Medium" and record["growth_rate"] == "Low"
+    assert record["indoor"] is True and record["drought_tolerant"] is False
+    assert record["poisonous_to_pets"] is False and record["poisonous_to_humans"] is False
+    # Null benchmark: no interval. Supreme-only fields, images, and the
+    # key-bearing hardiness/care-guide URLs are never kept.
+    assert "watering_interval" not in record and "image_url" not in record
+    flat = _json.dumps(record)
+    assert "key=" not in flat and "Upgrade" not in flat and "x" + "Watering" not in flat
+
+
+def test_watering_interval_is_readable_and_paywall_safe():
+    from domain.enrichment import _watering_interval
+    assert _watering_interval({"value": "5-7", "unit": "days"}) == "every 5-7 days"
+    assert _watering_interval({"value": '"7"', "unit": "days"}) == "every 7 days"
+    assert _watering_interval({"value": None, "unit": "days"}) is None
+    assert _watering_interval({"value": "Upgrade Plan To Supreme For Access", "unit": "days"}) is None
+
+
+def test_live_paywalled_details_response_is_a_plan_error():
+    raw = _fixture("perenual/paywalled_details_7171.json")
+    with pytest.raises(ProviderError) as err:
+        enrichment_run(PerenualAdapter(_served(raw), "k", detail_request=_served(raw)).record(7171))
+    assert err.value.kind == "plan" and err.value.status == 429

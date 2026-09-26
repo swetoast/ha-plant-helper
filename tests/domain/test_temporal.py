@@ -673,3 +673,87 @@ def test_one_watering_closes_exactly_one_learning_cycle():
     # The span before the first watering ever seen did not start at a watering,
     # so its high is not a post-watering peak and is not learned.
     assert samples.peaks == ()
+
+
+# ------------------------------------------------- calibration progress
+
+from domain.temporal.baseline import (
+    RELEARN_KEY,
+    calibration_progress,
+    days_since_relearn,
+    relearn_baseline,
+)
+
+
+def test_calibration_progress_counts_days_and_cycles_and_says_what_is_missing():
+    empty = calibration_progress(BaselineSamples(), "low", NOW, complete=False)
+    assert empty.percent == 0 and empty.phase == "learning"
+    assert empty.waiting_for == "2 more complete watering cycles"
+    assert empty.estimated_ready is None
+
+    # ~12 days in, two waterings seen: one complete cycle, one to go.
+    start = NOW - timedelta(days=13)
+    samples, _ = _simulate_cycles(2, 6, start, dry=[70, 50, 30, 20], water=75.0)
+    at = samples.last_seen
+    progress = calibration_progress(samples, "high", at, complete=False)
+    assert progress.cycles == 1 and 0 < progress.percent < 99
+    assert progress.waiting_for == "one more complete watering cycle"
+    # Projected from this plant's own watering interval (about six days).
+    assert samples.intervals and progress.estimated_ready is not None
+    assert timedelta(days=4) < progress.estimated_ready - at < timedelta(days=8)
+
+
+def test_calibration_progress_waits_for_days_then_confidence_then_completes():
+    # Three waterings six days apart: two complete cycles in about 13 days.
+    short, _ = _simulate_cycles(3, 6, NOW - timedelta(days=20), dry=[70, 50, 30, 20], water=75.0)
+    early = calibration_progress(short, "high", short.last_seen, complete=False)
+    assert early.cycles == 2 and early.days == 13
+    assert early.waiting_for == "one more day of readings"
+    # Four waterings five days apart: 16 days, but the data is not steady yet.
+    covered, _ = _simulate_cycles(4, 5, NOW - timedelta(days=20), dry=[70, 50, 30, 20], water=75.0)
+    unsure = calibration_progress(covered, "medium", covered.last_seen, complete=False)
+    assert unsure.waiting_for == "steadier readings (data confidence is medium)"
+    assert unsure.percent == 99  # every gate but the last: never shows 100 early
+    done = calibration_progress(covered, "high", covered.last_seen, complete=True)
+    assert done.percent == 100 and done.phase == "calibrated" and done.waiting_for is None
+
+
+def test_watering_intervals_survive_a_restart():
+    start = NOW - timedelta(days=20)
+    samples, _ = _simulate_cycles(3, 7, start, dry=[70, 50, 30, 20], water=75.0)
+    assert len(samples.intervals) == 2
+    assert all(abs(hours - 7 * 24) < 1 for hours in samples.intervals)
+    assert BaselineSamples.from_dict(samples.to_dict()).intervals == samples.intervals
+
+
+def test_relearn_discards_days_before_the_reset():
+    from datetime import date
+    fresh = relearn_baseline(date(2026, 9, 26))
+    assert fresh == {RELEARN_KEY: "2026-09-26"}
+
+    class Day:
+        def __init__(self, day):
+            self.day = day
+
+    days = [Day("2026-09-24"), Day("2026-09-26"), Day("2026-09-27")]
+    assert [d.day for d in days_since_relearn(days, fresh)] == ["2026-09-26", "2026-09-27"]
+    assert len(days_since_relearn(days, {})) == 3 and len(days_since_relearn(days, None)) == 3
+
+
+def test_calibration_sensor_reports_progress_and_the_learned_range():
+    from zoneinfo import ZoneInfo
+    from domain.temporal.baseline import CalibrationProgress, describe_calibration
+    tz = ZoneInfo("Europe/Stockholm")
+    # 22:30 UTC is already the next day in Stockholm.
+    learning = CalibrationProgress(62, "learning", 9, 1, "one more complete watering cycle",
+                                   datetime(2026, 10, 2, 22, 30, tzinfo=timezone.utc))
+    state, attrs = describe_calibration(learning, {"light_effective": 3500.0}, tz)
+    assert state == 62 and attrs["phase"] == "learning"
+    assert (attrs["days"], attrs["days_required"], attrs["cycles"], attrs["cycles_required"]) == (9, 14, 1, 2)
+    assert attrs["estimated_ready"] == "2026-10-03"
+    assert attrs["learned_norms"] == ["light"] and "learned_low" not in attrs
+    assert "waiting for one more complete watering cycle" in attrs["summary"]
+    done = CalibrationProgress(100, "calibrated", 20, 2, None, None)
+    state, attrs = describe_calibration(done, {"complete": True, "low": 33.2, "high": 61.7}, tz)
+    assert state == 100 and (attrs["learned_low"], attrs["learned_high"]) == (33, 62)
+    assert attrs["summary"] == "Judged against its own learned range, 33-62%"

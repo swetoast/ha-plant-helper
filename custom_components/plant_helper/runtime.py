@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
 
@@ -20,13 +23,18 @@ from .domain.entity_contract import is_retired_unique_id
 from .domain.interpretation import interpret_indoor, interpret_outdoor
 from .domain.temporal.baseline import (
     BaselineSamples,
+    CalibrationProgress,
+    calibration_progress,
     cycle_baseline,
     daily_baseline,
+    days_since_relearn,
     derive_band,
+    describe_calibration,
     monthly_baseline,
+    relearn_baseline,
     update_samples,
 )
-from .domain.temporal.daily import DailySummary, completed_days, update_ledger
+from .domain.temporal.daily import DailySummary, completed_days, light_report, update_ledger
 from .domain.temporal.daylight import (
     DaylightState,
     DaylightWindow,
@@ -67,6 +75,8 @@ from .domain.enrichment import (
     TrefleAdapter,
     select_exact_common_name_candidate,
 )
+from .domain.edit_plant import EditPlantError, async_edit_runtime_plant, setting_change
+from .domain.issues import desired_issues
 from .domain.storage import PlantHelperStorage, StorageBackend
 from .physical import PhysicalSubscriptions
 from .domain.physical import PlantPhysicalProcessor
@@ -100,6 +110,16 @@ def _durable(state: TemporalMoistureState | None) -> tuple | None:
         state.elevated_since,
     )
 
+
+# Edit errors from the care profile select and rain limit number, mapped to the
+# exception messages in the translations.
+_SETTING_ERRORS = {
+    "plant_changed": "plant_changed",
+    "custom_multiplier_range": "custom_needs_multiplier",
+    "moisture_not_numeric": "moisture_not_ready",
+    "moisture_out_of_range": "moisture_not_ready",
+    "rain_limit_mm": "rain_limit_range",
+}
 
 # Statuses whose readings must not teach the learned baseline (roadmap Phase 6).
 _UNLEARNABLE = frozenset({"too_wet", "too_dry", "sensor_problem", "waiting_for_data"})
@@ -157,6 +177,7 @@ class PlantHelperRuntime:
     image_gc_unsub: Any = None
     species_images: dict[str, Any] = field(default_factory=dict)
     learning: Any = None
+    version: str | None = None
     _blocked: set[str] = field(default_factory=set)
     _trefle_gate: RateLimitGate = field(default_factory=RateLimitGate)
 
@@ -196,6 +217,12 @@ class PlantHelperRuntime:
         self.temporal_unsub = async_track_time_interval(
             hass, self._temporal_tick, timedelta(seconds=TEMPORAL_TICK_SECONDS)
         )
+        self.plants.subscribe(self._plant_set_changed)
+        if hass.state is CoreState.running:
+            self.sync_issues()
+        else:
+            # Other integrations' sensors may still be loading until then.
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._on_started)
 
     def require_storage(self) -> PlantHelperStorage:
         if self.storage is None:
@@ -338,66 +365,98 @@ class PlantHelperRuntime:
         ledger: Mapping[str, DailySummary],
         now: datetime,
         record: bool,
-    ) -> tuple[dict[str, Any], str]:
-        """Return (learned baseline, calibration state), fully defensively.
+    ) -> tuple[dict[str, Any], CalibrationProgress | None]:
+        """Return (learned baseline, calibration progress), fully defensively.
 
         Learning continues after calibration (roadmap Phase 6): each watering
         cycle refines the typical rise, peak, drying slope and recovery time, and
         each new day refreshes the light, temperature and humidity norms and the
         monthly seasonal record. Readings taken in an abnormal state are not
-        learned. Any failure returns ({}, "learning") so the engine falls back
-        to the profile band and evaluation never breaks.
+        learned, and after a relearn only days from the relearn on count. Any
+        failure returns ({}, None) so the engine falls back to the profile band
+        and evaluation never breaks.
         """
         learning = self.learning
         if learning is None:
-            return {}, "learning"
+            return {}, None
         try:
             if plant_uuid not in learning.placement:
                 learning.placement[plant_uuid] = placement
                 learning.calibrating.add(plant_uuid)
             state = learning.state(plant_uuid)
             baseline = dict(state.baseline)
-            if not record:
-                return baseline, "calibrated" if baseline.get("complete") else "learning"
-            prior = self.temporal_state.get(plant_uuid)
-            learnable = prior is None or prior.status not in _UNLEARNABLE
             profile_band = PROFILE_BANDS.get(profile, PROFILE_BANDS["balanced"])
-            band_high = (
-                float(baseline["high"]) if baseline.get("complete") else profile_band[1]
-            )
-            tz = self._timezone()
             samples = BaselineSamples.from_dict(state.active_samples)
-            updated = update_samples(
-                samples,
-                history,
-                now,
-                band_high=band_high,
-                learnable=learnable,
-                watering_rise=watering_rise_threshold(completed_days(ledger, now, tz)),
-            )
-            learning.active_samples[plant_uuid] = updated.to_dict()
-            cycle_closed = updated.last_watering != samples.last_watering
-            day_key = now.astimezone(tz).date().isoformat()
-            if cycle_closed:
-                await learning.set_active_samples(plant_uuid, updated.to_dict())
-            if cycle_closed or baseline.get("updated") != day_key:
-                days = completed_days(ledger, now, tz)
-                refreshed = dict(baseline)
-                refreshed.update(cycle_baseline(updated))
-                refreshed.update(daily_baseline(days))
-                refreshed["monthly"] = monthly_baseline(baseline.get("monthly"), days)
-                derived = derive_band(
-                    updated, history.confidence(now), now, profile_band
+            tz = self._timezone()
+            days = days_since_relearn(completed_days(ledger, now, tz), baseline)
+            if record:
+                prior = self.temporal_state.get(plant_uuid)
+                learnable = prior is None or prior.status not in _UNLEARNABLE
+                band_high = (
+                    float(baseline["high"]) if baseline.get("complete") else profile_band[1]
                 )
-                if derived is not None:
-                    refreshed.update({"complete": True, "low": derived[0], "high": derived[1]})
-                refreshed["updated"] = day_key
-                await learning.set_baseline(plant_uuid, state.placement, refreshed)
-                baseline = refreshed
-            return baseline, "calibrated" if baseline.get("complete") else "learning"
+                updated = update_samples(
+                    samples,
+                    history,
+                    now,
+                    band_high=band_high,
+                    learnable=learnable,
+                    watering_rise=watering_rise_threshold(days),
+                )
+                learning.active_samples[plant_uuid] = updated.to_dict()
+                cycle_closed = updated.last_watering != samples.last_watering
+                day_key = now.astimezone(tz).date().isoformat()
+                if cycle_closed:
+                    await learning.set_active_samples(plant_uuid, updated.to_dict())
+                if cycle_closed or baseline.get("updated") != day_key:
+                    refreshed = dict(baseline)
+                    refreshed.update(cycle_baseline(updated))
+                    refreshed.update(daily_baseline(days))
+                    refreshed["monthly"] = monthly_baseline(baseline.get("monthly"), days)
+                    derived = derive_band(
+                        updated, history.confidence(now), now, profile_band
+                    )
+                    if derived is not None:
+                        refreshed.update(
+                            {"complete": True, "low": derived[0], "high": derived[1]}
+                        )
+                    refreshed["updated"] = day_key
+                    await learning.set_baseline(plant_uuid, state.placement, refreshed)
+                    baseline = refreshed
+                samples = updated
+            progress = calibration_progress(
+                samples,
+                history.confidence(now),
+                now,
+                complete=bool(baseline.get("complete")),
+                profile_band=profile_band,
+            )
+            return baseline, progress
         except Exception:
             _LOGGER.debug("Learning step failed for %s", plant_uuid, exc_info=True)
-            return {}, "learning"
+            return {}, None
+
+    async def async_relearn(self, plant_uuid: str) -> None:
+        """Forget what a plant learned for its current placement and start over.
+
+        Clears the learned band, per-cycle values, and light, temperature and
+        humidity norms for the current placement only; the other placement's
+        baseline is kept. Recent readings and daily summaries stay, because the
+        statuses need them, but learning only counts days from today on.
+        """
+        plant = self.plants.plants.get(plant_uuid)
+        if plant is None:
+            raise KeyError(plant_uuid)
+        learning = self.learning
+        if learning is None:
+            raise RuntimeError("learning_unavailable")
+        placement = str(plant.config.get("placement", "indoor"))
+        learning.placement[plant_uuid] = placement
+        today = datetime.now(timezone.utc).astimezone(self._timezone()).date()
+        await learning.set_baseline(plant_uuid, placement, relearn_baseline(today))
+        await learning.set_active_samples(plant_uuid, {})
+        learning.calibrating.add(plant_uuid)
+        await self.evaluate(plant_uuid)
 
     async def _reset_learning(self, plant_uuid: str) -> None:
         """Drop a plant's learned baseline so it recalibrates. Best-effort."""
@@ -499,6 +558,7 @@ class PlantHelperRuntime:
                     )
         for plant_uuid in list(self.plants.plants):
             await self.evaluate(plant_uuid)
+        self.sync_issues()
 
     @callback
     def _weather_tick(self, _now: datetime) -> None:
@@ -627,7 +687,7 @@ class PlantHelperRuntime:
             learned=self._learned_baseline(plant_uuid),
         )
         self.temporal_daily[plant_uuid] = ledger
-        learned, calibration_state = await self._learning_step(
+        learned, calibration = await self._learning_step(
             plant_uuid, placement, profile, history, ledger, now, record
         )
         result = evaluate_plant(
@@ -647,6 +707,16 @@ class PlantHelperRuntime:
         )
         previous_state = self.temporal_state.get(plant_uuid)
         self.temporal_state[plant_uuid] = result.moisture_state
+        watered = result.moisture_state.last_watering_event
+        if (
+            previous_state is not None
+            and watered is not None
+            and watered != previous_state.last_watering_event
+        ):
+            # A new watering, not the stored one restored after a restart.
+            for entity in self.entities.get(plant_uuid, {}).get("event", []):
+                if entity.hass is not None:
+                    entity.watered(watered)
         # Persist only when something durable changed. Deduplication keeps at
         # most one observation per few minutes, and today's and yesterday's
         # summaries are rebuilt from history on load, so a steady plant writes
@@ -679,16 +749,15 @@ class PlantHelperRuntime:
         state["health_attributes"] = {"summary": result.health_summary}
         state["needs_attention"] = result.needs_attention
         state["needs_attention_attributes"] = {"reason": result.attention_reason}
-        state["calibration"] = calibration_state
-        if calibration_state == "calibrated":
-            calibration_summary = (
-                "Judging against this plant's learned moisture range"
-            )
+        state["last_watered"] = watered
+        state["daily_light"], state["daily_light_attributes"] = light_report(ledger, now, tz)
+        if calibration is None:
+            state["calibration"] = None
+            state["calibration_attributes"] = {}
         else:
-            calibration_summary = (
-                "Learning this plant's normal range; using the profile band meanwhile"
+            state["calibration"], state["calibration_attributes"] = describe_calibration(
+                calibration, learned, tz
             )
-        state["calibration_attributes"] = {"summary": calibration_summary}
 
         species = plant.config.get("species")
         if species:
@@ -706,12 +775,14 @@ class PlantHelperRuntime:
             state.pop("species_context", None)
             state.pop("species_context_attributes", None)
 
+        if not tick:
+            self._update_device(plant_uuid)
         if not tick or self._published(state) != previous:
             self.plants.notify_updated(plant_uuid)
 
     @staticmethod
     def _published(state: Mapping[str, Any]) -> tuple:
-        """Everything the status, health and attention entities publish."""
+        """Everything the entities publish that the tick can change."""
         return (
             state.get("care_status"),
             repr(state.get("care_status_attributes")),
@@ -720,6 +791,10 @@ class PlantHelperRuntime:
             state.get("needs_attention"),
             repr(state.get("needs_attention_attributes")),
             state.get("calibration"),
+            repr(state.get("calibration_attributes")),
+            state.get("last_watered"),
+            state.get("daily_light"),
+            repr(state.get("daily_light_attributes")),
         )
 
     def _timezone(self) -> tzinfo:
@@ -964,7 +1039,9 @@ class PlantHelperRuntime:
         self.species_context[plant_uuid] = (context_state, dict(attributes))
         plant.state["species_context"] = context_state
         plant.state["species_context_attributes"] = dict(attributes)
+        self._update_device(plant_uuid)
         self.plants.notify_updated(plant_uuid)
+        self.sync_issues()
 
     async def schedule_reconciliation(self, plant_uuid: str) -> None:
         plant = self.plants.plants.get(plant_uuid)
@@ -1000,6 +1077,104 @@ class PlantHelperRuntime:
         if getattr(species_change, "kind", "different_taxon") != "alias":
             await self._reset_learning(plant_uuid)
         await self.evaluate(plant_uuid)
+
+    async def async_edit(
+        self, plant_uuid: str, expected_revision: int, raw: dict[str, Any], placement: str
+    ) -> None:
+        """Save an edited plant; raises EditPlantError with a translation key."""
+        await async_edit_runtime_plant(
+            self, plant_uuid, expected_revision, raw, placement, self._read_source
+        )
+        self.sync_issues()
+
+    async def async_change_setting(self, plant_uuid: str, key: str, value: Any) -> None:
+        """Change one plant setting from its select or number entity."""
+        plant = self.plants.plants.get(plant_uuid)
+        if plant is None:
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="not_a_plant")
+        revision, raw, placement = setting_change(plant.config, key, value)
+        try:
+            await self.async_edit(plant_uuid, revision, raw, placement)
+        except EditPlantError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key=_SETTING_ERRORS.get(err.key, "cannot_save_plant"),
+            ) from None
+        except Exception as err:
+            _LOGGER.exception("Failed to save plant %s", plant_uuid)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="cannot_save_plant"
+            ) from err
+
+    def device_model(self, plant_uuid: str) -> str:
+        """The plant device's model: its species, or "Plant" without one."""
+        context = self.species_context.get(plant_uuid)
+        if context is not None and context[0] not in {"ambiguous", "not_found"}:
+            return context[0]
+        plant = self.plants.plants.get(plant_uuid)
+        species = plant.config.get("species") if plant is not None else None
+        return str(species) if species else "Plant"
+
+    def _update_device(self, plant_uuid: str) -> None:
+        """Keep the device's name, model and version in step with the plant."""
+        plant = self.plants.plants.get(plant_uuid)
+        if self.hass is None or plant is None:
+            return
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, plant_uuid)})
+        if device is None:
+            return
+        name = str(plant.config.get("display_name", plant_uuid))
+        model = self.device_model(plant_uuid)
+        if (device.name, device.model, device.sw_version) != (name, model, self.version):
+            registry.async_update_device(
+                device.id, name=name, model=model, sw_version=self.version
+            )
+
+    @callback
+    def _on_started(self, _event: Any) -> None:
+        self.sync_issues()
+
+    @callback
+    def _plant_set_changed(self, change: Any) -> None:
+        if change.added or change.removed:
+            self.sync_issues()
+
+    @callback
+    def sync_issues(self) -> None:
+        """Show the repair issues that apply now and clear the rest."""
+        hass = self.hass
+        if hass is None:
+            return
+        running = hass.state is CoreState.running
+        wanted = desired_issues(
+            {uuid: plant.config for uuid, plant in self.plants.plants.items()},
+            sensor_exists=(
+                (lambda entity_id: hass.states.get(entity_id) is not None)
+                if running
+                else None
+            ),
+            provider_problems=(
+                self.source_enrichment.problems if self.source_enrichment else {}
+            ),
+            perenual_free=self.perenual_free,
+        )
+        registry = ir.async_get(hass)
+        for domain, issue_id in list(registry.issues):
+            # Before startup finishes sensors cannot be judged; keep those issues.
+            judged = running or not issue_id.startswith("missing_moisture_sensor_")
+            if domain == DOMAIN and issue_id not in wanted and judged:
+                ir.async_delete_issue(hass, DOMAIN, issue_id)
+        for issue_id, (key, placeholders) in wanted.items():
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=key,
+                translation_placeholders=placeholders,
+            )
 
     def destination_baseline_complete(self, plant_uuid: str, destination: str) -> bool:
         learning = self.learning

@@ -1,0 +1,98 @@
+{
+  "entity": {
+    "sensor": {
+      "care_status": {
+        "default": "mdi:sprout",
+        "state": {
+          "waiting_for_data": "mdi:timer-sand",
+          "normal": "mdi:sprout",
+          "recently_watered": "mdi:watering-can",
+          "partial_watering": "mdi:watering-can-outline",
+          "wet": "mdi:water",
+          "staying_wet": "mdi:water-alert-outline",
+          "too_wet": "mdi:water-alert",
+          "drying": "mdi:water-minus",
+          "approaching_dry": "mdi:water-percent-alert",
+          "needs_water": "mdi:water-off",
+          "too_dry": "mdi:water-remove",
+          "watering_paused": "mdi:weather-pouring",
+          "too_cold": "mdi:snowflake-thermometer",
+          "too_hot": "mdi:thermometer-high",
+          "insufficient_light": "mdi:weather-sunny-off",
+          "sensor_problem": "mdi:alert-circle-outline"
+        }
+      },
+      "moisture": {
+        "default": "mdi:water-percent"
+      },
+      "light": {
+        "default": "mdi:brightness-5"
+      },
+      "temperature": {
+        "default": "mdi:thermometer"
+      },
+      "humidity": {
+        "default": "mdi:water-percent"
+      },
+      "health": {
+        "default": "mdi:leaf",
+        "state": {
+          "good": "mdi:leaf",
+          "watch": "mdi:alert-outline",
+          "stressed": "mdi:leaf-off"
+        }
+      },
+      "last_watered": {
+        "default": "mdi:watering-can"
+      },
+      "daily_light": {
+        "default": "mdi:white-balance-sunny"
+      },
+      "calibration": {
+        "default": "mdi:tune"
+      },
+      "species_context": {
+        "default": "mdi:flower"
+      }
+    },
+    "binary_sensor": {
+      "needs_attention": {
+        "default": "mdi:check-circle-outline",
+        "state": {
+          "on": "mdi:alert-circle-outline"
+        }
+      }
+    },
+    "image": {
+      "species_image": {
+        "default": "mdi:image"
+      }
+    },
+    "event": {
+      "watering": {
+        "default": "mdi:watering-can"
+      }
+    },
+    "select": {
+      "care_profile": {
+        "default": "mdi:tune-variant",
+        "state": {
+          "dry": "mdi:cactus",
+          "balanced": "mdi:scale-balance",
+          "moist": "mdi:water",
+          "custom": "mdi:tune"
+        }
+      }
+    },
+    "number": {
+      "rain_limit": {
+        "default": "mdi:weather-rainy"
+      }
+    }
+  },
+  "services": {
+    "relearn": {
+      "service": "mdi:restart"
+    }
+  }
+}

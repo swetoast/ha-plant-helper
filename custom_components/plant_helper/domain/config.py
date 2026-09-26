@@ -4,6 +4,9 @@ import math
 import uuid
 from typing import Any, Mapping
 
+PROFILES = ("dry", "balanced", "moist", "custom")
+RAIN_LIMIT_RANGE = (0.0, 1000.0)
+
 class ValidationError(ValueError):
     def __init__(self, key: str):
         super().__init__(key)
@@ -86,11 +89,11 @@ class PlantConfig:
         placement=raw.get("placement")
         if placement not in {"indoor","outdoor"}: raise ValidationError("placement")
         profile=raw.get("profile","balanced")
-        if profile not in {"dry","balanced","moist","custom"}: raise ValidationError("profile")
+        if profile not in PROFILES: raise ValidationError("profile")
         multiplier=None
         if profile=="custom": multiplier=_finite_float(raw.get("custom_multiplier"),"custom_multiplier_range",0.25,4.0)
         rain=None
-        if placement=="outdoor": rain=_finite_float(raw.get("rain_limit_mm"),"rain_limit_mm",0,1000)
+        if placement=="outdoor": rain=_finite_float(raw.get("rain_limit_mm"),"rain_limit_mm",*RAIN_LIMIT_RANGE)
         species=raw.get("species")
         if species is not None:
             if not isinstance(species,str): raise ValidationError("species")

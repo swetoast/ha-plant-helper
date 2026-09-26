@@ -1,0 +1,4 @@
+relearn:
+  target:
+    device:
+      integration: plant_helper

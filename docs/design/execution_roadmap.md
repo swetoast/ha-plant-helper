@@ -1,5 +1,8 @@
 # Plant Helper Execution Roadmap
 
+> Status: historical sequencing plan. The work it sequences has shipped; the
+> user documentation and `CHANGELOG.md` describe current behavior.
+
 ## Purpose
 
 One ordered plan from the current release toward the full design in
