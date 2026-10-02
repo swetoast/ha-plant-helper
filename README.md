@@ -5,10 +5,9 @@ plain language. One device per plant. It reads your existing soil, light,
 humidity, and temperature sensors and turns them into a small set of useful
 entities.
 
-Moisture is judged from recent history, not a single reading, so a brief spike
-no longer trips a false alarm. Each plant learns its own normal range over time,
+Moisture is judged from recent history, not a single reading, Each plant learns its own normal range over time,
 outdoor plants factor in the weather, and dormant plants are left alone about
-wet soil instead of being nagged.
+wet soil.
 
 ## What it does
 
